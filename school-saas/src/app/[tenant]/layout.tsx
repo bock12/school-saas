@@ -1,27 +1,65 @@
-import { School } from 'lucide-react';
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
-export default async function TenantLayout({ children, params }: { children: React.ReactNode; params: Promise<{ tenant: string }> }) {
+export default async function TenantLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ tenant: string }>;
+}) {
   const { tenant } = await params;
+  const supabase = await createClient();
 
-  // TODO: Fetch tenant branding from Supabase
-  // const supabase = await createClient();
-  // const { data: tenantData } = await supabase.from('tenants').select('*').eq('slug', tenant).single();
+  // ── Verify tenant exists in the database ──────────────────────
+  const { data: school, error } = await supabase
+    .from('tenants')
+    .select('id, name, slug, status, primary_color, logo_url')
+    .eq('slug', tenant)
+    .single();
 
-  return (
-    <div className="min-h-screen bg-[hsl(var(--bg-primary))]" style={{ '--tenant-primary': '#6366f1' } as React.CSSProperties}>
-      {/* Tenant Header Bar */}
-      <header className="h-14 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex items-center px-6">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[hsl(var(--accent)/0.15)] flex items-center justify-center">
-            <School className="w-4 h-4 text-[hsl(var(--accent))]" />
+  // If the school doesn't exist, redirect to the main platform landing page
+  if (error || !school) {
+    redirect('/');
+  }
+
+  // ── Handle suspended schools ──────────────────────────────────
+  if (school.status === 'suspended') {
+    return (
+      <div className="min-h-screen bg-[hsl(var(--bg-primary))] flex items-center justify-center p-6">
+        <div className="w-full max-w-md text-center">
+          <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto mb-6">
+            <ShieldAlert className="w-8 h-8 text-red-500" />
           </div>
-          <div>
-            <p className="text-sm font-semibold text-[hsl(var(--text-primary))] capitalize">{tenant.replace(/-/g, ' ')}</p>
-            <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{tenant}.schoolsaas.com</p>
+          <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Account Suspended</h1>
+          <p className="text-sm text-[hsl(var(--text-tertiary))] mt-3 max-w-xs mx-auto">
+            This school portal has been temporarily suspended. Please contact your school administrator or our support team for assistance.
+          </p>
+          <div className="mt-6 p-4 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]">
+            <p className="text-xs text-[hsl(var(--text-tertiary))]">School</p>
+            <p className="text-sm font-semibold text-[hsl(var(--text-primary))] mt-0.5">{school.name}</p>
           </div>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 mt-6 text-sm text-[hsl(var(--accent))] hover:underline"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Return to homepage
+          </Link>
         </div>
-      </header>
-      <main>{children}</main>
+      </div>
+    );
+  }
+
+  // ── Active tenant — render the school portal ──────────────────
+  return (
+    <div
+      className="min-h-screen bg-[hsl(var(--bg-primary))]"
+      style={{ '--tenant-primary': school.primary_color || '#6366f1' } as React.CSSProperties}
+    >
+      {children}
     </div>
   );
 }
