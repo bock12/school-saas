@@ -1,14 +1,12 @@
 {
-  "name": "school-saas",
+  "name": "educate",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "seed": "node scripts/seed-tenant.cjs",
-    "create-admin": "node scripts/create-admin.cjs"
+    "lint": "eslint"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
@@ -27,12 +25,9 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
-    "pg": "^8.22.0",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "ws": "^8.21.0"
+    "typescript": "^5"
   }
 }
