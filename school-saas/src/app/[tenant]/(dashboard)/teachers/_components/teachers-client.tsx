@@ -76,17 +76,16 @@ export function TeachersClient({
       }
     });
   }
-
   return (
-    <div className="space-y-6 max-w-[1400px]">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 max-w-[1600px]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Teachers</h1>
           <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">{initialTeachers.length} staff members</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-medium hover:opacity-90 transition-opacity w-full sm:w-auto"
         >
           <Plus className="w-4 h-4" /> Add Teacher
         </button>
@@ -94,20 +93,20 @@ export function TeachersClient({
 
       {/* Filters */}
       <div className="glass-card p-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
-          <SearchInput placeholder="Search teachers..." onSearch={setSearch} className="w-full md:w-80" />
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-[hsl(var(--text-tertiary))]" />
-            <button onClick={() => setDeptFilter('all')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${deptFilter === 'all' ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.3)]' : 'text-[hsl(var(--text-tertiary))] hover:bg-[hsl(var(--bg-tertiary))]'}`}>All</button>
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          <SearchInput placeholder="Search teachers..." onSearch={setSearch} className="w-full lg:w-80" />
+          <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-none pb-2 lg:pb-0 max-w-full">
+            <Filter className="w-4 h-4 text-[hsl(var(--text-tertiary))] flex-shrink-0" />
+            <button onClick={() => setDeptFilter('all')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${deptFilter === 'all' ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.3)]' : 'text-[hsl(var(--text-tertiary))] hover:bg-[hsl(var(--bg-tertiary))]'}`}>All</button>
             {deptList.map((d) => (
-              <button key={d} onClick={() => setDeptFilter(d)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${deptFilter === d ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.3)]' : 'text-[hsl(var(--text-tertiary))] hover:bg-[hsl(var(--bg-tertiary))]'}`}>{d}</button>
+              <button key={d} onClick={() => setDeptFilter(d)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${deptFilter === d ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.3)]' : 'text-[hsl(var(--text-tertiary))] hover:bg-[hsl(var(--bg-tertiary))]'}`}>{d}</button>
             ))}
           </div>
         </div>
       </div>
 
       {/* Teacher Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.length === 0 ? (
           <div className="col-span-full py-10 text-center text-sm text-[hsl(var(--text-tertiary))]">
             No teachers found. Add your first staff member to get started.
@@ -115,17 +114,17 @@ export function TeachersClient({
         ) : (
           filtered.map((teacher, i) => (
             <div key={teacher.id} className="glass-card p-5 animate-fade-in" style={{ animationDelay: `${i * 60}ms` }}>
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[hsl(var(--accent)/0.2)] to-[hsl(var(--info)/0.2)] flex items-center justify-center text-[hsl(var(--accent))] text-sm font-bold">
+              <div className="flex items-start justify-between mb-4 gap-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[hsl(var(--accent)/0.2)] to-[hsl(var(--info)/0.2)] flex items-center justify-center text-[hsl(var(--accent))] text-sm font-bold flex-shrink-0">
                     {teacher.first_name[0]}{teacher.last_name[0]}
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[hsl(var(--text-primary))]">{teacher.first_name} {teacher.last_name}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[hsl(var(--text-primary))] truncate">{teacher.first_name} {teacher.last_name}</p>
                     <code className="text-[10px] font-mono text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.1)] px-1.5 py-0.5 rounded">{teacher.employee_id || 'N/A'}</code>
                   </div>
                 </div>
-                <div className="relative">
+                <div className="relative flex-shrink-0">
                   <button onClick={() => setActiveMenu(activeMenu === teacher.id ? null : teacher.id)} className="p-1 rounded-lg hover:bg-[hsl(var(--bg-tertiary))] transition-colors">
                     <MoreHorizontal className="w-4 h-4 text-[hsl(var(--text-tertiary))]" />
                   </button>
@@ -140,16 +139,16 @@ export function TeachersClient({
               </div>
 
               <div className="space-y-2 mb-4">
-                <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5"><Mail className="w-3 h-3" />{teacher.email || 'No email'}</p>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5"><Phone className="w-3 h-3" />{teacher.phone || 'N/A'}</p>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5"><GraduationCap className="w-3 h-3" />{teacher.qualification || 'N/A'}</p>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5 truncate"><Mail className="w-3 h-3 flex-shrink-0" />{teacher.email || 'No email'}</p>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5 truncate"><Phone className="w-3 h-3 flex-shrink-0" />{teacher.phone || 'N/A'}</p>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5 truncate"><GraduationCap className="w-3 h-3 flex-shrink-0" />{teacher.qualification || 'N/A'}</p>
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-[hsl(var(--border))]">
-                <div className="flex flex-wrap gap-1">
+              <div className="flex items-center justify-between pt-3 border-t border-[hsl(var(--border))] gap-2">
+                <div className="flex flex-wrap gap-1 min-w-0">
                   {teacher.subjects.length > 0 ? (
                     teacher.subjects.map((s) => (
-                      <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]">
+                      <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))] flex-shrink-0">
                         <BookOpen className="w-2.5 h-2.5" />{s}
                       </span>
                     ))
@@ -192,15 +191,15 @@ export function TeachersClient({
               {formError}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><label className={labelClass}>First Name *</label><input name="first_name" type="text" required placeholder="e.g., John" className={inputClass} /></div>
             <div><label className={labelClass}>Last Name *</label><input name="last_name" type="text" required placeholder="e.g., Smith" className={inputClass} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><label className={labelClass}>Email</label><input name="email" type="email" placeholder="teacher@school.edu" className={inputClass} /></div>
             <div><label className={labelClass}>Phone</label><input name="phone" type="tel" placeholder="+1 555-0000" className={inputClass} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelClass}>Department</label>
               <select name="department_id" className={selectClass}>

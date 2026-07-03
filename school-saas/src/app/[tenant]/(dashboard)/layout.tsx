@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { TenantSidebar } from '@/components/tenant/sidebar';
 import { TenantTopbar } from '@/components/tenant/topbar';
+import { SidebarProvider } from '@/components/tenant/sidebar-provider';
+import { SidebarLayoutShell } from '@/components/tenant/sidebar-layout-shell';
 
 export default async function TenantDashboardLayout({
   children,
@@ -14,7 +16,10 @@ export default async function TenantDashboardLayout({
   const supabase = await createClient();
 
   // ── 1. Verify the user is authenticated ───────────────────────
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
   if (userError || !user) {
     redirect(`/${tenant}/login`);
@@ -28,7 +33,6 @@ export default async function TenantDashboardLayout({
     .single();
 
   if (profileError || !profile) {
-    // Profile missing — sign out and send to login
     await supabase.auth.signOut();
     redirect(`/${tenant}/login`);
   }
@@ -40,7 +44,6 @@ export default async function TenantDashboardLayout({
     .eq('slug', tenant)
     .single();
 
-  // Cross-tenant access check: user's profile must belong to this school
   if (!school || profile.tenant_id !== school.id) {
     await supabase.auth.signOut();
     redirect(`/${tenant}/login`);
@@ -48,30 +51,31 @@ export default async function TenantDashboardLayout({
 
   // ── 4. Build display name ──────────────────────────────────────
   const displayName =
-    profile.full_name ||
-    user.email?.split('@')[0] ||
-    'School User';
+    profile.full_name || user.email?.split('@')[0] || 'School User';
 
   const tenantName =
     school.name ||
     tenant.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--bg-primary))]">
-      <TenantSidebar
-        tenantSlug={tenant}
-        tenantName={tenantName}
-        primaryColor={school.primary_color || '#6366f1'}
-      />
-      <div className="ml-[260px] transition-all duration-300">
-        <TenantTopbar
+    <SidebarProvider>
+      <div className="min-h-screen bg-[hsl(var(--bg-primary))]">
+        <TenantSidebar
           tenantSlug={tenant}
           tenantName={tenantName}
-          userName={displayName}
-          userRole={profile.role}
+          primaryColor={school.primary_color || '#6366f1'}
         />
-        <main className="p-6">{children}</main>
+        {/* SidebarLayoutShell handles the dynamic left margin based on sidebar state */}
+        <SidebarLayoutShell>
+          <TenantTopbar
+            tenantSlug={tenant}
+            tenantName={tenantName}
+            userName={displayName}
+            userRole={profile.role}
+          />
+          <main className="p-4 sm:p-6 min-h-[calc(100vh-4rem)]">{children}</main>
+        </SidebarLayoutShell>
       </div>
-    </div>
+    </SidebarProvider>
   );
 }

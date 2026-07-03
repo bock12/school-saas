@@ -94,16 +94,16 @@ export function StudentsClient({
   }
 
   return (
-    <div className="space-y-6 max-w-[1400px]">
+    <div className="space-y-6 max-w-[1600px]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Students</h1>
           <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">{initialStudents.length} total students</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-medium hover:opacity-90 transition-opacity w-full sm:w-auto"
         >
           <Plus className="w-4 h-4" /> Add Student
         </button>
@@ -111,13 +111,13 @@ export function StudentsClient({
 
       {/* Filters */}
       <div className="glass-card p-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
-          <SearchInput placeholder="Search students..." onSearch={setSearch} className="w-full md:w-80" />
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-[hsl(var(--text-tertiary))]" />
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          <SearchInput placeholder="Search students..." onSearch={setSearch} className="w-full lg:w-80" />
+          <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-none pb-2 lg:pb-0 max-w-full">
+            <Filter className="w-4 h-4 text-[hsl(var(--text-tertiary))] flex-shrink-0" />
             <button
               onClick={() => setClassFilter('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${classFilter === 'all' ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.3)]' : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${classFilter === 'all' ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.3)]' : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'}`}
             >
               All
             </button>
@@ -125,13 +125,13 @@ export function StudentsClient({
               <button
                 key={c}
                 onClick={() => setClassFilter(c)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${classFilter === c ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.3)]' : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${classFilter === c ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.3)]' : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'}`}
               >
                 {c}
               </button>
             ))}
           </div>
-          <button className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors">
+          <button className="lg:ml-auto flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors border border-[hsl(var(--border))] lg:border-0 w-full lg:w-auto">
             <Download className="w-3.5 h-3.5" /> Export
           </button>
         </div>
@@ -144,7 +144,7 @@ export function StudentsClient({
             <thead>
               <tr className="border-b border-[hsl(var(--border))]">
                 {['Student', 'Admission #', 'Class', 'Guardian', 'Status', ''].map((h) => (
-                  <th key={h} className="text-left text-xs font-medium text-[hsl(var(--text-tertiary))] uppercase tracking-wider px-5 py-3">
+                  <th key={h} className="text-left text-xs font-medium text-[hsl(var(--text-tertiary))] uppercase tracking-wider px-5 py-3 whitespace-nowrap">
                     {h}
                   </th>
                 ))}
@@ -162,28 +162,28 @@ export function StudentsClient({
                   <tr key={student.id} className="border-b border-[hsl(var(--border)/0.5)] table-row-hover transition-colors">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold ${student.gender === 'female' ? 'bg-pink-500/15 text-pink-400' : 'bg-blue-500/15 text-blue-400'}`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${student.gender === 'female' ? 'bg-pink-500/15 text-pink-400' : 'bg-blue-500/15 text-blue-400'}`}>
                           {student.first_name[0]}{student.last_name[0]}
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-[hsl(var(--text-primary))]">{student.first_name} {student.last_name}</p>
-                          <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1"><Mail className="w-3 h-3" />{student.email || 'No email'}</p>
+                          <p className="text-sm font-medium text-[hsl(var(--text-primary))] whitespace-nowrap">{student.first_name} {student.last_name}</p>
+                          <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1 whitespace-nowrap"><Mail className="w-3 h-3 flex-shrink-0" />{student.email || 'No email'}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
-                      <code className="text-xs font-mono text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.1)] px-2 py-0.5 rounded">{student.admission_number || 'N/A'}</code>
+                      <code className="text-xs font-mono text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.1)] px-2 py-0.5 rounded whitespace-nowrap">{student.admission_number || 'N/A'}</code>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className="flex items-center gap-1.5 text-sm text-[hsl(var(--text-secondary))]">
-                        <BookOpen className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" />
+                      <span className="flex items-center gap-1.5 text-sm text-[hsl(var(--text-secondary))] whitespace-nowrap">
+                        <BookOpen className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))] flex-shrink-0" />
                         {student.className ? `${student.className} — ${student.sectionName}` : 'Unassigned'}
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
                       <div>
-                        <p className="text-sm text-[hsl(var(--text-secondary))]">{student.guardian_name || 'N/A'}</p>
-                        <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1"><Phone className="w-3 h-3" />{student.guardian_phone || 'N/A'}</p>
+                        <p className="text-sm text-[hsl(var(--text-secondary))] whitespace-nowrap">{student.guardian_name || 'N/A'}</p>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1 whitespace-nowrap"><Phone className="w-3 h-3 flex-shrink-0" />{student.guardian_phone || 'N/A'}</p>
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
@@ -214,7 +214,7 @@ export function StudentsClient({
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-[hsl(var(--border))]">
+        <div className="flex flex-col sm:flex-row items-center justify-between px-5 py-4 gap-3 border-t border-[hsl(var(--border))]">
           <p className="text-xs text-[hsl(var(--text-tertiary))]">Showing {filtered.length} of {initialStudents.length} students</p>
           <div className="flex items-center gap-1">
             <button className="p-1.5 rounded-lg hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-tertiary))] transition-colors"><ChevronLeft className="w-4 h-4" /></button>
@@ -252,11 +252,11 @@ export function StudentsClient({
               {formError}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><label className={labelClass}>First Name *</label><input name="first_name" type="text" required placeholder="e.g., Amara" className={inputClass} /></div>
             <div><label className={labelClass}>Last Name *</label><input name="last_name" type="text" required placeholder="e.g., Johnson" className={inputClass} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><label className={labelClass}>Email</label><input name="email" type="email" placeholder="student@school.edu" className={inputClass} /></div>
             <div>
               <label className={labelClass}>Gender</label>
@@ -268,7 +268,7 @@ export function StudentsClient({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelClass}>Class</label>
               <select
@@ -294,7 +294,7 @@ export function StudentsClient({
           </div>
           <div className="pt-3 border-t border-[hsl(var(--border))]">
             <p className="text-xs font-semibold text-[hsl(var(--text-secondary))] mb-3 flex items-center gap-1.5"><User className="w-3.5 h-3.5" />Guardian Information</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><label className={labelClass}>Guardian Name</label><input name="guardian_name" type="text" placeholder="e.g., Mrs. Johnson" className={inputClass} /></div>
               <div><label className={labelClass}>Guardian Phone</label><input name="guardian_phone" type="tel" placeholder="+1 555-0100" className={inputClass} /></div>
             </div>
