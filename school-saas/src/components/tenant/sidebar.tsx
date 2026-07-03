@@ -46,6 +46,7 @@ import {
   Briefcase,
   Shield,
   Award,
+  Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -82,7 +83,8 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
     Students: true,
     'Staff Management': true,
     'Parent & Guardian': true,
-    Academics: true,
+    'Academic Management': true,
+    'Academic Operations': true,
   });
 
   const basePath = `/${tenantSlug}`;
@@ -184,15 +186,44 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
       ],
     },
     {
-      label: 'Academics',
+      label: 'Academic Management',
       items: [],
       subSections: [
         {
-          label: 'Academics',
+          label: 'Academic Management',
           icon: BookOpen,
           items: [
-            { label: 'Classes', href: `${basePath}/classes`, icon: Layers },
-            { label: 'Subjects', href: `${basePath}/subjects`, icon: BookMarked },
+            { label: 'Dashboard', href: `${basePath}/academics`, icon: LayoutDashboard, exact: true },
+            { label: 'Academic Years', href: `${basePath}/academics/years`, icon: Calendar },
+            { label: 'Terms', href: `${basePath}/academics/terms`, icon: Clock },
+            { label: 'Academic Calendar', href: `${basePath}/academics/calendar`, icon: CalendarCheck },
+            { label: 'Departments', href: `${basePath}/academics/departments`, icon: Layers },
+            { label: 'Subjects', href: `${basePath}/academics/subjects`, icon: BookMarked },
+            { label: 'Subject Groups', href: `${basePath}/academics/subject-groups`, icon: LayoutGrid },
+            { label: 'Classes', href: `${basePath}/academics/classes`, icon: GraduationCap },
+            { label: 'Streams', href: `${basePath}/academics/streams`, icon: Users },
+            { label: 'Houses', href: `${basePath}/academics/houses`, icon: Home },
+            { label: 'Curriculum', href: `${basePath}/academics/curriculum`, icon: BookOpen },
+            { label: 'Learning Outcomes', href: `${basePath}/academics/outcomes`, icon: Award },
+            { label: 'Teacher Allocation', href: `${basePath}/academics/teacher-allocation`, icon: UsersRound },
+            { label: 'Course Allocation', href: `${basePath}/academics/course-allocation`, icon: Layers },
+            { label: 'Assessment Rules', href: `${basePath}/academics/assessment-rules`, icon: ClipboardList },
+            { label: 'Grading Systems', href: `${basePath}/academics/grading`, icon: BarChart3 },
+            { label: 'Promotion Rules', href: `${basePath}/academics/promotion-rules`, icon: TrendingUp },
+            { label: 'Graduation Rules', href: `${basePath}/academics/graduation-rules`, icon: GraduationCap },
+            { label: 'Reports', href: `${basePath}/academics/reports`, icon: BarChart3 },
+          ],
+        },
+      ],
+    },
+    {
+      label: 'Academic Operations',
+      items: [],
+      subSections: [
+        {
+          label: 'Academic Operations',
+          icon: ShieldCheck,
+          items: [
             { label: 'Timetable', href: `${basePath}/academics/timetable`, icon: Clock },
             { label: 'Attendance', href: `${basePath}/attendance`, icon: CalendarCheck },
             { label: 'Examinations', href: `${basePath}/academics/examinations`, icon: FlaskConical },
