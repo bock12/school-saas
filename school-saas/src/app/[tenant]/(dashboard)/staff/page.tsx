@@ -1,111 +1,216 @@
-import { UsersRound, UserPlus, Briefcase, Search, Phone, Mail, Shield, Truck, BookOpen, HeartPulse } from 'lucide-react';
+'use client';
 
-const staffCategories = [
-  { label: 'Admin Staff', icon: Briefcase, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', count: 8 },
-  { label: 'Finance Staff', icon: Briefcase, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', count: 4 },
-  { label: 'Librarians', icon: BookOpen, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20', count: 2 },
-  { label: 'Nurses', icon: HeartPulse, color: 'text-pink-400', bg: 'bg-pink-500/10 border-pink-500/20', count: 3 },
-  { label: 'Security', icon: Shield, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', count: 6 },
-  { label: 'Drivers', icon: Truck, color: 'text-teal-400', bg: 'bg-teal-500/10 border-teal-500/20', count: 5 },
-];
+import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import {
+  UsersRound, Briefcase, UserPlus, Users, GraduationCap, Shield, Layers, BookOpen,
+  CalendarCheck, Clock, BarChart3, DollarSign, FileText, ClipboardList, Award,
+  LayoutGrid, ArrowUpRight, ChevronRight, Plus, Download, CheckSquare, Settings, AlertTriangle
+} from 'lucide-react';
 
-const demoStaff = [
-  { id: '1', name: 'Mrs. Patricia Osei', role: 'Head of Admin', department: 'Administration', email: 'p.osei@school.edu', phone: '+1 555-1001', employeeId: 'EMP-001', joinDate: 'Mar 2019', status: 'active', type: 'Admin Staff' },
-  { id: '2', name: 'Mr. Benjamin Asante', role: 'Accountant', department: 'Finance', email: 'b.asante@school.edu', phone: '+1 555-1002', employeeId: 'EMP-002', joinDate: 'Jan 2021', status: 'active', type: 'Finance Staff' },
-  { id: '3', name: 'Ms. Josephine Boateng', role: 'Head Librarian', department: 'Library', email: 'j.boateng@school.edu', phone: '+1 555-1003', employeeId: 'EMP-003', joinDate: 'Sep 2018', status: 'active', type: 'Librarians' },
-  { id: '4', name: 'Nurse Mary Amponsah', role: 'School Nurse', department: 'Health Center', email: 'm.amponsah@school.edu', phone: '+1 555-1004', employeeId: 'EMP-004', joinDate: 'Sep 2020', status: 'active', type: 'Nurses' },
-  { id: '5', name: 'Sgt. Paul Mensah', role: 'Head of Security', department: 'Security', email: 'p.mensah@school.edu', phone: '+1 555-1005', employeeId: 'EMP-005', joinDate: 'Jan 2017', status: 'active', type: 'Security' },
-  { id: '6', name: 'Mr. Kwame Darko', role: 'Bus Driver', department: 'Transport', email: 'k.darko@school.edu', phone: '+1 555-1006', employeeId: 'EMP-006', joinDate: 'Sep 2022', status: 'on_leave', type: 'Drivers' },
-  { id: '7', name: 'Ms. Abena Frimpong', role: 'Secretary', department: 'Administration', email: 'a.frimpong@school.edu', phone: '+1 555-1007', employeeId: 'EMP-007', joinDate: 'Jan 2023', status: 'active', type: 'Admin Staff' },
-  { id: '8', name: 'Mr. Kofi Asumadu', role: 'IT Support', department: 'Administration', email: 'k.asumadu@school.edu', phone: '+1 555-1008', employeeId: 'EMP-008', joinDate: 'Sep 2021', status: 'active', type: 'Admin Staff' },
-];
+export default function StaffDashboardPage() {
+  const params = useParams();
+  const router = useRouter();
+  const tenant = params.tenant as string;
 
-const typeColors: Record<string, string> = {
-  'Admin Staff': 'bg-blue-500/15 text-blue-400',
-  'Finance Staff': 'bg-emerald-500/15 text-emerald-400',
-  'Librarians': 'bg-purple-500/15 text-purple-400',
-  'Nurses': 'bg-pink-500/15 text-pink-400',
-  'Security': 'bg-amber-500/15 text-amber-400',
-  'Drivers': 'bg-teal-500/15 text-teal-400',
-};
+  const kpis = [
+    { label: 'Total Employees', value: 84, change: '+2.4%', up: true, icon: UsersRound, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+    { label: 'Active Staff', value: 78, change: '+1.2%', up: true, icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+    { label: 'Teachers', value: 48, change: '0', up: true, icon: GraduationCap, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
+    { label: 'Non-Teaching Staff', value: 36, change: '+2', up: true, icon: Shield, color: 'text-cyan-400', bg: 'bg-cyan-500/10 border-cyan-500/20' },
+    { label: 'Staff on Leave', value: 4, change: '-1', up: false, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+    { label: 'New Employees', value: 6, change: '+3', up: true, icon: UserPlus, color: 'text-teal-400', bg: 'bg-teal-500/10 border-teal-500/20' },
+    { label: 'Contracts Expiring', value: 3, subtitle: 'Next 30 days', icon: ClipboardList, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' },
+    { label: 'Vacant Positions', value: 5, subtitle: '2 active postings', icon: Briefcase, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20' },
+    { label: 'Attendance Today', value: '95.2%', change: '+0.5%', up: true, icon: CalendarCheck, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+    { label: 'Performance Reviews Due', value: 12, subtitle: 'Annual Appraisals', icon: BarChart3, color: 'text-pink-400', bg: 'bg-pink-500/10 border-pink-500/20' },
+  ];
 
-export default function StaffPage() {
+  const quickActions = [
+    { label: 'Add Staff', desc: 'Register new employee record', href: `/${tenant}/staff/employees`, icon: UserPlus, primary: true },
+    { label: 'Start Recruitment', desc: 'Publish a job vacancy', href: `/${tenant}/staff/recruitment`, icon: Briefcase },
+    { label: 'Assign Role', desc: 'Configure system roles', href: `/${tenant}/staff/bulk`, icon: Settings },
+    { label: 'Assign Department', desc: 'Move employee structures', href: `/${tenant}/staff/departments`, icon: Layers },
+    { label: 'Upload Contract', desc: 'Attach signed PDF contract', href: `/${tenant}/staff/contracts`, icon: FileText },
+    { label: 'Approve Leave', desc: 'Approve leave request forms', href: `/${tenant}/staff/leave`, icon: Clock },
+    { label: 'Mark Attendance', desc: 'Roster check-ins override', href: `/${tenant}/staff/attendance`, icon: CheckSquare },
+    { label: 'Generate Staff ID', desc: 'Auto-identity pool config', href: `/${tenant}/staff/bulk`, icon: Award },
+    { label: 'Print ID Card', desc: 'Batch ID card prints', href: `/${tenant}/staff/bulk`, icon: LayoutGrid },
+    { label: 'Export Staff List', desc: 'Download rosters', href: `/${tenant}/staff/bulk`, icon: Download },
+  ];
+
   return (
-    <div className="space-y-6 max-w-[1600px]">
+    <div className="space-y-6 max-w-[1600px] animate-fade-in">
+      {/* Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Staff Management</h1>
+          <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Human Capital Management (HCM)</h1>
           <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">
-            Non-teaching staff — {demoStaff.length} total employees
+            Workforce insights, performance trackers, and personnel recruitment logs
           </p>
         </div>
-        <button className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-medium hover:opacity-90 transition-opacity w-full sm:w-auto">
-          <UserPlus className="w-4 h-4" />
-          Add Staff
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-medium">
+            Active Payroll Period: July 2026
+          </span>
+        </div>
       </div>
 
-      {/* Category Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {staffCategories.map(cat => {
-          const Icon = cat.icon;
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {kpis.map((kpi, i) => {
+          const Icon = kpi.icon;
           return (
-            <div key={cat.label} className={`rounded-xl border p-4 text-center cursor-pointer hover:scale-105 transition-transform ${cat.bg}`}>
-              <Icon className={`w-5 h-5 mx-auto mb-2 ${cat.color}`} />
-              <p className={`text-xl font-bold ${cat.color}`}>{cat.count}</p>
-              <p className="text-xs text-[hsl(var(--text-tertiary))] mt-0.5 leading-tight">{cat.label}</p>
+            <div
+              key={kpi.label}
+              className={`glass-card p-4 flex flex-col justify-between border hover:scale-[1.02] transition-all cursor-pointer ${kpi.bg}`}
+              style={{ animationDelay: `${i * 30}ms` }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-[hsl(var(--text-tertiary))] tracking-wider truncate mr-2">{kpi.label}</span>
+                <Icon className={`w-4 h-4 flex-shrink-0 ${kpi.color}`} />
+              </div>
+              <div className="flex items-baseline gap-2 mt-auto">
+                <p className="text-lg font-bold text-[hsl(var(--text-primary))]">{kpi.value}</p>
+                {kpi.change && (
+                  <span className={`text-[10px] font-semibold flex items-center ${kpi.up ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <ArrowUpRight className={`w-3 h-3 ${!kpi.up && 'rotate-90'}`} />
+                    {kpi.change}
+                  </span>
+                )}
+                {kpi.subtitle && (
+                  <span className="text-[10px] text-[hsl(var(--text-tertiary))] truncate">{kpi.subtitle}</span>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* Search & Filter */}
-      <div className="glass-card p-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-tertiary))]" />
-            <input type="text" placeholder="Search staff..." className="w-full h-10 pl-10 pr-4 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" />
-          </div>
-          <select className="h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-secondary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors w-full sm:w-48">
-            <option>All Departments</option>
-            <option>Administration</option>
-            <option>Finance</option>
-            <option>Library</option>
-            <option>Health Center</option>
-            <option>Security</option>
-            <option>Transport</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Staff Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {demoStaff.map((staff, i) => (
-          <div key={staff.id} className="glass-card p-5 animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
-            <div className="flex items-start justify-between mb-3 gap-2">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[hsl(var(--accent)/0.2)] to-[hsl(var(--info)/0.2)] flex items-center justify-center text-[hsl(var(--accent))] font-bold text-sm flex-shrink-0">
-                  {staff.name.split(' ').map(w => w[0]).join('').slice(0,2)}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-semibold text-sm text-[hsl(var(--text-primary))] truncate">{staff.name}</p>
-                  <p className="text-xs text-[hsl(var(--text-tertiary))] truncate">{staff.role}</p>
-                </div>
+      {/* Main Insights Content Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Charts Panel */}
+        <div className="xl:col-span-2 space-y-6">
+          <div className="glass-card p-5 space-y-6">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+              <div>
+                <h3 className="text-base font-semibold text-[hsl(var(--text-primary))]">Workforce Analytics</h3>
+                <p className="text-xs text-[hsl(var(--text-tertiary))]">Demographics, qualification distribution, and department mappings</p>
               </div>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${staff.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
-                {staff.status === 'active' ? 'Active' : 'On Leave'}
+              <span className="text-xs text-[hsl(var(--accent))] font-medium flex items-center gap-1">
+                Active Term: Term 1 <ChevronRight className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="space-y-1 mb-3">
-              <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5 truncate"><Mail className="w-3 h-3 flex-shrink-0" />{staff.email}</p>
-              <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5 truncate"><Phone className="w-3 h-3 flex-shrink-0" />{staff.phone}</p>
+
+            {/* Custom SVG line/area chart (High Performance/Zero Dep) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Department distribution */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-[hsl(var(--text-secondary))]">Staff by Department</p>
+                <div className="space-y-2">
+                  {[
+                    { dept: 'Administration', count: 18, pct: '21%' },
+                    { dept: 'Mathematics', count: 14, pct: '16%' },
+                    { dept: 'Science & Chemistry', count: 16, pct: '19%' },
+                    { dept: 'Finance & HR', count: 8, pct: '9%' },
+                    { dept: 'Operations & Maintenance', count: 28, pct: '35%' },
+                  ].map(d => (
+                    <div key={d.dept} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-[hsl(var(--text-secondary))]">{d.dept}</span>
+                        <span className="font-semibold text-[hsl(var(--text-primary))]">{d.count} ({d.pct})</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[hsl(var(--bg-tertiary))] overflow-hidden">
+                        <div className="h-full bg-[hsl(var(--accent))]" style={{ width: d.pct }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Demographics distributions */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-[hsl(var(--text-secondary))]">Qualifications &amp; Leave</p>
+                <div className="space-y-2">
+                  {[
+                    { label: 'Doctorate (PhD)', count: 6, pct: '7%' },
+                    { label: 'Masters (MSc/MEd)', count: 24, pct: '28%' },
+                    { label: 'Bachelors (BSc/BEd)', count: 48, pct: '57%' },
+                    { label: 'Diploma / Certificate', count: 6, pct: '7%' },
+                  ].map(q => (
+                    <div key={q.label} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-[hsl(var(--text-secondary))]">{q.label}</span>
+                        <span className="font-semibold text-[hsl(var(--text-primary))]">{q.count}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[hsl(var(--bg-tertiary))] overflow-hidden">
+                        <div className="h-full bg-indigo-400" style={{ width: q.pct }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="flex items-center justify-between pt-3 border-t border-[hsl(var(--border))]">
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${typeColors[staff.type] || 'bg-zinc-500/15 text-zinc-400'}`}>{staff.type}</span>
-              <code className="text-[10px] font-mono text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.1)] px-1.5 py-0.5 rounded">{staff.employeeId}</code>
+
+            {/* Custom mini bar charts for stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[hsl(var(--border))]">
+              <div>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">Teachers vs Non-Teaching Staff</p>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
+                    <div className="h-full rounded-full bg-purple-500" style={{ width: '57%' }} />
+                  </div>
+                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">48/36</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">Gender Distribution</p>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
+                    <div className="h-full rounded-full bg-teal-400" style={{ width: '52%' }} />
+                  </div>
+                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">52% F</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">Leave Accrued utilization</p>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
+                    <div className="h-full rounded-full bg-amber-500" style={{ width: '12%' }} />
+                  </div>
+                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">12%</span>
+                </div>
+              </div>
             </div>
           </div>
-        ))}
+        </div>
+
+        {/* Quick Actions Panel */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold text-[hsl(var(--text-secondary))] uppercase tracking-widest">Quick Actions</h3>
+          <div className="grid grid-cols-1 gap-2.5">
+            {quickActions.map(act => (
+              <button
+                key={act.label}
+                onClick={() => router.push(act.href)}
+                className={`flex items-center justify-between p-4 rounded-xl border text-left hover:scale-[1.01] hover:border-[hsl(var(--border-hover))] transition-all ${
+                  act.primary
+                    ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white border-transparent shadow-lg shadow-[hsl(var(--accent)/0.15)]'
+                    : 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-primary))]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <act.icon className={`w-5 h-5 ${act.primary ? 'text-white' : 'text-[hsl(var(--accent))]'}`} />
+                  <div>
+                    <p className="text-sm font-semibold">{act.label}</p>
+                    <p className={`text-xs mt-0.5 ${act.primary ? 'text-white/80' : 'text-[hsl(var(--text-tertiary))]'}`}>{act.desc}</p>
+                  </div>
+                </div>
+                <ChevronRight className={`w-4 h-4 ${act.primary ? 'text-white/85' : 'text-[hsl(var(--text-tertiary))]'}`} />
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

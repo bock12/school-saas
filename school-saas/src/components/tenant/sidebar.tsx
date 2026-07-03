@@ -43,6 +43,9 @@ import {
   UserCog,
   Scale,
   Megaphone,
+  Briefcase,
+  Shield,
+  Award,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -77,6 +80,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
   const { isCollapsed, toggleCollapsed, isMobileOpen, closeMobile } = useSidebar();
   const [openSubMenus, setOpenSubMenus] = useState<Record<string, boolean>>({
     Students: true,
+    'Staff Management': true,
     Academics: true,
   });
 
@@ -97,8 +101,35 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
       items: [
         { label: 'Dashboard', href: basePath, icon: LayoutDashboard, exact: true },
         { label: 'Parents', href: `${basePath}/parents`, icon: UserCheck },
-        { label: 'Staff', href: `${basePath}/staff`, icon: UsersRound },
-        { label: 'Teachers', href: `${basePath}/teachers`, icon: GraduationCap },
+      ],
+    },
+    {
+      label: 'Staff Management',
+      items: [],
+      subSections: [
+        {
+          label: 'Staff Management',
+          icon: UsersRound,
+          items: [
+            { label: 'Dashboard', href: `${basePath}/staff`, icon: LayoutDashboard, exact: true },
+            { label: 'Recruitment', href: `${basePath}/staff/recruitment`, icon: Briefcase },
+            { label: 'Applicants', href: `${basePath}/staff/applicants`, icon: UserPlus },
+            { label: 'Employees', href: `${basePath}/staff/employees`, icon: Users },
+            { label: 'Teachers', href: `${basePath}/staff/teachers`, icon: GraduationCap },
+            { label: 'Non-Teaching Staff', href: `${basePath}/staff/non-teaching`, icon: Shield },
+            { label: 'Departments', href: `${basePath}/staff/departments`, icon: Layers },
+            { label: 'Positions', href: `${basePath}/staff/positions`, icon: BookOpen },
+            { label: 'Attendance', href: `${basePath}/staff/attendance`, icon: CalendarCheck },
+            { label: 'Leave', href: `${basePath}/staff/leave`, icon: Clock },
+            { label: 'Performance', href: `${basePath}/staff/performance`, icon: BarChart3 },
+            { label: 'Payroll', href: `${basePath}/staff/payroll`, icon: DollarSign },
+            { label: 'Documents', href: `${basePath}/staff/documents`, icon: FileText },
+            { label: 'Contracts', href: `${basePath}/staff/contracts`, icon: ClipboardList },
+            { label: 'Training', href: `${basePath}/staff/training`, icon: Award },
+            { label: 'Bulk Operations', href: `${basePath}/staff/bulk`, icon: LayoutGrid },
+            { label: 'Reports', href: `${basePath}/staff/reports`, icon: BarChart3 },
+          ],
+        },
       ],
     },
     {
