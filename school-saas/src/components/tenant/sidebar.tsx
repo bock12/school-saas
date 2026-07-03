@@ -76,6 +76,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
   const pathname = usePathname();
   const { isCollapsed, toggleCollapsed, isMobileOpen, closeMobile } = useSidebar();
   const [openSubMenus, setOpenSubMenus] = useState<Record<string, boolean>>({
+    Students: true,
     Academics: true,
   });
 
@@ -95,11 +96,36 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
       label: 'Main',
       items: [
         { label: 'Dashboard', href: basePath, icon: LayoutDashboard, exact: true },
-        { label: 'Admissions', href: `${basePath}/admissions`, icon: UserPlus },
-        { label: 'Students', href: `${basePath}/students`, icon: Users },
         { label: 'Parents', href: `${basePath}/parents`, icon: UserCheck },
         { label: 'Staff', href: `${basePath}/staff`, icon: UsersRound },
         { label: 'Teachers', href: `${basePath}/teachers`, icon: GraduationCap },
+      ],
+    },
+    {
+      label: 'Student Lifecycle',
+      items: [],
+      subSections: [
+        {
+          label: 'Students',
+          icon: Users,
+          items: [
+            { label: 'Dashboard', href: `${basePath}/students`, icon: LayoutDashboard, exact: true },
+            { label: 'Admissions', href: `${basePath}/students/admissions`, icon: UserPlus },
+            { label: 'Applications', href: `${basePath}/students/applications`, icon: ClipboardList },
+            { label: 'Enrolled Students', href: `${basePath}/students/enrolled`, icon: UserCheck },
+            { label: 'Active Students', href: `${basePath}/students/active`, icon: Users },
+            { label: 'Class Allocation', href: `${basePath}/students/allocation`, icon: Layers },
+            { label: 'Promotions', href: `${basePath}/students/promotions`, icon: TrendingUp },
+            { label: 'Transfers', href: `${basePath}/students/transfers`, icon: Bus },
+            { label: 'Graduation', href: `${basePath}/students/graduation`, icon: GraduationCap },
+            { label: 'Alumni', href: `${basePath}/students/alumni`, icon: UsersRound },
+            { label: 'Medical', href: `${basePath}/students/medical`, icon: Stethoscope },
+            { label: 'Discipline', href: `${basePath}/students/discipline`, icon: Scale },
+            { label: 'Documents', href: `${basePath}/students/documents`, icon: FileText },
+            { label: 'Bulk Operations', href: `${basePath}/students/bulk`, icon: LayoutGrid },
+            { label: 'Reports', href: `${basePath}/students/reports`, icon: BarChart3 },
+          ],
+        },
       ],
     },
     {
