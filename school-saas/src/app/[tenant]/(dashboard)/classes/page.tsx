@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { ClassesClient, ClassData } from './_components/classes-client';
+import { ClassesClient, ClassData, TeacherOption } from './_components/classes-client';
 
 export default async function ClassesPage({ params }: { params: Promise<{ tenant: string }> }) {
   const resolvedParams = await params;
@@ -17,7 +17,6 @@ export default async function ClassesPage({ params }: { params: Promise<{ tenant
   const tenantId = tenantData?.id;
 
   // 2. Fetch classes with their sections and the class teacher
-  // Use FK hint for class_teacher_id → teachers
   const { data: classesData, error } = await supabase
     .from('classes')
     .select(`
@@ -45,16 +44,27 @@ export default async function ClassesPage({ params }: { params: Promise<{ tenant
     console.error('Error fetching classes:', error);
   }
 
-  // 3. Format the data for the client component
+  // 3. Fetch teachers for the Add Section modal
+  const { data: teachersRaw } = await supabase
+    .from('teachers')
+    .select('id, first_name, last_name')
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true)
+    .order('first_name', { ascending: true });
+
+  const teacherOptions: TeacherOption[] = (teachersRaw || []).map((t: any) => ({
+    id: t.id,
+    name: `${t.first_name} ${t.last_name}`,
+  }));
+
+  // 4. Format the data for the client component
   const classes: ClassData[] = (classesData || []).map((c: any) => {
     const sections = (c.sections || []).map((sec: any) => {
-      // Get teacher name from the FK-hinted relationship
       const teacherData = sec.teachers;
       const teacher = teacherData
         ? `${teacherData.first_name} ${teacherData.last_name}`
         : null;
 
-      // Count enrollments by array length
       const studentCount = Array.isArray(sec.class_enrollments)
         ? sec.class_enrollments.length
         : 0;
@@ -68,7 +78,6 @@ export default async function ClassesPage({ params }: { params: Promise<{ tenant
       };
     });
 
-    // Sort sections by name
     sections.sort((a: any, b: any) => a.name.localeCompare(b.name));
 
     return {
@@ -79,6 +88,5 @@ export default async function ClassesPage({ params }: { params: Promise<{ tenant
     };
   });
 
-  return <ClassesClient initialClasses={classes} />;
+  return <ClassesClient initialClasses={classes} teacherOptions={teacherOptions} tenant={tenant} />;
 }
-

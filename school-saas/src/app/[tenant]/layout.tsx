@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -11,16 +12,19 @@ export default async function TenantLayout({
   params: Promise<{ tenant: string }>;
 }) {
   const { tenant } = await params;
-  const supabase = await createClient();
 
-  // ── Verify tenant exists in the database ──────────────────────
-  const { data: school, error } = await supabase
+  // ── Use the admin (service-role) client ONLY to look up the tenant.
+  // This bypasses RLS so unauthenticated visitors (e.g. the login page)
+  // can still see the school's name and status without a session cookie.
+  const adminSupabase = createAdminClient();
+
+  const { data: school, error } = await adminSupabase
     .from('tenants')
     .select('id, name, slug, status, primary_color, logo_url')
     .eq('slug', tenant)
     .single();
 
-  // If the school doesn't exist, redirect to the main platform landing page
+  // If the school slug doesn't exist at all, redirect to the platform homepage
   if (error || !school) {
     redirect('/');
   }

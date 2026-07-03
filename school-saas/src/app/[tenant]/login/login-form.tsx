@@ -5,7 +5,15 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-export function TenantLoginForm({ tenantSlug, tenantName }: { tenantSlug: string; tenantName: string }) {
+export function TenantLoginForm({
+  tenantSlug,
+  tenantName,
+  schoolId,
+}: {
+  tenantSlug: string;
+  tenantName: string;
+  schoolId: string;
+}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -37,10 +45,10 @@ export function TenantLoginForm({ tenantSlug, tenantName }: { tenantSlug: string
       return;
     }
 
-    // 2. Fetch user profile and verify tenant match
+    // 2. Fetch user profile — simple SELECT, no join, no RLS circular dependency
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, tenant_id, tenants(slug)')
+      .select('role, tenant_id')
       .eq('id', authData.user.id)
       .single();
 
@@ -50,12 +58,11 @@ export function TenantLoginForm({ tenantSlug, tenantName }: { tenantSlug: string
       return;
     }
 
-    // 3. ENFORCE TENANT ISOLATION: Ensure user belongs to this school's subdomain
-    const profileTenant = (profile as unknown as { tenants: { slug: string } | null }).tenants;
-    if (!profileTenant || profileTenant.slug !== tenantSlug) {
+    // 3. ENFORCE TENANT ISOLATION: compare tenant_id directly (no join needed)
+    if (profile.tenant_id !== schoolId) {
       // Cross-tenant access attempt — force sign out immediately
       await supabase.auth.signOut();
-      setError(`Access denied. Your account does not belong to this school portal.`);
+      setError('Access denied. Your account does not belong to this school portal.');
       setLoading(false);
       return;
     }

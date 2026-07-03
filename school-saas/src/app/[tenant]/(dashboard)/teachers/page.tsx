@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { TeachersClient, Teacher } from './_components/teachers-client';
+import { TeachersClient, Teacher, Department } from './_components/teachers-client';
 
 export default async function TeachersPage({ params }: { params: Promise<{ tenant: string }> }) {
   const resolvedParams = await params;
@@ -29,7 +29,7 @@ export default async function TeachersPage({ params }: { params: Promise<{ tenan
       qualification,
       is_active,
       date_of_joining,
-      departments (
+      departments!teachers_department_id_fkey (
         name
       ),
       teacher_assignments (
@@ -45,7 +45,19 @@ export default async function TeachersPage({ params }: { params: Promise<{ tenan
     console.error('Error fetching teachers:', error);
   }
 
-  // 3. Format the data for the client component
+  // 3. Fetch departments for the Add Teacher dropdown
+  const { data: departmentsRaw } = await supabase
+    .from('departments')
+    .select('id, name')
+    .eq('tenant_id', tenantId)
+    .order('name', { ascending: true });
+
+  const departments: Department[] = (departmentsRaw || []).map((d: any) => ({
+    id: d.id,
+    name: d.name,
+  }));
+
+  // 4. Format the data for the client component
   const teachers: Teacher[] = (teachersData || []).map((t: any) => {
     const departmentName = t.departments?.name || 'Unassigned';
     
@@ -71,5 +83,5 @@ export default async function TeachersPage({ params }: { params: Promise<{ tenan
     };
   });
 
-  return <TeachersClient initialTeachers={teachers} />;
+  return <TeachersClient initialTeachers={teachers} departments={departments} tenant={tenant} />;
 }

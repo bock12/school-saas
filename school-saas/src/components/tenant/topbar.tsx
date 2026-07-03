@@ -1,25 +1,47 @@
 'use client';
 
-import { Bell, ChevronDown, LogOut, User, Search } from 'lucide-react';
-import { useState } from 'react';
+import { Bell, ChevronDown, LogOut, User, Search, Loader2 } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import { signOut } from '@/app/[tenant]/login/actions';
 
 interface TenantTopbarProps {
+  tenantSlug: string;
   tenantName: string;
   userName?: string;
   userRole?: string;
   userAvatar?: string;
 }
 
-export function TenantTopbar({ tenantName, userName = 'School Admin', userRole = 'school_admin', userAvatar }: TenantTopbarProps) {
+const roleLabels: Record<string, string> = {
+  school_admin: 'School Admin',
+  teacher: 'Teacher',
+  student: 'Student',
+  parent: 'Parent',
+};
+
+export function TenantTopbar({
+  tenantSlug,
+  tenantName,
+  userName = 'School Admin',
+  userRole = 'school_admin',
+  userAvatar,
+}: TenantTopbarProps) {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isSigningOut, startSignOut] = useTransition();
 
-  const roleLabels: Record<string, string> = {
-    school_admin: 'School Admin',
-    teacher: 'Teacher',
-    student: 'Student',
-    parent: 'Parent',
-  };
+  const initials = userName
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  function handleSignOut() {
+    startSignOut(async () => {
+      await signOut(tenantSlug);
+    });
+  }
 
   return (
     <header className="sticky top-0 z-30 h-16 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg-primary)/0.8)] backdrop-blur-xl">
@@ -67,9 +89,7 @@ export function TenantTopbar({ tenantName, userName = 'School Admin', userRole =
                 {userAvatar ? (
                   <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover" />
                 ) : (
-                  <span className="text-xs font-bold text-[hsl(var(--accent))]">
-                    {userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                  </span>
+                  <span className="text-xs font-bold text-[hsl(var(--accent))]">{initials}</span>
                 )}
               </div>
               <div className="hidden md:block text-left">
@@ -81,14 +101,28 @@ export function TenantTopbar({ tenantName, userName = 'School Admin', userRole =
 
             {showProfile && (
               <div className="absolute right-0 top-12 w-52 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] shadow-lg animate-fade-in-scale overflow-hidden z-50 p-1">
-                <button className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all">
+                {/* User info summary */}
+                <div className="px-3 py-2.5 mb-1">
+                  <p className="text-sm font-semibold text-[hsl(var(--text-primary))] truncate">{userName}</p>
+                  <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{roleLabels[userRole] || userRole}</p>
+                </div>
+                <div className="border-t border-[hsl(var(--border))] mx-1" />
+                <button className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all mt-0.5">
                   <User className="w-4 h-4" />
                   My Profile
                 </button>
-                <div className="my-1 border-t border-[hsl(var(--border))]" />
-                <button className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger)/0.1)] transition-all">
-                  <LogOut className="w-4 h-4" />
-                  Sign Out
+                <div className="my-0.5 mx-1 border-t border-[hsl(var(--border))]" />
+                <button
+                  onClick={handleSignOut}
+                  disabled={isSigningOut}
+                  className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger)/0.1)] transition-all disabled:opacity-50"
+                >
+                  {isSigningOut ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <LogOut className="w-4 h-4" />
+                  )}
+                  {isSigningOut ? 'Signing out…' : 'Sign Out'}
                 </button>
               </div>
             )}
