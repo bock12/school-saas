@@ -81,6 +81,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
   const [openSubMenus, setOpenSubMenus] = useState<Record<string, boolean>>({
     Students: true,
     'Staff Management': true,
+    'Parent & Guardian': true,
     Academics: true,
   });
 
@@ -100,7 +101,30 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
       label: 'Main',
       items: [
         { label: 'Dashboard', href: basePath, icon: LayoutDashboard, exact: true },
-        { label: 'Parents', href: `${basePath}/parents`, icon: UserCheck },
+      ],
+    },
+    {
+      label: 'Parent & Guardian',
+      items: [],
+      subSections: [
+        {
+          label: 'Parent & Guardian',
+          icon: UserCheck,
+          items: [
+            { label: 'Dashboard', href: `${basePath}/parents`, icon: LayoutDashboard, exact: true },
+            { label: 'Parents', href: `${basePath}/parents/parents`, icon: Users },
+            { label: 'Guardians', href: `${basePath}/parents/guardians`, icon: ShieldCheck },
+            { label: 'Sponsors', href: `${basePath}/parents/sponsors`, icon: DollarSign },
+            { label: 'Emergency Contacts', href: `${basePath}/parents/emergency`, icon: Heart },
+            { label: 'Family Groups', href: `${basePath}/parents/families`, icon: UsersRound },
+            { label: 'Student Relationships', href: `${basePath}/parents/relationships`, icon: Layers },
+            { label: 'Communication', href: `${basePath}/parents/communication`, icon: MessageSquare },
+            { label: 'Portal Accounts', href: `${basePath}/parents/portal`, icon: UserPlus },
+            { label: 'Documents', href: `${basePath}/parents/documents`, icon: FileText },
+            { label: 'Bulk Operations', href: `${basePath}/parents/bulk`, icon: LayoutGrid },
+            { label: 'Reports', href: `${basePath}/parents/reports`, icon: BarChart3 },
+          ],
+        },
       ],
     },
     {

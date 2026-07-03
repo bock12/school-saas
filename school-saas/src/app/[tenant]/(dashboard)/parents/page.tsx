@@ -1,100 +1,219 @@
-import { UserCheck, UserPlus, Phone, Mail, Users, Search, MapPin, Heart, MessageSquare, ArrowRight } from 'lucide-react';
+'use client';
 
-const demoParents = [
-  { id: '1', name: 'Mrs. Rachel Johnson', email: 'rachel.johnson@email.com', phone: '+1 555-0101', children: ['Amara Johnson', 'Tony Johnson'], type: 'Parent', address: '42 Elm Street, Springfield', joinedDate: 'Sep 2024' },
-  { id: '2', name: 'Mr. Emeka Okafor', email: 'emeka.okafor@email.com', phone: '+1 555-0102', children: ['David Okafor'], type: 'Parent', address: '18 Oak Avenue, Riverside', joinedDate: 'Jan 2025' },
-  { id: '3', name: 'Ms. Linda Williams', email: 'linda.williams@email.com', phone: '+1 555-0103', children: ['Sarah Williams'], type: 'Guardian', address: '99 Pine Road, Westtown', joinedDate: 'Sep 2023' },
-  { id: '4', name: 'Mr. Wei Chen', email: 'wei.chen@email.com', phone: '+1 555-0104', children: ['Michael Chen', 'Lucy Chen'], type: 'Parent', address: '5 Cherry Lane, Greenville', joinedDate: 'Jan 2024' },
-  { id: '5', name: 'Mr. Ahmed Hassan', email: 'a.hassan@email.com', phone: '+1 555-0105', children: ['Fatima Hassan'], type: 'Parent', address: '33 Maple Drive, Northgate', joinedDate: 'Sep 2024' },
-  { id: '6', name: 'Mrs. Linh Nguyen', email: 'linh.nguyen@email.com', phone: '+1 555-0106', children: ['James Nguyen'], type: 'Parent', address: '77 Birch Blvd, Eastside', joinedDate: 'Sep 2021' },
-  { id: '7', name: 'Dr. Raj Sharma', email: 'raj.sharma@email.com', phone: '+1 555-0107', children: ['Priya Sharma'], type: 'Parent', address: '12 Willow Ct, Midtown', joinedDate: 'Jan 2025' },
-  { id: '8', name: 'Pastor Samuel Adeyemi', email: 's.adeyemi@email.com', phone: '+1 555-0108', children: ['Emmanuel Adeyemi'], type: 'Sponsor', address: '60 Church Road, Calvary', joinedDate: 'Sep 2025' },
-];
+import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import {
+  Users, ShieldCheck, DollarSign, Heart, UsersRound, Layers, MessageSquare, UserPlus,
+  FileText, LayoutGrid, BarChart3, ChevronRight, UserCheck, ArrowUpRight, Plus, Download, Mail
+} from 'lucide-react';
 
-export default function ParentsPage() {
+export default function ParentsDashboardPage() {
+  const params = useParams();
+  const router = useRouter();
+  const tenant = params.tenant as string;
+
+  const kpis: {
+    label: string;
+    value: number;
+    change: string;
+    up: boolean;
+    icon: any;
+    color: string;
+    bg: string;
+    subtitle?: string;
+  }[] = [
+    { label: 'Total Parents', value: 524, change: '+3.1%', up: true, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+    { label: 'Total Guardians', value: 84, change: '+1.2%', up: true, icon: ShieldCheck, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+    { label: 'Sponsors', value: 12, change: '0', up: true, icon: DollarSign, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
+    { label: 'Students w/o Guardians', value: 3, change: '-2', up: false, icon: UserPlus, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' },
+    { label: 'Pending Rel Requests', value: 8, change: '+1', up: true, icon: Layers, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+    { label: 'Portal Users Mobile', value: 412, change: '+6.2%', up: true, icon: UsersRound, color: 'text-teal-400', bg: 'bg-teal-500/10 border-teal-500/20' },
+    { label: 'No Portal Access', value: 18, change: '-4', up: false, icon: UserPlus, color: 'text-pink-400', bg: 'bg-pink-500/10 border-pink-500/20' },
+    { label: 'Emergency Contact Missing', value: 2, change: '-1', up: false, icon: Heart, color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20' }
+  ];
+
+  const quickActions = [
+    { label: 'Add Parent', desc: 'Register parent profile', href: `/${tenant}/parents/parents`, icon: UserPlus, primary: true },
+    { label: 'Add Guardian', desc: 'Register legal guardian', href: `/${tenant}/parents/guardians`, icon: ShieldCheck },
+    { label: 'Link Parent', desc: 'Link parent to student', href: `/${tenant}/parents/relationships`, icon: Layers },
+    { label: 'Invite Parent Portal', desc: 'Dispatch portal invite email', href: `/${tenant}/parents/portal`, icon: Mail },
+    { label: 'Print Parent Cards', desc: 'Batch ID card print', href: `/${tenant}/parents/bulk`, icon: LayoutGrid },
+    { label: 'Bulk Import', desc: 'Upload CSV templates', href: `/${tenant}/parents/bulk`, icon: Download },
+    { label: 'Send Announcement', desc: 'Dispatch broadcast to parents', href: `/${tenant}/parents/communication`, icon: MessageSquare },
+    { label: 'Generate Family Report', desc: 'Consolidated sibling lists', href: `/${tenant}/parents/reports`, icon: FileText }
+  ];
+
   return (
-    <div className="space-y-6 max-w-[1600px]">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="space-y-6 max-w-[1600px] animate-fade-in">
+      {/* Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Parents & Guardians</h1>
-          <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">{demoParents.length} registered contacts</p>
+          <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Parent &amp; Guardian RMS</h1>
+          <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">
+            Relationship management center, permissions allocation, and portal registration logs
+          </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-medium hover:opacity-90 transition-opacity w-fit">
-          <UserPlus className="w-4 h-4" />
-          Add Parent
-        </button>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Parents', value: demoParents.filter(p => p.type === 'Parent').length, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
-          { label: 'Guardians', value: demoParents.filter(p => p.type === 'Guardian').length, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-          { label: 'Sponsors', value: demoParents.filter(p => p.type === 'Sponsor').length, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
-        ].map(s => (
-          <div key={s.label} className={`rounded-xl border p-4 text-center ${s.bg}`}>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-[hsl(var(--text-tertiary))] mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="glass-card p-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-tertiary))]" />
-            <input type="text" placeholder="Search parents..." className="w-full h-10 pl-10 pr-4 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" />
-          </div>
-          <select className="h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-secondary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors">
-            <option>All Types</option>
-            <option>Parent</option>
-            <option>Guardian</option>
-            <option>Sponsor</option>
-          </select>
+        <div className="flex items-center gap-2">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-medium">
+            Active Accounts: 608
+          </span>
         </div>
       </div>
 
-      {/* Parent Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {demoParents.map((parent, i) => (
-          <div key={parent.id} className="glass-card p-5 animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[hsl(var(--accent)/0.2)] to-[hsl(var(--info)/0.2)] flex items-center justify-center text-[hsl(var(--accent))] font-bold text-sm flex-shrink-0">
-                {parent.name.split(' ').map(w => w[0]).join('').slice(0,2)}
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        {kpis.map((kpi, i) => {
+          const Icon = kpi.icon;
+          return (
+            <div
+              key={kpi.label}
+              className={`glass-card p-4 flex flex-col justify-between border hover:scale-[1.02] transition-all cursor-pointer ${kpi.bg}`}
+              style={{ animationDelay: `${i * 30}ms` }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-[hsl(var(--text-tertiary))] tracking-wider truncate mr-2">{kpi.label}</span>
+                <Icon className={`w-4 h-4 flex-shrink-0 ${kpi.color}`} />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-[hsl(var(--text-primary))] truncate">{parent.name}</p>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${parent.type === 'Parent' ? 'bg-blue-500/15 text-blue-400' : parent.type === 'Guardian' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-purple-500/15 text-purple-400'}`}>
-                  {parent.type}
-                </span>
+              <div className="flex items-baseline gap-2 mt-auto">
+                <p className="text-lg font-bold text-[hsl(var(--text-primary))]">{kpi.value}</p>
+                {kpi.change && (
+                  <span className={`text-[10px] font-semibold flex items-center ${kpi.up ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <ArrowUpRight className={`w-3 h-3 ${!kpi.up && 'rotate-90'}`} />
+                    {kpi.change}
+                  </span>
+                )}
+                {kpi.subtitle && (
+                  <span className="text-[10px] text-[hsl(var(--text-tertiary))] truncate">{kpi.subtitle}</span>
+                )}
               </div>
             </div>
-            <div className="space-y-1.5 mb-4">
-              <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5"><Mail className="w-3 h-3" />{parent.email}</p>
-              <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5"><Phone className="w-3 h-3" />{parent.phone}</p>
-              <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1.5"><MapPin className="w-3 h-3" />{parent.address}</p>
+          );
+        })}
+      </div>
+
+      {/* Main Insights Content Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Charts & Graphs Panel */}
+        <div className="xl:col-span-2 space-y-6">
+          <div className="glass-card p-5 space-y-6">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+              <div>
+                <h3 className="text-base font-semibold text-[hsl(var(--text-primary))]">Parent Demographics</h3>
+                <p className="text-xs text-[hsl(var(--text-tertiary))]">Relationship distributions and portal active rates</p>
+              </div>
+              <span className="text-xs text-[hsl(var(--accent))] font-medium flex items-center gap-1">
+                Portal Activation: 97.4% <ChevronRight className="w-3.5 h-3.5" />
+              </span>
             </div>
-            <div className="pt-3 border-t border-[hsl(var(--border))]">
-              <p className="text-[10px] font-medium text-[hsl(var(--text-tertiary))] uppercase tracking-wider mb-1.5">Children</p>
-              <div className="flex flex-wrap gap-1">
-                {parent.children.map(c => (
-                  <span key={c} className="text-[11px] px-2 py-0.5 rounded-full bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] border border-[hsl(var(--border))]">{c}</span>
-                ))}
+
+            {/* Custom SVG line/area chart (High Performance/Zero Dep) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Relationship distribution */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-[hsl(var(--text-secondary))]">Adult Relationships Distribution</p>
+                <div className="space-y-2">
+                  {[
+                    { type: 'Father / Mother (Academic + Finance)', count: 480, pct: '78%' },
+                    { type: 'Guardians (Custody & Pickup)', count: 84, pct: '14%' },
+                    { type: 'Sponsors (Finance Only)', count: 12, pct: '2%' },
+                    { type: 'Emergency Contacts Only', count: 32, pct: '6%' },
+                  ].map(d => (
+                    <div key={d.type} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-[hsl(var(--text-secondary))] truncate mr-2">{d.type}</span>
+                        <span className="font-semibold text-[hsl(var(--text-primary))] flex-shrink-0">{d.count}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[hsl(var(--bg-tertiary))] overflow-hidden">
+                        <div className="h-full bg-[hsl(var(--accent))]" style={{ width: d.pct }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Portal status distribution */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-[hsl(var(--text-secondary))]">Portal Activation Demographics</p>
+                <div className="space-y-2">
+                  {[
+                    { label: 'Mobile App Active', count: 412, pct: '67%' },
+                    { label: 'Web Portal Active', count: 178, pct: '29%' },
+                    { label: 'Invited / Pending', count: 18, pct: '3%' },
+                    { label: 'Not Invited Yet', count: 10, pct: '1%' },
+                  ].map(q => (
+                    <div key={q.label} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-[hsl(var(--text-secondary))]">{q.label}</span>
+                        <span className="font-semibold text-[hsl(var(--text-primary))]">{q.count}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[hsl(var(--bg-tertiary))] overflow-hidden">
+                        <div className="h-full bg-emerald-500" style={{ width: q.pct }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="flex gap-2 mt-3 pt-3 border-t border-[hsl(var(--border))]">
-              <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] border border-[hsl(var(--border))] transition-all">
-                <MessageSquare className="w-3.5 h-3.5" />
-                Message
-              </button>
-              <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.1)] hover:bg-[hsl(var(--accent)/0.2)] transition-all">
-                <UserCheck className="w-3.5 h-3.5" />
-                View Profile
-              </button>
+
+            {/* Custom mini bar charts for statistics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[hsl(var(--border))]">
+              <div>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">Family Group Statements Billing</p>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
+                    <div className="h-full rounded-full bg-blue-500" style={{ width: '92%' }} />
+                  </div>
+                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">92%</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">SMS Notification Delivery Rate</p>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
+                    <div className="h-full rounded-full bg-emerald-500" style={{ width: '99%' }} />
+                  </div>
+                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">99%</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">Meeting Attendance engagement</p>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
+                    <div className="h-full rounded-full bg-purple-500" style={{ width: '84.2%' }} />
+                  </div>
+                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">84%</span>
+                </div>
+              </div>
             </div>
           </div>
-        ))}
+        </div>
+
+        {/* Quick Actions Panel */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold text-[hsl(var(--text-secondary))] uppercase tracking-widest">Quick Actions</h3>
+          <div className="grid grid-cols-1 gap-2.5">
+            {quickActions.map(act => (
+              <button
+                key={act.label}
+                onClick={() => router.push(act.href)}
+                className={`flex items-center justify-between p-4 rounded-xl border text-left hover:scale-[1.01] hover:border-[hsl(var(--border-hover))] transition-all ${
+                  act.primary
+                    ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white border-transparent shadow-lg shadow-[hsl(var(--accent)/0.15)]'
+                    : 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-primary))]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <act.icon className={`w-5 h-5 ${act.primary ? 'text-white' : 'text-[hsl(var(--accent))]'}`} />
+                  <div>
+                    <p className="text-sm font-semibold">{act.label}</p>
+                    <p className={`text-xs mt-0.5 ${act.primary ? 'text-white/80' : 'text-[hsl(var(--text-tertiary))]'}`}>{act.desc}</p>
+                  </div>
+                </div>
+                <ChevronRight className={`w-4 h-4 ${act.primary ? 'text-white/85' : 'text-[hsl(var(--text-tertiary))]'}`} />
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
