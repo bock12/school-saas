@@ -48,6 +48,10 @@ import {
   Award,
   Calendar,
   Edit2,
+  Phone,
+  Mail,
+  Bell,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -87,6 +91,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
     'Academic Management': true,
     'Academic Operations': true,
     Examinations: true,
+    Communication: true,
   });
 
   const basePath = `/${tenantSlug}`;
@@ -270,9 +275,34 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
       ],
     },
     {
+      label: 'Communication',
+      items: [],
+      subSections: [
+        {
+          label: 'Communication',
+          icon: MessageSquare,
+          items: [
+            { label: 'Dashboard', href: `${basePath}/communication`, icon: LayoutDashboard, exact: true },
+            { label: 'Internal Messages', href: `${basePath}/communication/internal`, icon: MessageSquare },
+            { label: 'SMS', href: `${basePath}/communication/sms`, icon: Phone },
+            { label: 'Email', href: `${basePath}/communication/email`, icon: Mail },
+            { label: 'Push Notifications', href: `${basePath}/communication/push`, icon: Bell },
+            { label: 'Notice Board', href: `${basePath}/communication/notice-board`, icon: Layers },
+            { label: 'Broadcasts', href: `${basePath}/communication/broadcasts`, icon: Megaphone },
+            { label: 'Emergency Alerts', href: `${basePath}/communication/emergency`, icon: AlertTriangle },
+            { label: 'Scheduled Messages', href: `${basePath}/communication/scheduled`, icon: Clock },
+            { label: 'Templates', href: `${basePath}/communication/templates`, icon: FileText },
+            { label: 'Automation Rules', href: `${basePath}/communication/automation`, icon: ShieldCheck },
+            { label: 'Delivery Reports', href: `${basePath}/communication/delivery-reports`, icon: BarChart3 },
+            { label: 'Communication Logs', href: `${basePath}/communication/logs`, icon: ClipboardList },
+            { label: 'Settings', href: `${basePath}/communication/settings`, icon: Settings },
+          ],
+        },
+      ],
+    },
+    {
       label: 'School Life',
       items: [
-        { label: 'Communication', href: `${basePath}/communication`, icon: MessageSquare },
         { label: 'Library', href: `${basePath}/library`, icon: Library },
         { label: 'Transport', href: `${basePath}/transport`, icon: Bus },
         { label: 'Hostel', href: `${basePath}/hostel`, icon: Home },
