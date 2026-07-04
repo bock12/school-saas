@@ -12,26 +12,6 @@ export default function ParentsDashboardPage() {
   const router = useRouter();
   const tenant = params.tenant as string;
 
-  const kpis: {
-    label: string;
-    value: number;
-    change: string;
-    up: boolean;
-    icon: any;
-    color: string;
-    bg: string;
-    subtitle?: string;
-  }[] = [
-    { label: 'Total Parents', value: 524, change: '+3.1%', up: true, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
-    { label: 'Total Guardians', value: 84, change: '+1.2%', up: true, icon: ShieldCheck, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-    { label: 'Sponsors', value: 12, change: '0', up: true, icon: DollarSign, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
-    { label: 'Students w/o Guardians', value: 3, change: '-2', up: false, icon: UserPlus, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' },
-    { label: 'Pending Rel Requests', value: 8, change: '+1', up: true, icon: Layers, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
-    { label: 'Portal Users Mobile', value: 412, change: '+6.2%', up: true, icon: UsersRound, color: 'text-teal-400', bg: 'bg-teal-500/10 border-teal-500/20' },
-    { label: 'No Portal Access', value: 18, change: '-4', up: false, icon: UserPlus, color: 'text-pink-400', bg: 'bg-pink-500/10 border-pink-500/20' },
-    { label: 'Emergency Contact Missing', value: 2, change: '-1', up: false, icon: Heart, color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20' }
-  ];
-
   const quickActions = [
     { label: 'Add Parent', desc: 'Register parent profile', href: `/${tenant}/parents/parents`, icon: UserPlus, primary: true },
     { label: 'Add Guardian', desc: 'Register legal guardian', href: `/${tenant}/parents/guardians`, icon: ShieldCheck },
@@ -44,169 +24,145 @@ export default function ParentsDashboardPage() {
   ];
 
   return (
-    <div className="space-y-6 max-w-[1600px] animate-fade-in">
+    <div className="space-y-8 max-w-[1600px] animate-fade-in px-4 sm:px-6">
       {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[hsl(var(--border))]">
         <div>
-          <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Parent &amp; Guardian RMS</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-[hsl(var(--text-primary))] bg-clip-text bg-gradient-to-r from-[hsl(var(--text-primary))] to-[hsl(var(--text-secondary))]">
+            Parent &amp; Guardian RMS
+          </h1>
           <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">
-            Relationship management center, permissions allocation, and portal registration logs
+            Relationship management center, billing groups isolation, and secure portal registration access controls.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-medium">
-            Active Accounts: 608
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold shadow-glow">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            608 Active Relations
           </span>
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-        {kpis.map((kpi, i) => {
-          const Icon = kpi.icon;
-          return (
-            <div
-              key={kpi.label}
-              className={`glass-card p-4 flex flex-col justify-between border hover:scale-[1.02] transition-all cursor-pointer ${kpi.bg}`}
-              style={{ animationDelay: `${i * 30}ms` }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-[hsl(var(--text-tertiary))] tracking-wider truncate mr-2">{kpi.label}</span>
-                <Icon className={`w-4 h-4 flex-shrink-0 ${kpi.color}`} />
-              </div>
-              <div className="flex items-baseline gap-2 mt-auto">
-                <p className="text-lg font-bold text-[hsl(var(--text-primary))]">{kpi.value}</p>
-                {kpi.change && (
-                  <span className={`text-[10px] font-semibold flex items-center ${kpi.up ? 'text-emerald-400' : 'text-red-400'}`}>
-                    <ArrowUpRight className={`w-3 h-3 ${!kpi.up && 'rotate-90'}`} />
-                    {kpi.change}
-                  </span>
-                )}
-                {kpi.subtitle && (
-                  <span className="text-[10px] text-[hsl(var(--text-tertiary))] truncate">{kpi.subtitle}</span>
-                )}
+      {/* Modern High-End KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[
+          { label: 'Total Registered Adults', value: '608', sub: '524 Parents • 84 Guardians', change: '+3.1%', icon: Users, color: 'from-blue-500/20 to-blue-600/5 border-blue-500/30 text-blue-400' },
+          { label: 'Financial Sponsors', value: '12 Accounts', sub: 'Sibling groups consolidation', change: '0%', icon: DollarSign, color: 'from-purple-500/20 to-purple-600/5 border-purple-500/30 text-purple-400' },
+          { label: 'Portal Registration', value: '97.4%', sub: '412 Mobile App • 178 Web', change: '+6.2%', icon: UsersRound, color: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/30 text-emerald-400' },
+          { label: 'Attention Required', value: '5 Issues', sub: '3 Missing Guardians • 2 Emergency', change: '-3', up: false, icon: Heart, color: 'from-rose-500/20 to-rose-600/5 border-rose-500/30 text-rose-400' }
+        ].map((kpi, idx) => (
+          <div
+            key={kpi.label}
+            className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${kpi.color} p-6 hover:-translate-y-1 transition-all duration-300 shadow-md`}
+          >
+            <div className="flex justify-between items-start mb-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-secondary))]">{kpi.label}</span>
+              <div className="p-2 rounded-xl bg-white/5 border border-white/10">
+                <kpi.icon className="w-5 h-5" />
               </div>
             </div>
-          );
-        })}
+            <div className="space-y-1">
+              <p className="text-3xl font-black text-[hsl(var(--text-primary))]">{kpi.value}</p>
+              <div className="flex items-center justify-between text-xs text-[hsl(var(--text-secondary))] pt-2 border-t border-white/5">
+                <span>{kpi.sub}</span>
+                <span className={`font-semibold flex items-center ${kpi.up !== false ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {kpi.change}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Main Insights Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Charts & Graphs Panel */}
         <div className="xl:col-span-2 space-y-6">
-          <div className="glass-card p-5 space-y-6">
-            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+          <div className="glass-card p-6 rounded-2xl border border-[hsl(var(--border))] space-y-6 shadow-lg">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-4">
               <div>
-                <h3 className="text-base font-semibold text-[hsl(var(--text-primary))]">Parent Demographics</h3>
+                <h3 className="text-lg font-bold text-[hsl(var(--text-primary))]">Adult Custody &amp; Engagement distributions</h3>
                 <p className="text-xs text-[hsl(var(--text-tertiary))]">Relationship distributions and portal active rates</p>
               </div>
-              <span className="text-xs text-[hsl(var(--accent))] font-medium flex items-center gap-1">
+              <span className="text-xs text-[hsl(var(--accent))] font-medium flex items-center gap-1 cursor-pointer hover:underline">
                 Portal Activation: 97.4% <ChevronRight className="w-3.5 h-3.5" />
               </span>
             </div>
 
-            {/* Custom SVG line/area chart (High Performance/Zero Dep) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Relationship distribution */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-[hsl(var(--text-secondary))]">Adult Relationships Distribution</p>
-                <div className="space-y-2">
-                  {[
-                    { type: 'Father / Mother (Academic + Finance)', count: 480, pct: '78%' },
-                    { type: 'Guardians (Custody & Pickup)', count: 84, pct: '14%' },
-                    { type: 'Sponsors (Finance Only)', count: 12, pct: '2%' },
-                    { type: 'Emergency Contacts Only', count: 32, pct: '6%' },
-                  ].map(d => (
-                    <div key={d.type} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-[hsl(var(--text-secondary))] truncate mr-2">{d.type}</span>
-                        <span className="font-semibold text-[hsl(var(--text-primary))] flex-shrink-0">{d.count}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-[hsl(var(--bg-tertiary))] overflow-hidden">
-                        <div className="h-full bg-[hsl(var(--accent))]" style={{ width: d.pct }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Portal status distribution */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-[hsl(var(--text-secondary))]">Portal Activation Demographics</p>
-                <div className="space-y-2">
-                  {[
-                    { label: 'Mobile App Active', count: 412, pct: '67%' },
-                    { label: 'Web Portal Active', count: 178, pct: '29%' },
-                    { label: 'Invited / Pending', count: 18, pct: '3%' },
-                    { label: 'Not Invited Yet', count: 10, pct: '1%' },
-                  ].map(q => (
-                    <div key={q.label} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-[hsl(var(--text-secondary))]">{q.label}</span>
-                        <span className="font-semibold text-[hsl(var(--text-primary))]">{q.count}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-[hsl(var(--bg-tertiary))] overflow-hidden">
-                        <div className="h-full bg-emerald-500" style={{ width: q.pct }} />
-                      </div>
-                    </div>
-                  ))}
+            {/* High-Fidelity SVG Line Graph */}
+            <div className="space-y-4">
+              <p className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Historical Relationship Registrations (Monthly)</p>
+              <div className="h-60 w-full relative pt-4">
+                <svg className="w-full h-full overflow-visible" viewBox="0 0 500 200" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="parentCurveGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity="0.4" />
+                      <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  {/* Grid Lines */}
+                  <line x1="0" y1="50" x2="500" y2="50" stroke="hsl(var(--border)/0.4)" strokeWidth="1" strokeDasharray="4" />
+                  <line x1="0" y1="100" x2="500" y2="100" stroke="hsl(var(--border)/0.4)" strokeWidth="1" strokeDasharray="4" />
+                  <line x1="0" y1="150" x2="500" y2="150" stroke="hsl(var(--border)/0.4)" strokeWidth="1" strokeDasharray="4" />
+                  {/* Curved Area */}
+                  <path d="M 0 160 Q 125 120 250 140 T 500 60 L 500 200 L 0 200 Z" fill="url(#parentCurveGrad)" />
+                  {/* Curved Line */}
+                  <path d="M 0 160 Q 125 120 250 140 T 500 60" fill="none" stroke="hsl(var(--accent))" strokeWidth="3" />
+                  {/* Nodes */}
+                  <circle cx="250" cy="140" r="5" fill="hsl(var(--accent))" stroke="white" strokeWidth="2" />
+                  <circle cx="500" cy="60" r="5" fill="hsl(var(--accent))" stroke="white" strokeWidth="2" />
+                </svg>
+                <div className="absolute bottom-0 left-0 right-0 flex justify-between text-[10px] text-[hsl(var(--text-tertiary))] pt-2">
+                  <span>Jan</span>
+                  <span>Mar</span>
+                  <span>May</span>
+                  <span>Jul (Active)</span>
                 </div>
               </div>
             </div>
 
             {/* Custom mini bar charts for statistics */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[hsl(var(--border))]">
-              <div>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">Family Group Statements Billing</p>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
-                    <div className="h-full rounded-full bg-blue-500" style={{ width: '92%' }} />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t border-[hsl(var(--border))]">
+              {[
+                { label: 'Billing Consolidation', val: '92%', color: 'bg-blue-500' },
+                { label: 'SMS Delivery Success', val: '99%', color: 'bg-emerald-500' },
+                { label: 'PTA Engagement Rate', val: '84%', color: 'bg-purple-500' }
+              ].map(stat => (
+                <div key={stat.label} className="space-y-2">
+                  <span className="text-[11px] font-bold text-[hsl(var(--text-tertiary))] uppercase tracking-wider block">{stat.label}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
+                      <div className={`h-full rounded-full ${stat.color}`} style={{ width: stat.val }} />
+                    </div>
+                    <span className="text-xs font-bold text-[hsl(var(--text-primary))]">{stat.val}</span>
                   </div>
-                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">92%</span>
                 </div>
-              </div>
-              <div>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">SMS Notification Delivery Rate</p>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
-                    <div className="h-full rounded-full bg-emerald-500" style={{ width: '99%' }} />
-                  </div>
-                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">99%</span>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">Meeting Attendance engagement</p>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
-                    <div className="h-full rounded-full bg-purple-500" style={{ width: '84.2%' }} />
-                  </div>
-                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">84%</span>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
 
         {/* Quick Actions Panel */}
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-[hsl(var(--text-secondary))] uppercase tracking-widest">Quick Actions</h3>
-          <div className="grid grid-cols-1 gap-2.5">
+          <h3 className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-widest">Adult Relations Operations</h3>
+          <div className="grid grid-cols-1 gap-3">
             {quickActions.map(act => (
               <button
                 key={act.label}
                 onClick={() => router.push(act.href)}
-                className={`flex items-center justify-between p-4 rounded-xl border text-left hover:scale-[1.01] hover:border-[hsl(var(--border-hover))] transition-all ${
+                className={`flex items-center justify-between p-4.5 rounded-2xl border text-left hover:-translate-y-0.5 hover:border-[hsl(var(--border-hover))] transition-all duration-300 ${
                   act.primary
-                    ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white border-transparent shadow-lg shadow-[hsl(var(--accent)/0.15)]'
+                    ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white border-transparent shadow-lg shadow-[hsl(var(--accent)/0.2)]'
                     : 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-primary))]'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <act.icon className={`w-5 h-5 ${act.primary ? 'text-white' : 'text-[hsl(var(--accent))]'}`} />
+                <div className="flex items-center gap-3.5">
+                  <div className={`p-2.5 rounded-xl ${act.primary ? 'bg-white/10' : 'bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]'}`}>
+                    <act.icon className="w-5 h-5" />
+                  </div>
                   <div>
-                    <p className="text-sm font-semibold">{act.label}</p>
-                    <p className={`text-xs mt-0.5 ${act.primary ? 'text-white/80' : 'text-[hsl(var(--text-tertiary))]'}`}>{act.desc}</p>
+                    <p className="text-sm font-bold">{act.label}</p>
+                    <p className={`text-[11px] mt-0.5 ${act.primary ? 'text-white/80' : 'text-[hsl(var(--text-tertiary))]'}`}>{act.desc}</p>
                   </div>
                 </div>
                 <ChevronRight className={`w-4 h-4 ${act.primary ? 'text-white/85' : 'text-[hsl(var(--text-tertiary))]'}`} />

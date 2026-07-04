@@ -13,19 +13,6 @@ export default function CommunicationDashboard() {
   const router = useRouter();
   const tenant = params.tenant as string;
 
-  const kpis = [
-    { label: 'Messages Sent Today', value: '1,248', icon: MessageSquare, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', subtitle: 'All channels' },
-    { label: 'SMS Delivered', value: '584', icon: Phone, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', subtitle: '98.2% delivery' },
-    { label: 'Emails Delivered', value: '412', icon: Mail, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20', subtitle: '85.4% open rate' },
-    { label: 'Push Notifications', value: '252', icon: Bell, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20', subtitle: 'Mobile alerts' },
-    { label: 'Failed Messages', value: '18', icon: AlertTriangle, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', subtitle: 'Needs re-send' },
-    { label: 'Scheduled Messages', value: '8', icon: Clock, color: 'text-teal-400', bg: 'bg-teal-500/10 border-teal-500/20', subtitle: 'PTA reminder next' },
-    { label: 'Emergency Alerts', value: '0', icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20', subtitle: 'None active' },
-    { label: 'Parent Response Rate', value: '84.6%', icon: Users, color: 'text-cyan-400', bg: 'bg-cyan-500/10 border-cyan-500/20', subtitle: 'Avg 2hr reply' },
-    { label: 'Unread Internal', value: '12', icon: Mail, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', subtitle: 'HOD inbox' },
-    { label: 'Active Conversations', value: '34', icon: MessageSquare, color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20', subtitle: 'Ongoing chat logs' }
-  ];
-
   const quickActions = [
     { label: 'Send SMS', desc: 'Urgent announcements', href: `/${tenant}/communication/sms`, icon: Phone },
     { label: 'Send Email', desc: 'HTML newsletters or reports', href: `/${tenant}/communication/email`, icon: Mail },
@@ -38,154 +25,145 @@ export default function CommunicationDashboard() {
   ];
 
   return (
-    <div className="space-y-6 max-w-[1600px] animate-fade-in">
+    <div className="space-y-8 max-w-[1600px] animate-fade-in px-4 sm:px-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[hsl(var(--border))]">
         <div>
-          <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Communication Center Dashboard</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-[hsl(var(--text-primary))] bg-clip-text bg-gradient-to-r from-[hsl(var(--text-primary))] to-[hsl(var(--text-secondary))]">
+            Communication Hub
+          </h1>
           <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">
-            Centralized hub for all inbound and outbound communication channels, automated event triggers, emergency alerts, templates library, and delivery logs.
+            Centralized hub for all inbound and outbound communication channels, automated event triggers, emergency alerts, and delivery logs.
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold shadow-glow">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            All Gateways Online
+          </span>
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-3">
-        {kpis.map((kpi, i) => {
-          const Icon = kpi.icon;
-          return (
-            <div
-              key={kpi.label}
-              className={`glass-card p-4 flex flex-col justify-between border hover:scale-[1.02] transition-all cursor-pointer ${kpi.bg}`}
-              style={{ animationDelay: `${i * 30}ms` }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-semibold text-[hsl(var(--text-tertiary))] tracking-wider truncate mr-1">{kpi.label}</span>
-                <Icon className={`w-4 h-4 flex-shrink-0 ${kpi.color}`} />
-              </div>
-              <div className="mt-auto space-y-0.5">
-                <p className="text-base font-bold text-[hsl(var(--text-primary))]">{kpi.value}</p>
-                <p className="text-[9px] text-[hsl(var(--text-tertiary))] truncate">{kpi.subtitle}</p>
+      {/* Modern High-End KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[
+          { label: 'Outbound Dispatches (Today)', value: '1,248 Alerts', sub: 'SMS, Email, and Push channels', change: '+12%', icon: MessageSquare, color: 'from-blue-500/20 to-blue-600/5 border-blue-500/30 text-blue-400' },
+          { label: 'Outbound SMS Costs', value: '$42.80', sub: 'Twilio Gateway API charges', change: '$0.02/sms', icon: Phone, color: 'from-purple-500/20 to-purple-600/5 border-purple-500/30 text-purple-400' },
+          { label: 'Email Open Rate', value: '85.4%', sub: 'Avg 412 active notifications read', change: '+6.2%', icon: Mail, color: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/30 text-emerald-400' },
+          { label: 'System Queue Flags', value: '18 Failed', sub: 'Network issues or invalid phone', change: 'Alert', icon: AlertTriangle, color: 'from-rose-500/20 to-rose-600/5 border-rose-500/30 text-rose-400' }
+        ].map((kpi, idx) => (
+          <div
+            key={kpi.label}
+            className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${kpi.color} p-6 hover:-translate-y-1 transition-all duration-300 shadow-md`}
+          >
+            <div className="flex justify-between items-start mb-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-secondary))]">{kpi.label}</span>
+              <div className="p-2 rounded-xl bg-white/5 border border-white/10">
+                <kpi.icon className="w-5 h-5" />
               </div>
             </div>
-          );
-        })}
+            <div className="space-y-1">
+              <p className="text-3xl font-black text-[hsl(var(--text-primary))]">{kpi.value}</p>
+              <div className="flex items-center justify-between text-xs text-[hsl(var(--text-secondary))] pt-2 border-t border-white/5">
+                <span>{kpi.sub}</span>
+                <span className={`font-semibold ${kpi.change === 'Alert' ? 'text-rose-400' : 'text-emerald-400'}`}>{kpi.change}</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Analytics & Charts */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      {/* Main Insights Content Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        {/* Charts & Graphs Panel */}
         <div className="xl:col-span-2 space-y-6">
-          <div className="glass-card p-5 space-y-6">
-            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+          <div className="glass-card p-6 rounded-2xl border border-[hsl(var(--border))] space-y-6 shadow-lg">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-4">
               <div>
-                <h3 className="text-base font-semibold text-[hsl(var(--text-primary))]">Delivery &amp; Engagement Success Trends</h3>
+                <h3 className="text-lg font-bold text-[hsl(var(--text-primary))]">Delivery &amp; Engagement Success Trends</h3>
                 <p className="text-xs text-[hsl(var(--text-tertiary))]">Real-time charts of message volumes and open rates</p>
               </div>
-              <span className="text-xs text-[hsl(var(--accent))] font-medium flex items-center gap-1">
+              <span className="text-xs text-[hsl(var(--accent))] font-medium flex items-center gap-1 cursor-pointer hover:underline">
                 Average Success: 98.4% <ChevronRight className="w-3.5 h-3.5" />
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Delivery stats */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-[hsl(var(--text-secondary))]">Message Volume by Channel (Monthly)</p>
-                <div className="space-y-2">
-                  {[
-                    { channel: 'SMS Outbound Messages', count: '14,240', pct: '65%' },
-                    { channel: 'Rich HTML Newsletters', count: '5,820', pct: '25%' },
-                    { channel: 'Push Mobile Alerts', count: '2,180', pct: '10%' }
-                  ].map(c => (
-                    <div key={c.channel} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-[hsl(var(--text-secondary))] truncate mr-2">{c.channel}</span>
-                        <span className="font-semibold text-[hsl(var(--text-primary))] flex-shrink-0">{c.count} sent</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-[hsl(var(--bg-tertiary))] overflow-hidden">
-                        <div className="h-full bg-[hsl(var(--accent))]" style={{ width: c.pct }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Engagement statistics */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-[hsl(var(--text-secondary))]">Parent Response Rates &amp; Reads</p>
-                <div className="space-y-2">
-                  {[
-                    { metric: 'Parent portal read receipts', count: '84.6%', pct: '84.6%' },
-                    { metric: 'HTML email click-through rate', count: '42.1%', pct: '42.1%' },
-                    { metric: 'Average teacher response delay', count: '12 mins', pct: '95%' }
-                  ].map(m => (
-                    <div key={m.metric} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-[hsl(var(--text-secondary))]">{m.metric}</span>
-                        <span className="font-semibold text-[hsl(var(--text-primary))]">{m.count}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-[hsl(var(--bg-tertiary))] overflow-hidden">
-                        <div className="h-full bg-emerald-500" style={{ width: m.pct }} />
-                      </div>
-                    </div>
-                  ))}
+            {/* Custom SVG line graph */}
+            <div className="space-y-4">
+              <p className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Weekly Dispatched Alert Volume</p>
+              <div className="h-60 w-full relative pt-4">
+                <svg className="w-full h-full overflow-visible" viewBox="0 0 500 200" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="commCurveGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity="0.4" />
+                      <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  {/* Grid Lines */}
+                  <line x1="0" y1="50" x2="500" y2="50" stroke="hsl(var(--border)/0.4)" strokeWidth="1" strokeDasharray="4" />
+                  <line x1="0" y1="100" x2="500" y2="100" stroke="hsl(var(--border)/0.4)" strokeWidth="1" strokeDasharray="4" />
+                  <line x1="0" y1="150" x2="500" y2="150" stroke="hsl(var(--border)/0.4)" strokeWidth="1" strokeDasharray="4" />
+                  {/* Curved Area */}
+                  <path d="M 0 160 Q 125 90 250 110 T 500 30 L 500 200 L 0 200 Z" fill="url(#commCurveGrad)" />
+                  {/* Curved Line */}
+                  <path d="M 0 160 Q 125 90 250 110 T 500 30" fill="none" stroke="hsl(var(--accent))" strokeWidth="3" />
+                  {/* Nodes */}
+                  <circle cx="250" cy="110" r="5" fill="hsl(var(--accent))" stroke="white" strokeWidth="2" />
+                  <circle cx="500" cy="30" r="5" fill="hsl(var(--accent))" stroke="white" strokeWidth="2" />
+                </svg>
+                <div className="absolute bottom-0 left-0 right-0 flex justify-between text-[10px] text-[hsl(var(--text-tertiary))] pt-2">
+                  <span>SMS (65%)</span>
+                  <span>Email (25%)</span>
+                  <span>Push Mobile (10%)</span>
+                  <span>Average success (98.4%)</span>
                 </div>
               </div>
             </div>
 
-            {/* Sub indicators */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[hsl(var(--border))]">
-              <div>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">SMS Cost Tracking (Budget)</p>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
-                    <div className="h-full rounded-full bg-blue-500" style={{ width: '42.8%' }} />
+            {/* Custom mini bar charts for statistics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t border-[hsl(var(--border))]">
+              {[
+                { label: 'Parent Portal App Read', val: '84.6%', color: 'bg-blue-500' },
+                { label: 'Weekly Click-Through Rate', val: '42.1%', color: 'bg-emerald-500' },
+                { label: 'Automated Rule Triggers', val: '100%', color: 'bg-purple-500' }
+              ].map(stat => (
+                <div key={stat.label} className="space-y-2">
+                  <span className="text-[11px] font-bold text-[hsl(var(--text-tertiary))] uppercase tracking-wider block">{stat.label}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
+                      <div className={`h-full rounded-full ${stat.color}`} style={{ width: stat.val }} />
+                    </div>
+                    <span className="text-xs font-bold text-[hsl(var(--text-primary))]">{stat.val}</span>
                   </div>
-                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">$42.80</span>
                 </div>
-              </div>
-              <div>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">Email Bounce Rate ratio</p>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
-                    <div className="h-full rounded-full bg-emerald-500" style={{ width: '0.4%' }} />
-                  </div>
-                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">0.4%</span>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mb-1.5">Automated Event Triggers</p>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 rounded-full bg-[hsl(var(--bg-tertiary))] flex-1 overflow-hidden">
-                    <div className="h-full rounded-full bg-purple-500" style={{ width: '100%' }} />
-                  </div>
-                  <span className="text-xs font-semibold text-[hsl(var(--text-primary))]">12 Active</span>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
 
         {/* Quick Actions Panel */}
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-[hsl(var(--text-secondary))] uppercase tracking-widest">Hub Control Actions</h3>
-          <div className="grid grid-cols-1 gap-2.5">
+          <h3 className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-widest">Hub Control Operations</h3>
+          <div className="grid grid-cols-1 gap-3">
             {quickActions.map(act => (
               <button
                 key={act.label}
                 onClick={() => router.push(act.href)}
-                className={`flex items-center justify-between p-4 rounded-xl border text-left hover:scale-[1.01] hover:border-[hsl(var(--border-hover))] transition-all ${
+                className={`flex items-center justify-between p-4.5 rounded-2xl border text-left hover:-translate-y-0.5 hover:border-[hsl(var(--border-hover))] transition-all duration-300 ${
                   act.primary
-                    ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white border-transparent shadow-lg shadow-[hsl(var(--accent)/0.15)]'
+                    ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white border-transparent shadow-lg shadow-[hsl(var(--accent)/0.2)]'
                     : act.danger
                     ? 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white'
                     : 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-primary))]'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <act.icon className={`w-5 h-5 ${act.primary ? 'text-white' : act.danger ? 'text-red-400 group-hover:text-white' : 'text-[hsl(var(--accent))]'}`} />
+                <div className="flex items-center gap-3.5">
+                  <div className={`p-2.5 rounded-xl ${act.primary ? 'bg-white/10' : act.danger ? 'bg-red-500/25 text-red-400 group-hover:text-white' : 'bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]'}`}>
+                    <act.icon className="w-5 h-5" />
+                  </div>
                   <div>
-                    <p className="text-sm font-semibold">{act.label}</p>
-                    <p className={`text-xs mt-0.5 ${act.primary ? 'text-white/80' : 'text-[hsl(var(--text-tertiary))]'}`}>{act.desc}</p>
+                    <p className="text-sm font-bold">{act.label}</p>
+                    <p className={`text-[11px] mt-0.5 ${act.primary ? 'text-white/80' : 'text-[hsl(var(--text-tertiary))]'}`}>{act.desc}</p>
                   </div>
                 </div>
                 <ChevronRight className={`w-4 h-4 ${act.primary ? 'text-white/85' : 'text-[hsl(var(--text-tertiary))]'}`} />
