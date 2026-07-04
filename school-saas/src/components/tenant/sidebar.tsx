@@ -47,6 +47,7 @@ import {
   Shield,
   Award,
   Calendar,
+  Edit2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -85,6 +86,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
     'Parent & Guardian': true,
     'Academic Management': true,
     'Academic Operations': true,
+    Examinations: true,
   });
 
   const basePath = `/${tenantSlug}`;
@@ -217,6 +219,35 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
       ],
     },
     {
+      label: 'Examinations',
+      items: [],
+      subSections: [
+        {
+          label: 'Examinations',
+          icon: FlaskConical,
+          items: [
+            { label: 'Dashboard', href: `${basePath}/academics/examinations`, icon: LayoutDashboard, exact: true },
+            { label: 'Assessment Categories', href: `${basePath}/academics/examinations/categories`, icon: Layers },
+            { label: 'Examinations', href: `${basePath}/academics/examinations/list`, icon: FlaskConical },
+            { label: 'Timetable', href: `${basePath}/academics/examinations/timetable`, icon: Clock },
+            { label: 'Invigilation', href: `${basePath}/academics/examinations/invigilation`, icon: UsersRound },
+            { label: 'Gradebooks', href: `${basePath}/academics/examinations/gradebooks`, icon: BookOpen },
+            { label: 'Marks Entry', href: `${basePath}/academics/examinations/marks`, icon: Edit2 },
+            { label: 'Moderation', href: `${basePath}/academics/examinations/moderation`, icon: ClipboardList },
+            { label: 'Approval Workflow', href: `${basePath}/academics/examinations/approval`, icon: ShieldCheck },
+            { label: 'Result Publication', href: `${basePath}/academics/examinations/publish`, icon: FileText },
+            { label: 'Report Cards', href: `${basePath}/academics/examinations/report-cards`, icon: Award },
+            { label: 'GPA', href: `${basePath}/academics/examinations/gpa`, icon: BarChart3 },
+            { label: 'Rankings', href: `${basePath}/academics/examinations/rankings`, icon: TrendingUp },
+            { label: 'Promotion', href: `${basePath}/academics/examinations/promotion`, icon: TrendingUp },
+            { label: 'Transcripts', href: `${basePath}/academics/examinations/transcripts`, icon: FileText },
+            { label: 'Analytics', href: `${basePath}/academics/examinations/analytics`, icon: BarChart3 },
+            { label: 'Reports', href: `${basePath}/academics/examinations/reports`, icon: BarChart3 },
+          ],
+        },
+      ],
+    },
+    {
       label: 'Academic Operations',
       items: [],
       subSections: [
@@ -226,7 +257,6 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
           items: [
             { label: 'Timetable', href: `${basePath}/academics/timetable`, icon: Clock },
             { label: 'Attendance', href: `${basePath}/attendance`, icon: CalendarCheck },
-            { label: 'Examinations', href: `${basePath}/academics/examinations`, icon: FlaskConical },
             { label: 'LMS', href: `${basePath}/academics/lms`, icon: LayoutGrid },
           ],
         },
