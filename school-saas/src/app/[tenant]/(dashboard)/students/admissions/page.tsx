@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import {
   UserPlus, Clock, CheckCircle2, AlertCircle, FileText, Search, Filter,
   ArrowRight, MoreHorizontal, Eye, Edit2, Calendar, ClipboardCheck,
-  CheckCircle, MessageSquare, ChevronRight, Play, BarChart3, Layers
+  CheckCircle, MessageSquare, ChevronRight, Play, BarChart3, Layers, X, Upload, Camera
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -21,16 +21,22 @@ interface Applicant {
   interviewScore: number | null;
   assessmentScore: number | null;
   comment: string;
+  photoUrl?: string;
+  gender?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  prevSchool?: string;
 }
 
 const initialApplicants: Applicant[] = [
-  { id: '1', name: 'Amara Johnson', grade: 'Grade 9', parentName: 'Mrs. Patricia Johnson', appliedDate: 'Jun 28, 2026', dob: 'Mar 12, 2012', stage: 'Application', docsVerified: false, interviewScore: null, assessmentScore: null, comment: 'Application form submitted' },
-  { id: '2', name: 'David Okafor', grade: 'Grade 11', parentName: 'Mr. Emeka Okafor', appliedDate: 'Jun 25, 2026', dob: 'Aug 5, 2010', stage: 'Verification', docsVerified: true, interviewScore: null, assessmentScore: null, comment: 'Verified transcript and certificate of birth' },
-  { id: '3', name: 'Sarah Williams', grade: 'Grade 7', parentName: 'Ms. Linda Williams', appliedDate: 'Jun 20, 2026', dob: 'Nov 22, 2013', stage: 'Interview', docsVerified: true, interviewScore: 85, assessmentScore: null, comment: 'Excellent presentation during interview' },
-  { id: '4', name: 'Michael Chen', grade: 'Grade 10', parentName: 'Mr. Wei Chen', appliedDate: 'Jun 18, 2026', dob: 'Jan 30, 2011', stage: 'Assessment', docsVerified: true, interviewScore: 90, assessmentScore: 88, comment: 'Passed math & science assessments' },
-  { id: '5', name: 'Fatima Hassan', grade: 'Grade 8', parentName: 'Mr. Ahmed Hassan', appliedDate: 'Jun 15, 2026', dob: 'Jul 4, 2012', stage: 'Acceptance', docsVerified: true, interviewScore: 92, assessmentScore: 90, comment: 'Offer letter dispatched' },
-  { id: '6', name: 'James Nguyen', grade: 'Grade 12', parentName: 'Mrs. Linh Nguyen', appliedDate: 'Jun 10, 2026', dob: 'Feb 14, 2009', stage: 'Enrollment', docsVerified: true, interviewScore: 88, assessmentScore: 85, comment: 'Tuition deposit received' },
-  { id: '7', name: 'Priya Sharma', grade: 'Grade 9', parentName: 'Dr. Raj Sharma', appliedDate: 'Jul 1, 2026', dob: 'Sep 18, 2012', stage: 'Allocation', docsVerified: true, interviewScore: 95, assessmentScore: 92, comment: 'Awaiting classroom allocation assignment' },
+  { id: '1', name: 'Amara Johnson', grade: 'Grade 9', parentName: 'Mrs. Patricia Johnson', appliedDate: '2026-06-28', dob: '2012-03-12', stage: 'Application', docsVerified: false, interviewScore: null, assessmentScore: null, comment: 'Application form submitted' },
+  { id: '2', name: 'David Okafor', grade: 'Grade 11', parentName: 'Mr. Emeka Okafor', appliedDate: '2026-06-25', dob: '2010-08-05', stage: 'Verification', docsVerified: true, interviewScore: null, assessmentScore: null, comment: 'Verified transcript and certificate of birth' },
+  { id: '3', name: 'Sarah Williams', grade: 'Grade 7', parentName: 'Ms. Linda Williams', appliedDate: '2026-06-20', dob: '2013-11-22', stage: 'Interview', docsVerified: true, interviewScore: 85, assessmentScore: null, comment: 'Excellent presentation during interview' },
+  { id: '4', name: 'Michael Chen', grade: 'Grade 10', parentName: 'Mr. Wei Chen', appliedDate: '2026-06-18', dob: '2011-01-30', stage: 'Assessment', docsVerified: true, interviewScore: 90, assessmentScore: 88, comment: 'Passed math & science assessments' },
+  { id: '5', name: 'Fatima Hassan', grade: 'Grade 8', parentName: 'Mr. Ahmed Hassan', appliedDate: '2026-06-15', dob: '2012-07-04', stage: 'Acceptance', docsVerified: true, interviewScore: 92, assessmentScore: 90, comment: 'Offer letter dispatched' },
+  { id: '6', name: 'James Nguyen', grade: 'Grade 12', parentName: 'Mrs. Linh Nguyen', appliedDate: '2026-06-10', dob: '2009-02-14', stage: 'Enrollment', docsVerified: true, interviewScore: 88, assessmentScore: 85, comment: 'Tuition deposit received' },
+  { id: '7', name: 'Priya Sharma', grade: 'Grade 9', parentName: 'Dr. Raj Sharma', appliedDate: '2026-07-01', dob: '2012-09-18', stage: 'Allocation', docsVerified: true, interviewScore: 95, assessmentScore: 92, comment: 'Awaiting classroom allocation assignment' },
 ];
 
 const stagesList = [
@@ -51,6 +57,86 @@ export default function AdmissionsPage() {
   const [selectedStage, setSelectedStage] = useState<string>('Application');
   const [showApproveModal, setShowApproveModal] = useState<Applicant | null>(null);
   const [approveComment, setApproveComment] = useState('');
+
+  // Form State
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    dob: '',
+    gender: 'Male',
+    bloodGroup: '',
+    nin: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    country: 'Nigeria',
+    grade: 'Grade 7',
+    prevSchool: '',
+    parentName: '',
+    parentPhone: '',
+    parentEmail: '',
+    parentRelation: 'Father',
+    photo: ''
+  });
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Simulate photo upload by setting mock object URL
+      setFormData(prev => ({ ...prev, photo: URL.createObjectURL(file) }));
+    }
+  };
+
+  const handleCreateApplicant = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.firstName || !formData.lastName || !formData.parentName) return;
+
+    const newApp: Applicant = {
+      id: (applicants.length + 1).toString(),
+      name: `${formData.firstName} ${formData.lastName}`,
+      grade: formData.grade,
+      parentName: formData.parentName,
+      appliedDate: new Date().toISOString().split('T')[0],
+      dob: formData.dob,
+      stage: 'Application',
+      docsVerified: false,
+      interviewScore: null,
+      assessmentScore: null,
+      comment: 'Application registered manually via dashboard.',
+      photoUrl: formData.photo || undefined,
+      gender: formData.gender,
+      email: formData.email,
+      phone: formData.phone,
+      address: `${formData.address}, ${formData.city}`,
+      prevSchool: formData.prevSchool || undefined
+    };
+
+    setApplicants(prev => [newApp, ...prev]);
+    setShowCreateModal(false);
+    // Reset form
+    setFormData({
+      firstName: '',
+      lastName: '',
+      dob: '',
+      gender: 'Male',
+      bloodGroup: '',
+      nin: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      country: 'Nigeria',
+      grade: 'Grade 7',
+      prevSchool: '',
+      parentName: '',
+      parentPhone: '',
+      parentEmail: '',
+      parentRelation: 'Father',
+      photo: ''
+    });
+  };
 
   const nextStageMap: Record<string, string> = {
     'Application': 'Verification',
@@ -83,13 +169,16 @@ export default function AdmissionsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Admissions Workflow</h1>
+          <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Admissions Workflow Desk</h1>
           <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">
             Progress applications chronologically through verification, interviews, assessments, and allocations.
           </p>
         </div>
-        <button className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-medium hover:opacity-90 transition-opacity w-full sm:w-auto">
-          <UserPlus className="w-4 h-4" /> New Application
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-semibold hover:opacity-90 transition-opacity w-full sm:w-auto"
+        >
+          <UserPlus className="w-4 h-4" /> New Admission Application
         </button>
       </div>
 
@@ -153,15 +242,24 @@ export default function AdmissionsPage() {
                 applicants.filter(a => a.stage === selectedStage).map(app => (
                   <tr key={app.id} className="border-b border-[hsl(var(--border)/0.5)] table-row-hover transition-colors">
                     <td className="px-5 py-3.5">
-                      <div>
-                        <p className="text-sm font-semibold text-[hsl(var(--text-primary))]">{app.name}</p>
-                        <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Applied: {app.appliedDate}</p>
+                      <div className="flex items-center gap-3">
+                        {app.photoUrl ? (
+                          <img src={app.photoUrl} alt={app.name} className="w-9 h-9 rounded-full object-cover border border-[hsl(var(--border))]" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-[hsl(var(--accent)/0.1)] flex items-center justify-center text-[hsl(var(--accent))] text-xs font-bold">
+                            {app.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm font-semibold text-[hsl(var(--text-primary))]">{app.name}</p>
+                          <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Applied: {app.appliedDate}</p>
+                        </div>
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-[hsl(var(--text-secondary))]">{app.grade}</td>
                     <td className="px-5 py-3.5 text-sm text-[hsl(var(--text-secondary))]">{app.parentName}</td>
                     <td className="px-5 py-3.5">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${app.docsVerified ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'}`}>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${app.docsVerified ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/15 text-amber-400 border border-emerald-500/20'}`}>
                         {app.docsVerified ? 'Verified' : 'Pending Verification'}
                       </span>
                     </td>
@@ -202,6 +300,277 @@ export default function AdmissionsPage() {
           </table>
         </div>
       </div>
+
+      {/* New Application Creation Modal with Detailed Profile Fields */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto animate-fade-in">
+          <div className="glass-card max-w-4xl w-full p-6 space-y-6 my-8">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-4">
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-[hsl(var(--accent))]" />
+                <h3 className="text-lg font-bold text-[hsl(var(--text-primary))]">Student Admission Application Form</h3>
+              </div>
+              <button onClick={() => setShowCreateModal(false)} className="text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateApplicant} className="space-y-6">
+              {/* Photo Upload Section */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 rounded-xl bg-[hsl(var(--bg-tertiary)/0.5)] border border-[hsl(var(--border))]">
+                <div className="relative w-24 h-24 rounded-full bg-[hsl(var(--bg-tertiary))] border-2 border-dashed border-[hsl(var(--border))] flex flex-col items-center justify-center overflow-hidden group">
+                  {formData.photo ? (
+                    <img src={formData.photo} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <>
+                      <Camera className="w-6 h-6 text-[hsl(var(--text-tertiary))] group-hover:scale-110 transition-transform" />
+                      <span className="text-[9px] text-[hsl(var(--text-tertiary))] mt-1 font-semibold">Photo</span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                </div>
+                <div className="text-center sm:text-left">
+                  <p className="text-xs font-bold text-[hsl(var(--text-primary))]">Upload Student Profile Picture</p>
+                  <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">Supports PNG, JPG, or JPEG formats. Max weight limit 2.0 MB.</p>
+                </div>
+              </div>
+
+              {/* Personal Details */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-[hsl(var(--accent))] uppercase tracking-wider">1. Student Personal Information</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">First Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.firstName}
+                      onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                      placeholder="e.g. Sarah"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Last Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.lastName}
+                      onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                      placeholder="e.g. Smith"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Date of Birth *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.dob}
+                      onChange={(e) => setFormData(prev => ({ ...prev, dob: e.target.value }))}
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Gender *</label>
+                    <select
+                      value={formData.gender}
+                      onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value }))}
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-secondary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+                    >
+                      <option>Male</option>
+                      <option>Female</option>
+                      <option>Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Blood Group</label>
+                    <input
+                      type="text"
+                      value={formData.bloodGroup}
+                      onChange={(e) => setFormData(prev => ({ ...prev, bloodGroup: e.target.value }))}
+                      placeholder="e.g. O+"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">National ID / NIN</label>
+                    <input
+                      type="text"
+                      value={formData.nin}
+                      onChange={(e) => setFormData(prev => ({ ...prev, nin: e.target.value }))}
+                      placeholder="e.g. 120492019"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Details */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-[hsl(var(--accent))] uppercase tracking-wider">2. Contact &amp; Residential Location</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Student Personal Email (optional)</label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="e.g. sarah.smith@mail.com"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Mobile Phone (optional)</label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="e.g. +234 80 1234 5678"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Home Address *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.address}
+                      onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                      placeholder="e.g. 12 Broad Street"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">City/State *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.city}
+                      onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
+                      placeholder="e.g. Lagos"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Academic History */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-[hsl(var(--accent))] uppercase tracking-wider">3. Academic Profile</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Target Entry Grade *</label>
+                    <select
+                      value={formData.grade}
+                      onChange={(e) => setFormData(prev => ({ ...prev, grade: e.target.value }))}
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-secondary))] focus:outline-none"
+                    >
+                      <option>Grade 7</option>
+                      <option>Grade 8</option>
+                      <option>Grade 9</option>
+                      <option>Grade 10</option>
+                      <option>Grade 11</option>
+                      <option>Grade 12</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Previous School Attended (optional)</label>
+                    <input
+                      type="text"
+                      value={formData.prevSchool}
+                      onChange={(e) => setFormData(prev => ({ ...prev, prevSchool: e.target.value }))}
+                      placeholder="e.g. Kings College Lagos"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Parent Relationships */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-[hsl(var(--accent))] uppercase tracking-wider">4. Parent / Legal Guardian Details</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Parent Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.parentName}
+                      onChange={(e) => setFormData(prev => ({ ...prev, parentName: e.target.value }))}
+                      placeholder="e.g. Patricia Smith"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Parent Phone Number *</label>
+                    <input
+                      type="tel"
+                      required
+                      value={formData.parentPhone}
+                      onChange={(e) => setFormData(prev => ({ ...prev, parentPhone: e.target.value }))}
+                      placeholder="e.g. +234 80 9876 5432"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Parent Email *</label>
+                    <input
+                      type="email"
+                      required
+                      value={formData.parentEmail}
+                      onChange={(e) => setFormData(prev => ({ ...prev, parentEmail: e.target.value }))}
+                      placeholder="e.g. parent.smith@mail.com"
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1">Relationship Type *</label>
+                    <select
+                      value={formData.parentRelation}
+                      onChange={(e) => setFormData(prev => ({ ...prev, parentRelation: e.target.value }))}
+                      className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-secondary))] focus:outline-none"
+                    >
+                      <option>Father</option>
+                      <option>Mother</option>
+                      <option>Legal Guardian</option>
+                      <option>Sponsor</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[hsl(var(--border))]">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-5 py-2.5 rounded-lg border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-xs font-bold hover:opacity-90 transition-opacity"
+                >
+                  Register Application
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Approve comment modal */}
       {showApproveModal && (
