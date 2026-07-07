@@ -718,44 +718,182 @@ export default function StudentPortalPage() {
 
         {/* Tab 12: Settings */}
         {activeTab === 'settings' && (
-          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in text-xs">
-            <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-4">
+          <div className="space-y-6 animate-fade-in text-xs">
+            {/* Header banner */}
+            <div className="glass-card p-6 border border-[hsl(var(--border))] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-2xl">
               <div>
-                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">My Account Preferences</h3>
-                <p className="text-xs text-[hsl(var(--text-tertiary))]">Customize your profile view, email alerts and light/dark theme preference.</p>
+                <h3 className="text-base font-bold text-[hsl(var(--text-primary))] font-sans">Student Preferences &amp; Record Directory</h3>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Personalize your study dashboard settings, lodge profile updates, and view official school records.</p>
               </div>
-              <button onClick={() => handleAction('Account Settings')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90">
-                <Save className="w-3.5 h-3.5" /> Save Preferences
+              <button onClick={() => handleAction('Student Preferences Saved')} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90 transition-all">
+                <Save className="w-3.5 h-3.5" /> Save My Preferences
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Change Account Password</label>
-                <input type="password" placeholder="••••••••••••" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
+            {/* Main Split Layout Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left & Middle: Personal Preferences & Self-Service (Student Controlled) */}
+              <div className="lg:col-span-2 space-y-6">
+                
+                {/* 1. Profile Preferences */}
+                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl">
+                  <p className="font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-[hsl(var(--accent))]" /> Personal Profile Customization
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Preferred Display Name</label>
+                      <input type="text" defaultValue="Emeka Obi" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Personal Mobile Number</label>
+                      <input type="text" defaultValue="+2348021110022" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Personal Email Address</label>
+                      <input type="email" defaultValue="emeka.obi@student.schoolsaas.com" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Short Biography / Bio</label>
+                      <input type="text" placeholder="Science enthusiast, Chess club president, runner" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Account & Security Options */}
+                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl">
+                  <p className="font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-[hsl(var(--accent))]" /> Account Security
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Change Account Password</label>
+                      <input type="password" placeholder="••••••••••••" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
+                    </div>
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)]">
+                      <div>
+                        <p className="font-bold text-[hsl(var(--text-primary))]">Two-Factor Authentication (2FA)</p>
+                        <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Secure logins via email confirmation codes.</p>
+                      </div>
+                      <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Appearance, Dashboard & Notifications preferences */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Notifications Preferences */}
+                  <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-3 rounded-xl">
+                    <p className="font-bold text-[hsl(var(--text-primary))]">Receive Notifications For</p>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                        <span>Assignments &amp; homework deadlines</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                        <span>New published Continuous Assessment grades</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                        <span>School announcements bulletins</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Themes & Accent Color */}
+                  <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-3 rounded-xl">
+                    <p className="font-bold text-[hsl(var(--text-primary))]">Display &amp; Appearance</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Color Theme</label>
+                        <select className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded p-1.5 text-[hsl(var(--text-secondary))]">
+                          <option>Dark Mode</option>
+                          <option>Light Mode</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Language</label>
+                        <select className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded p-1.5 text-[hsl(var(--text-secondary))]">
+                          <option>English</option>
+                          <option>French</option>
+                        </select>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer pt-1">
+                      <input type="checkbox" className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                      <span>High-Contrast text visibility</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 4. Approval Required Info Requests Form */}
+                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl bg-[hsl(var(--bg-tertiary)/0.2)]">
+                  <div>
+                    <p className="font-bold text-[hsl(var(--text-primary))]">Submit Profile Update Request</p>
+                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">Submit an official change request ticket to the registrar for protected records like legal names, guardian updates, or hostel changes.</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <select className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 text-[hsl(var(--text-secondary))]">
+                      <option>Select Request Field...</option>
+                      <option>Legal Name Correction</option>
+                      <option>Parent / Guardian Update</option>
+                      <option>Home Address Modification</option>
+                      <option>Medical Record Update</option>
+                      <option>Hostel / Boarding Transfer</option>
+                      <option>Subject Group Transfer</option>
+                    </select>
+                    <input type="text" placeholder="Proposed change details..." className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))]" />
+                    <button onClick={() => handleAction('Profile update request submitted to registrar')} className="px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white hover:opacity-90 font-bold">Submit Request</button>
+                  </div>
+                </div>
+
               </div>
 
-              <div>
-                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Theme selection</label>
-                <select className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]">
-                  <option>Dark Mode</option>
-                  <option>Light Mode</option>
-                </select>
+              {/* Right Column: Official Records (Locked - View Only) */}
+              <div className="space-y-6">
+                <div className="glass-card p-5 border border-rose-500/20 bg-rose-500/5 space-y-4 rounded-xl">
+                  <div className="border-b border-rose-500/20 pb-3">
+                    <p className="font-bold text-rose-400 flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4" /> Locked School Records
+                    </p>
+                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">Official records can only be updated by authorized school administrators or registrar staff.</p>
+                  </div>
+
+                  <div className="space-y-4 text-[11px] leading-relaxed">
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Student Registry Info</p>
+                      <p className="text-[hsl(var(--text-primary))] font-semibold">Legal Name: Emeka Obi</p>
+                      <p className="text-[hsl(var(--text-secondary))]">Student ID: STU-2026-9081 &bull; Roll: #14</p>
+                      <p className="text-[hsl(var(--text-secondary))]">Admission No: ADM-908122-SL</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Class &amp; Enrollment allocation</p>
+                      <p className="text-[hsl(var(--text-primary))] font-semibold">SS2 Blue &bull; Red House Team</p>
+                      <p className="text-[hsl(var(--text-secondary))]">Enrollment Status: Active / Enrolled</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Academic Records</p>
+                      <p className="text-[hsl(var(--text-primary))] font-semibold">CGPA Average: 3.82 / 4.0</p>
+                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Alterations lockout: Active</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Official Timetables</p>
+                      <p className="text-[hsl(var(--text-primary))] font-semibold">Periods: 3 Daily Sessions (08:30 AM &mdash; 02:30 PM)</p>
+                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Class/Seat reallocation bounds: Locked</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">School policy &amp; calendar</p>
+                      <p className="text-[hsl(var(--text-secondary))]">Calendar term dates, subjects list, grading policy scales are governed globally.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)]">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
-                  <span>Receive Email announcements notices</span>
-                </label>
-              </div>
-
-              <div className="p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)]">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
-                  <span>Receive SMS grade notification updates</span>
-                </label>
-              </div>
             </div>
           </div>
         )}
