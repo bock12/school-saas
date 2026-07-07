@@ -176,6 +176,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
           icon: Users,
           items: [
             { label: 'Dashboard', href: `${basePath}/students`, icon: LayoutDashboard, exact: true },
+            { label: 'Student Portal', href: `${basePath}/students/portal`, icon: LayoutDashboard },
             { label: 'Admissions', href: `${basePath}/students/admissions`, icon: UserPlus },
             { label: 'Applications', href: `${basePath}/students/applications`, icon: ClipboardList },
             { label: 'Enrolled Students', href: `${basePath}/students/enrolled`, icon: UserCheck },
