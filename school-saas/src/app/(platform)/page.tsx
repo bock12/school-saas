@@ -1,8 +1,22 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
-import { Shield, School, Users, CreditCard, BarChart3, ArrowRight, Check, Zap, Lock, Globe } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Shield, School, Users, CreditCard, BarChart3, ArrowRight, Check, Zap, Lock, Globe, X, LogIn } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
 
 export default function HomePage() {
+  const router = useRouter();
+  const [showPortalModal, setShowPortalModal] = useState(false);
+  const [slug, setSlug] = useState('');
+
+  const handleGoToPortal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!slug.trim()) return;
+    router.push(`/${slug.trim().toLowerCase()}/login`);
+  };
+
   return (
     <div className="min-h-screen bg-[hsl(var(--bg-primary))]">
       {/* Navbar */}
@@ -13,8 +27,14 @@ export default function HomePage() {
             <span className="text-lg font-bold text-[hsl(var(--text-primary))]">{APP_NAME}</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/super-admin" className="text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] transition-colors">Admin</Link>
-            <Link href="/super-admin" className="px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-medium hover:opacity-90 transition-opacity">Get Started</Link>
+            <button
+              onClick={() => setShowPortalModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all font-semibold"
+            >
+              <LogIn className="w-4 h-4" /> School Portal Login
+            </button>
+            <Link href="/super-admin" className="text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] transition-colors">Admin Dashboard</Link>
+            <Link href="/super-admin" className="px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-semibold hover:opacity-90 transition-opacity">Get Started</Link>
           </div>
         </div>
       </nav>
@@ -33,9 +53,15 @@ export default function HomePage() {
             A complete SaaS solution for managing multiple schools with isolated data, role-based access, and powerful administrative tools.
           </p>
           <div className="flex items-center justify-center gap-4 mt-8">
-            <Link href="/super-admin" className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-medium hover:opacity-90 transition-opacity">
-              Launch Dashboard <ArrowRight className="w-4 h-4" />
+            <Link href="/super-admin" className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-semibold hover:opacity-90 transition-opacity">
+              Launch Super-Admin Dashboard <ArrowRight className="w-4 h-4" />
             </Link>
+            <button
+              onClick={() => setShowPortalModal(true)}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] font-semibold hover:bg-[hsl(var(--bg-tertiary))] transition-all"
+            >
+              School Portal Login <LogIn className="w-4 h-4 text-[hsl(var(--accent))]" />
+            </button>
           </div>
         </div>
       </section>
@@ -94,6 +120,60 @@ export default function HomePage() {
           <p className="text-xs text-[hsl(var(--text-tertiary))]">© 2026 {APP_NAME}. Multi-Tenant School Management SaaS Platform.</p>
         </div>
       </footer>
+
+      {/* Multi-Tenant School Portal Navigation Modal */}
+      {showPortalModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in animate-duration-200">
+          <div className="glass-card max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+              <div className="flex items-center gap-2">
+                <School className="w-5 h-5 text-[hsl(var(--accent))]" />
+                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Find Your School Portal</h3>
+              </div>
+              <button onClick={() => setShowPortalModal(false)} className="text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">
+              Enter your school's unique slug or subdomain identifier below to access your custom student lifecycle and academic desk.
+            </p>
+
+            <form onSubmit={handleGoToPortal} className="space-y-4 pt-1">
+              <div>
+                <label className="block text-[10px] font-semibold text-[hsl(var(--text-secondary))] mb-1.5">School Identifier Slug *</label>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    required
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    placeholder="e.g. greenwood, springfield"
+                    className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+                  />
+                  <span className="absolute right-3 text-[10px] text-[hsl(var(--text-tertiary))] font-mono">.schoolsaas.com</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPortalModal(false)}
+                  className="px-4 py-2 rounded-lg border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-xs font-bold hover:opacity-90 flex items-center gap-1"
+                >
+                  Go to Portal <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

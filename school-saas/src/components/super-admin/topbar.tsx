@@ -1,12 +1,20 @@
 'use client';
 
-import { Bell, Search, LogOut, User, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { Bell, Search, LogOut, User, ChevronDown, Loader2 } from 'lucide-react';
+import { useState, useTransition } from 'react';
 import { APP_NAME } from '@/lib/constants';
+import { signOut } from '@/app/[tenant]/login/actions';
 
 export function Topbar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isSigningOut, startSignOut] = useTransition();
+
+  const handleSignOut = () => {
+    startSignOut(async () => {
+      await signOut();
+    });
+  };
 
   return (
     <header className="sticky top-0 z-30 h-16 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg-primary)/0.8)] backdrop-blur-xl">
@@ -90,9 +98,17 @@ export function Topbar() {
                     Profile
                   </button>
                   <div className="my-1 border-t border-[hsl(var(--border))]" />
-                  <button className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger)/0.1)] transition-all duration-200">
-                    <LogOut className="w-4 h-4" />
-                    Sign Out
+                  <button
+                    onClick={handleSignOut}
+                    disabled={isSigningOut}
+                    className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger)/0.1)] transition-all duration-200 disabled:opacity-50"
+                  >
+                    {isSigningOut ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <LogOut className="w-4 h-4" />
+                    )}
+                    {isSigningOut ? 'Signing out…' : 'Sign Out'}
                   </button>
                 </div>
               </div>

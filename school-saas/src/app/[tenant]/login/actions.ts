@@ -58,6 +58,7 @@ export async function signOut(tenantSlug?: string) {
   if (tenantSlug) {
     redirect(`/${tenantSlug}/login`);
   } else {
-    redirect('/login');
+    redirect('/');
   }
 }
+
