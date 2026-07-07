@@ -146,6 +146,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
           icon: UsersRound,
           items: [
             { label: 'Dashboard', href: `${basePath}/staff`, icon: LayoutDashboard, exact: true },
+            { label: 'Teacher Portal', href: `${basePath}/teachers/portal`, icon: LayoutDashboard },
             { label: 'Recruitment', href: `${basePath}/staff/recruitment`, icon: Briefcase },
             { label: 'Applicants', href: `${basePath}/staff/applicants`, icon: UserPlus },
             { label: 'Employees', href: `${basePath}/staff/employees`, icon: Users },
