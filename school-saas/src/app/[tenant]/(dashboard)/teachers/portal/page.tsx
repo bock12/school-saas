@@ -7,7 +7,7 @@ import {
   Menu, Plus, Search, RotateCcw, AlertTriangle, CheckCircle2,
   TrendingDown, FileText, Download, History, Zap, Settings, RefreshCw, BarChart3,
   Calendar, Layers, MessageSquare, Landmark, HelpCircle, Save, Sparkles, UserCheck,
-  Award, ClipboardList, Send, Lightbulb, UserX, Heart, BookOpenCheck, Brain, PlusCircle, DollarSign
+  Award, ClipboardList, Send, Lightbulb, UserX, Heart, BookOpenCheck, Brain, PlusCircle, DollarSign, ShieldCheck
 } from 'lucide-react';
 
 type TeacherTab =
@@ -604,118 +604,181 @@ export default function TeacherPortalPage() {
 
         {/* Access Settings and RBAC Restrictions */}
         {activeTab === 'settings' && (
-          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in text-xs">
-            <div className="border-b border-[hsl(var(--border))] pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="space-y-6 animate-fade-in text-xs">
+            {/* Header banner */}
+            <div className="glass-card p-6 border border-[hsl(var(--border))] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-2xl">
               <div>
-                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Role-Based Access Control (RBAC) Settings</h3>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Configure restrictions and granular permission scopes for different teacher roles under the Principle of Least Privilege.</p>
+                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Teacher Preferences &amp; System Configuration</h3>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Personalize your teacher profile settings and view locked institution configurations.</p>
               </div>
-              <button onClick={() => handleAction('Save Security Policies')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90">
-                <Save className="w-3.5 h-3.5" /> Save Security Policies
+              <button onClick={() => handleAction('Save Preferences')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90">
+                <Save className="w-3.5 h-3.5" /> Save My Settings
               </button>
             </div>
 
-            {/* Role presets selector */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Select Role to Configure</label>
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                  className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))] font-semibold"
-                >
-                  <option value="classroom_teacher">Classroom Teacher</option>
-                  <option value="subject_teacher">Subject Teacher</option>
-                  <option value="form_teacher">Form / Class Teacher</option>
-                  <option value="head_of_dept">Head of Department</option>
-                  <option value="senior_teacher">Senior Teacher</option>
-                  <option value="vice_principal">Vice Principal / Academic</option>
-                  <option value="principal">Principal</option>
-                  <option value="sys_admin">System Administrator</option>
-                </select>
-              </div>
+            {/* Split Grid Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left & Middle Pane: My Settings (Teacher Controlled) */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Profile Preferences */}
+                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl">
+                  <p className="font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-[hsl(var(--accent))]" /> Profile Settings
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Display Name</label>
+                      <input type="text" defaultValue="Mr. Kwame Darko" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Contact Phone Number</label>
+                      <input type="text" defaultValue="+2348035550011" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Personal Email Address</label>
+                      <input type="email" defaultValue="k.darko@schoolsaas.com" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Emergency Contact Info</label>
+                      <input type="text" defaultValue="Mrs. Beatrice Darko (+2348035559988)" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Biography / About Me</label>
+                      <textarea defaultValue="Senior Mathematics Instructor with over 8 years experience teaching calculus and algebra." className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))] h-20 resize-none" />
+                    </div>
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Grading Deadline (Days)</label>
-                <input type="number" defaultValue={7} className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
-              </div>
-
-              <div>
-                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Attendance Correction Window (Hours)</label>
-                <input type="number" defaultValue={24} className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
-              </div>
-            </div>
-
-            {/* Permissions lists switches */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-              {/* Allowed Actions */}
-              <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-4">
-                <p className="font-bold text-emerald-400 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4" /> Allowed Operations (Least Privilege Scopes)
-                </p>
-                <div className="space-y-3">
-                  {[
-                    { key: 'view_assigned_students', label: 'View Assigned Students &amp; Classes', desc: 'Allows looking up only students assigned to teachers schedule.' },
-                    { key: 'enter_assigned_grades', label: 'Enter Grades for Assigned Subjects', desc: 'Allows marks input prior to grading policy lockouts.' },
-                    { key: 'mark_class_attendance', label: 'Mark Attendance for Assigned Periods', desc: 'Allows checks during the designated daily periods.' },
-                    { key: 'view_fee_status_simple', label: 'View Simple Fee Status Indicator', desc: 'Shows "Cleared/Outstanding" badge without exposing totals.' },
-                    { key: 'ai_lesson_generation', label: 'Use AI to Generate Lesson Notes', desc: 'Allows creating lesson text and quizzes draft ideas.' }
-                  ].map(perm => (
-                    <label key={perm.key} className="flex items-start gap-3 cursor-pointer p-1">
-                      <input type="checkbox" defaultChecked className="mt-0.5 rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))] focus:ring-0" />
+                {/* Account & Security Options */}
+                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl">
+                  <p className="font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-[hsl(var(--accent))]" /> Account &amp; Security Settings
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Change Password</label>
+                      <input type="password" placeholder="••••••••••••" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
+                    </div>
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)]">
                       <div>
-                        <p className="font-bold text-[hsl(var(--text-primary))]">{perm.label}</p>
-                        <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{perm.desc}</p>
+                        <p className="font-bold text-[hsl(var(--text-primary))]">Two-Factor Authentication (2FA)</p>
+                        <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Secure logins with OTP verification.</p>
                       </div>
+                      <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preferences Panels (Notification, Dashboard, Appearance) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Notifications */}
+                  <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-3 rounded-xl">
+                    <p className="font-bold text-[hsl(var(--text-primary))]">Notification Channels</p>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                        <span>Email reminders (Assignments, Grades)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                        <span>SMS alerts (Emergency notices)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                        <span>Parent messages notifications</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Appearance Settings */}
+                  <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-3 rounded-xl">
+                    <p className="font-bold text-[hsl(var(--text-primary))]">Theme &amp; Accessibility Options</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Color Mode</label>
+                        <select className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded p-1 text-[hsl(var(--text-secondary))]">
+                          <option>Dark Mode</option>
+                          <option>Light Mode</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Time Format</label>
+                        <select className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded p-1 text-[hsl(var(--text-secondary))]">
+                          <option>12-Hour format</option>
+                          <option>24-Hour format</option>
+                        </select>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer pt-1">
+                      <input type="checkbox" className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
+                      <span>Enable High-Contrast text accessibility</span>
                     </label>
-                  ))}
+                  </div>
+                </div>
+
+                {/* Official Info Request Ticket Form */}
+                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl bg-[hsl(var(--bg-tertiary)/0.2)]">
+                  <div>
+                    <p className="font-bold text-[hsl(var(--text-primary))]">Submit Administrative Change Request</p>
+                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">Submit a change ticket to the Principal for restricted fields like legal name updates or salary bank accounts.</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <select className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 text-[hsl(var(--text-secondary))]">
+                      <option>Select Request Type...</option>
+                      <option>Legal Name Change</option>
+                      <option>Department Transfer</option>
+                      <option>Salary Bank Info Update</option>
+                      <option>Subject Assignment</option>
+                    </select>
+                    <input type="text" placeholder="Proposed value (e.g. New Bank Account)" className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))]" />
+                    <button onClick={() => handleAction('Submit Change Ticket')} className="px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white hover:opacity-90 font-bold">Lodge Ticket</button>
+                  </div>
                 </div>
               </div>
 
-              {/* Prohibited Restrictions */}
-              <div className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-4">
-                <p className="font-bold text-rose-400 flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4" /> Restricted Actions (Principle of Least Privilege)
-                </p>
-                <div className="space-y-3">
-                  {[
-                    { key: 'edit_admission_records', label: 'Modify Official Student Admission Files', desc: 'Block editing enrollment numbers and names.' },
-                    { key: 'delete_student_accounts', label: 'Delete Student Accounts &amp; Profiles', desc: 'Block database removal actions.' },
-                    { key: 'view_staff_salaries', label: 'View Employee Salaries &amp; Contracts', desc: 'Block access to staff payroll ledger files.' },
-                    { key: 'edit_master_timetable', label: 'Edit Master School Timetable', desc: 'Block rearranging general periods or allocations.' },
-                    { key: 'issue_suspensions', label: 'Issue Student Suspensions / Expulsions', desc: 'Requires head Principal workflow authorization.' },
-                    { key: 'export_all_students_db', label: 'Export Complete Student Database (CSV)', desc: 'Block bulk record downloading to protect PII data.' },
-                    { key: 'access_audit_logs', label: 'Access System Audit Logs', desc: 'Restricted only to Platform Super Admin compliance officers.' },
-                    { key: 'ai_auto_update_grades', label: 'AI Auto-Update Official Grades', desc: 'Block automatic grading edits without teacher reviews.' }
-                  ].map(perm => (
-                    <label key={perm.key} className="flex items-start gap-3 cursor-pointer p-1">
-                      <input type="checkbox" defaultChecked={false} className="mt-0.5 rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))] focus:ring-0" />
-                      <div>
-                        <p className="font-bold text-[hsl(var(--text-primary))]">{perm.label}</p>
-                        <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{perm.desc}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
+              {/* Right Pane: Locked System Settings (Administrator Controlled) */}
+              <div className="space-y-6">
+                <div className="glass-card p-5 border border-rose-500/20 bg-rose-500/5 space-y-4 rounded-xl">
+                  <div className="border-b border-rose-500/20 pb-3">
+                    <p className="font-bold text-rose-400 flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4" /> Locked System Settings
+                    </p>
+                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">Institutional configuration parameters can only be altered by authorized Platform Super Admins.</p>
+                  </div>
 
-            {/* Temporary cover assignment */}
-            <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.3)] space-y-4">
-              <p className="font-bold text-[hsl(var(--text-primary))]">Temporary Cover &amp; Delegation Permission Override</p>
-              <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Temporarily assign another teacher cover permissions for sick leave coverage without modifying master security roles.</p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <select className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 flex-1 text-[hsl(var(--text-secondary))]">
-                  <option>Select Cover Teacher...</option>
-                  <option>Mr. Kofi Mensah</option>
-                  <option>Mr. Kwame Darko</option>
-                </select>
-                <select className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 flex-1 text-[hsl(var(--text-secondary))]">
-                  <option>Select Class to Delegate...</option>
-                  <option>Grade 9 Algebra (Period 1)</option>
-                  <option>Grade 10 Geometry (Period 2)</option>
-                </select>
-                <button onClick={() => handleAction('Assign Cover Delegation')} className="px-4 py-2 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--border))] font-semibold">Assign Temporary Override</button>
+                  <div className="space-y-4 text-[11px] leading-relaxed">
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">School Identity</p>
+                      <p className="text-[hsl(var(--text-primary))] font-semibold">Name: Freetown International Academy</p>
+                      <p className="text-[hsl(var(--text-secondary))]">Campus Address: 42 Aberdeen Road, SL</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Class &amp; Section Allocation</p>
+                      <p className="text-[hsl(var(--text-primary))] font-semibold">Assigned: Grade 9 Algebra &bull; Grade 10 Geometry</p>
+                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Class reallocation changes: Lockout Active</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Academic Grading Bounds</p>
+                      <p className="text-[hsl(var(--text-primary))] font-semibold">Grade A: 85% &rarr; 100% | Grade B: 75% &rarr; 84%</p>
+                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Weight factors config: Lockout Active</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Attendance Categories</p>
+                      <p className="text-[hsl(var(--text-primary))] font-semibold">Categories: Present, Absent, Late, Excused</p>
+                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Policy rules customization: Lockout Active</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Database &amp; Audit Security</p>
+                      <p className="text-[hsl(var(--text-secondary))]">API Integration keys: ••••••••••••••••••••••</p>
+                      <p className="text-[hsl(var(--text-secondary))]">Session timeout: 15 Mins (Locked)</p>
+                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Compliance audit access: Lockout Active</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
