@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   School, Palette, Calendar, Users, Bell, Shield, Layers, MessageSquare, Database,
   Brain, Zap, Link2, Download, History, Settings, Save, Sparkles, Check, Play,
-  Upload, QrCode, AlertTriangle, ShieldCheck, UserCheck, Trash2, Key, Search, Clock, Mail, Plus
+  Upload, QrCode, AlertTriangle, ShieldCheck, UserCheck, Trash2, Key, Search, Clock, Mail, Plus, Menu
 } from 'lucide-react';
 
 type SettingsTab =
@@ -31,6 +31,7 @@ export default function SchoolSettingsPage() {
   const router = useRouter();
   const tenant = params.tenant as string;
   const [activeTab, setActiveTab] = useState<SettingsTab>('overview');
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
@@ -177,28 +178,98 @@ export default function SchoolSettingsPage() {
         </div>
       )}
 
-      {/* Main Settings Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-        {/* Settings Sub-navigation List */}
-        <div className="lg:col-span-1 glass-card p-2 rounded-2xl border border-[hsl(var(--border))] space-y-1">
-          {menuItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id as SettingsTab)}
-              className={`flex items-center gap-3 w-full px-4.5 py-3 rounded-xl text-xs font-semibold text-left transition-all ${
-                activeTab === item.id
-                  ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white shadow-md shadow-[hsl(var(--accent)/0.15)]'
-                  : 'text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))]'
-              }`}
-            >
-              <item.icon className="w-4 h-4 flex-shrink-0" />
-              {item.label}
-            </button>
-          ))}
-        </div>
+      {/* Desktop Horizontal Tabs */}
+      <div className="hidden md:flex flex-wrap gap-2 pb-2 border-b border-[hsl(var(--border))] overflow-x-auto whitespace-nowrap scrollbar-none">
+        {menuItems.map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id as SettingsTab)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === item.id
+                ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white shadow-md shadow-[hsl(var(--accent)/0.15)]'
+                : 'text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))]'
+            }`}
+          >
+            <item.icon className="w-3.5 h-3.5" />
+            {item.label}
+          </button>
+        ))}
+      </div>
 
-        {/* Configurations Forms Container */}
-        <div className="lg:col-span-3">
+      {/* Mobile/Tablet Sticky Bottom Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-[hsl(var(--bg-secondary))] border-t border-[hsl(var(--border))] flex items-center justify-around py-2 px-4 shadow-2xl md:hidden">
+        {menuItems.slice(0, 4).map(item => (
+          <button
+            key={item.id}
+            onClick={() => {
+              setActiveTab(item.id as SettingsTab);
+              setShowMoreMenu(false);
+            }}
+            className={`flex flex-col items-center gap-1 py-1 px-3 text-center transition-all ${
+              activeTab === item.id && !showMoreMenu
+                ? 'text-[hsl(var(--accent))] font-bold'
+                : 'text-[hsl(var(--text-tertiary))]'
+            }`}
+          >
+            <item.icon className="w-5 h-5" />
+            <span className="text-[9px] font-medium tracking-tight">{item.label.split(' ')[0]}</span>
+          </button>
+        ))}
+        <button
+          onClick={() => setShowMoreMenu(prev => !prev)}
+          className={`flex flex-col items-center gap-1 py-1 px-3 text-center transition-all ${
+            showMoreMenu
+              ? 'text-[hsl(var(--accent))] font-bold'
+              : 'text-[hsl(var(--text-tertiary))]'
+          }`}
+        >
+          <div className="relative">
+            <Menu className="w-5 h-5" />
+            {!menuItems.slice(0, 4).map(i => i.id).includes(activeTab) && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[hsl(var(--accent))]" />
+            )}
+          </div>
+          <span className="text-[9px] font-medium tracking-tight">More</span>
+        </button>
+      </div>
+
+      {/* Bottom Sheet Backdrop & Panel for Mobile */}
+      {showMoreMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden animate-fade-in"
+            onClick={() => setShowMoreMenu(false)}
+          />
+          <div className="fixed bottom-14 left-0 right-0 z-50 bg-[hsl(var(--bg-secondary))] border-t border-[hsl(var(--border))] rounded-t-2xl p-4 max-h-[70vh] overflow-y-auto md:hidden animate-slide-up">
+            <div className="flex justify-between items-center pb-3 border-b border-[hsl(var(--border))] mb-3">
+              <span className="text-xs font-extrabold uppercase text-[hsl(var(--text-tertiary))]">Configuration Menu</span>
+              <button onClick={() => setShowMoreMenu(false)} className="text-[10px] font-bold text-[hsl(var(--text-tertiary))]">Close</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {menuItems.slice(4).map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id as SettingsTab);
+                    setShowMoreMenu(false);
+                  }}
+                  className={`flex items-center gap-2.5 p-3 rounded-xl text-left transition-all ${
+                    activeTab === item.id
+                      ? 'bg-[hsl(var(--accent)/0.12)] text-[hsl(var(--accent))] font-bold'
+                      : 'text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'
+                  }`}
+                >
+                  <item.icon className="w-4 h-4 text-[hsl(var(--accent))]" />
+                  <span className="text-xs font-semibold">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Main Configurations Container */}
+      <div className="pb-20 md:pb-0">
           {/* Settings Dashboard overview */}
           {activeTab === 'overview' && (
             <div className="space-y-6 animate-fade-in">
@@ -847,11 +918,8 @@ export default function SchoolSettingsPage() {
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-// Inline fallback for icon import error prevention
+    );
+  }// Inline fallback for icon import error prevention
 function CheckCircle2(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
