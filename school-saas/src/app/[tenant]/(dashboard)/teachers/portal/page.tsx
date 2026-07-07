@@ -7,7 +7,8 @@ import {
   Menu, Plus, Search, RotateCcw, AlertTriangle, CheckCircle2,
   TrendingDown, FileText, Download, History, Zap, Settings, RefreshCw, BarChart3,
   Calendar, Layers, MessageSquare, Landmark, HelpCircle, Save, Sparkles, UserCheck,
-  Award, ClipboardList, Send, Lightbulb, UserX, Heart, BookOpenCheck, Brain, PlusCircle, DollarSign, ShieldCheck
+  Award, ClipboardList, Send, Lightbulb, UserX, Heart, BookOpenCheck, Brain, PlusCircle,
+  DollarSign, ShieldCheck, Briefcase, Eye, Shield, UsersRound, Scale, Phone
 } from 'lucide-react';
 
 type TeacherTab =
@@ -20,24 +21,31 @@ type TeacherTab =
   | 'lessons'
   | 'materials'
   | 'homework'
-  | 'exams'
-  | 'assessments'
   | 'communication'
-  | 'behavior'
-  | 'reports'
   | 'calendar'
   | 'timetable'
   | 'lms'
   | 'resources'
-  | 'analytics'
-  | 'parents'
-  | 'documents'
-  | 'ai-copilot'
   | 'profile'
-  | 'tasks'
-  | 'settings';
+  | 'settings'
+  // Form role tabs
+  | 'parent-comm'
+  | 'welfare-alerts'
+  // HOD role tabs
+  | 'department'
+  | 'approvals-queue'
+  // Senior role tabs
+  | 'mentoring'
+  | 'lesson-reviews'
+  // VP role tabs
+  | 'academic-oversight'
+  | 'curriculum-bounds'
+  // Principal role tabs
+  | 'administration'
+  | 'staff-list'
+  | 'financial-snapshot';
 
-export default function TeacherPortalPage() {
+export default function AdaptiveTeacherDashboard() {
   const params = useParams();
   const tenant = params.tenant as string;
   const [activeTab, setActiveTab] = useState<TeacherTab>('dashboard');
@@ -46,41 +54,25 @@ export default function TeacherPortalPage() {
   // States for interactive demo actions
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState('classroom_teacher');
 
-  // AI Copilot prompt state
-  const [aiPrompt, setAiPrompt] = useState('Generate 5 organic chemistry questions for Grade 11');
-  const [aiOutput, setAiOutput] = useState<string | null>(null);
+  // Multi-role simulated switches state
+  const [activeRoles, setActiveRoles] = useState<Record<string, boolean>>({
+    classroom_teacher: true,
+    subject_teacher: true,
+    form_teacher: false,
+    hod: false,
+    senior_teacher: false,
+    vice_principal: false,
+    principal: false
+  });
 
-  // Today's classes state
-  const [classes, setClasses] = useState([
-    { id: '1', period: 'Period 1 (08:30 AM — 09:30 AM)', subject: 'Grade 9 Algebra', room: 'Room 104', studentsCount: 28, status: 'Completed' },
-    { id: '2', period: 'Period 2 (09:45 AM — 10:45 AM)', subject: 'Grade 10 Geometry', room: 'Room 104', studentsCount: 30, status: 'In Progress' },
-    { id: '3', period: 'Period 4 (11:30 AM — 12:30 PM)', subject: 'Grade 11 Calculus', room: 'Math Lab B', studentsCount: 22, status: 'Pending' }
-  ]);
-
-  // Students attendance list
-  const [attendanceList, setAttendanceList] = useState([
-    { id: 'S-001', name: 'Amara Johnson', status: 'Present', arrival: '08:24 AM', notes: '' },
-    { id: 'S-002', name: 'David Okafor', status: 'Late', arrival: '08:42 AM', notes: 'Traffic delay' },
-    { id: 'S-003', name: 'Priya Sharma', status: 'Absent', arrival: '—', notes: 'Sickness call' },
-    { id: 'S-004', name: 'Michael Chen', status: 'Present', arrival: '08:15 AM', notes: '' }
-  ]);
-
-  // Gradebook weights & values calculator
-  const [gradeRows, setGradeRows] = useState([
-    { name: 'Amara Johnson', quiz1: 85, hw1: 90, midterm: 78, weightedFinal: 81.8 },
-    { name: 'David Okafor', quiz1: 72, hw1: 80, midterm: 88, weightedFinal: 83.2 },
-    { name: 'Priya Sharma', quiz1: 94, hw1: 92, midterm: 90, weightedFinal: 91.2 },
-    { name: 'Michael Chen', quiz1: 68, hw1: 75, midterm: 70, weightedFinal: 70.8 }
-  ]);
-
-  const [quizWeight, setQuizWeight] = useState(20);
-  const [hwWeight, setHwWeight] = useState(30);
-  const [examWeight, setExamWeight] = useState(50);
-
-  const calculateWeighted = (quiz: number, hw: number, exam: number) => {
-    return Number(((quiz * quizWeight / 100) + (hw * hwWeight / 100) + (exam * examWeight / 100)).toFixed(1));
+  const handleRoleToggle = (role: string) => {
+    setActiveRoles(prev => ({
+      ...prev,
+      [role]: !prev[role]
+    }));
+    // Reset active tab to dashboard if changing roles
+    setActiveTab('dashboard');
   };
 
   const handleAction = (msg: string) => {
@@ -93,48 +85,63 @@ export default function TeacherPortalPage() {
     }, 800);
   };
 
-  const handleRunAi = () => {
-    setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
-      if (aiPrompt.toLowerCase().includes('chemistry')) {
-        setAiOutput(`**Organic Chemistry Quiz Questions (Grade 11):**\n1. Define isomerism and draw structural isomers of butane.\n2. State the difference between saturated and unsaturated hydrocarbons.\n3. What is the IUPAC name for CH3-CH2-CH(OH)-CH3?\n4. Explain the mechanism of electrophilic addition in alkenes.\n5. Write the chemical equation for the combustion of propane.`);
-      } else if (aiPrompt.toLowerCase().includes('parent') || aiPrompt.toLowerCase().includes('message')) {
-        setAiOutput(`**Draft Email Template:**\nSubject: Update regarding David Okafor's math progress\n\nDear Parent/Guardian,\nI wanted to update you on David's academic performance in Grade 10 Geometry. Over the past week, David has demonstrated great progress, achieving 88% on his midterm exam. He remains attentive and active in class. Keep up the good work!\n\nBest regards,\n[Your Name]`);
-      } else {
-        setAiOutput(`**AI Generated Lesson Material:**\n\nTopic: ${aiPrompt}\n- Learning Objectives: Understand key definitions, evaluate basic exercises.\n- Homework Assignment: Answer textbook questions 1 through 5.`);
-      }
-    }, 1200);
-  };
+  // Determine user data scope layer
+  let dataScope = 'Assigned Classes & Subjects Only';
+  if (activeRoles.hod) dataScope = 'Full Mathematics Department';
+  if (activeRoles.vice_principal || activeRoles.principal) dataScope = 'Whole School (All Campuses & Departments)';
 
-  // 25 menu tabs configuration
-  const menuItems = [
+  // Build adaptive navigation list
+  const coreTabs = [
     { id: 'dashboard', label: 'Dashboard Home', icon: BarChart3 },
-    { id: 'classes', label: 'Class Management', icon: Layers },
-    { id: 'students', label: 'Student Management', icon: Users },
-    { id: 'attendance', label: 'Attendance Module', icon: CalendarCheck },
+    { id: 'classes', label: 'My Classes', icon: Layers },
+    { id: 'attendance', label: 'Attendance', icon: CalendarCheck },
     { id: 'gradebook', label: 'Gradebook CA', icon: Award },
-    { id: 'assignments', label: 'Assignment Planners', icon: BookOpenCheck },
-    { id: 'lessons', label: 'Lesson Planning', icon: ClipboardList },
-    { id: 'materials', label: 'Learning Materials', icon: Download },
+    { id: 'assignments', label: 'Assignments', icon: BookOpenCheck },
+    { id: 'lessons', label: 'Lesson Plans', icon: ClipboardList },
+    { id: 'materials', label: 'Resources Library', icon: Download },
     { id: 'homework', label: 'Homework Logs', icon: FileText },
-    { id: 'exams', label: 'Exams & Invigilation', icon: Clock },
-    { id: 'assessments', label: 'Assessments Quiz', icon: HelpCircle },
-    { id: 'communication', label: 'Notice & SMS Messages', icon: MessageSquare },
-    { id: 'behavior', label: 'Behavior & Discipline', icon: ShieldAlert },
-    { id: 'reports', label: 'Workload Reports', icon: TrendingDown },
+    { id: 'communication', label: 'Messages Desk', icon: MessageSquare },
     { id: 'calendar', label: 'Events Calendar', icon: Calendar },
-    { id: 'timetable', label: 'Substitution Timetable', icon: Clock },
+    { id: 'timetable', label: 'My Timetable', icon: Clock },
     { id: 'lms', label: 'LMS Courses', icon: BookOpen },
     { id: 'resources', label: 'Resource Booking', icon: Landmark },
-    { id: 'analytics', label: 'Performance Charts', icon: BarChart3 },
-    { id: 'parents', label: 'Parent Engagement', icon: UserCheck },
-    { id: 'documents', label: 'Teacher Share Files', icon: FileText },
-    { id: 'ai-copilot', label: 'AI Teaching Copilot', icon: Brain },
-    { id: 'profile', label: 'Teacher Profile', icon: GraduationCap },
-    { id: 'tasks', label: 'Approvals & Tasks', icon: Zap },
-    { id: 'settings', label: 'Portal Settings', icon: Settings }
+    { id: 'profile', label: 'My Profile', icon: GraduationCap },
+    { id: 'settings', label: 'My Settings', icon: Settings }
   ];
+
+  const formTabs = [
+    { id: 'parent-comm', label: 'Parent Engagement', icon: UserCheck },
+    { id: 'welfare-alerts', label: 'Class Welfare Alerts', icon: Heart }
+  ];
+
+  const hodTabs = [
+    { id: 'department', label: 'Dept Management', icon: Landmark },
+    { id: 'approvals-queue', label: 'Grade Moderation Approvals', icon: ShieldCheck }
+  ];
+
+  const seniorTabs = [
+    { id: 'mentoring', label: 'Teacher Mentoring', icon: UsersRound },
+    { id: 'lesson-reviews', label: 'Lesson Reviews', icon: ClipboardList }
+  ];
+
+  const vpTabs = [
+    { id: 'academic-oversight', label: 'Academic Oversight', icon: ShieldCheck },
+    { id: 'curriculum-bounds', label: 'Curriculum & Exams', icon: BookOpen }
+  ];
+
+  const principalTabs = [
+    { id: 'administration', label: 'Administration Console', icon: Settings },
+    { id: 'staff-list', label: 'Staff Management', icon: UsersRound },
+    { id: 'financial-snapshot', label: 'Financial Snapshot', icon: DollarSign }
+  ];
+
+  // Compile active tabs based on selected role intersections
+  const activeTabsList = [...coreTabs];
+  if (activeRoles.form_teacher) activeTabsList.push(...formTabs);
+  if (activeRoles.hod) activeTabsList.push(...hodTabs);
+  if (activeRoles.senior_teacher) activeTabsList.push(...seniorTabs);
+  if (activeRoles.vice_principal) activeTabsList.push(...vpTabs);
+  if (activeRoles.principal) activeTabsList.push(...principalTabs);
 
   return (
     <div className="space-y-8 max-w-[1600px] animate-fade-in px-4 sm:px-6">
@@ -143,15 +150,15 @@ export default function TeacherPortalPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-[hsl(var(--text-primary))] bg-clip-text bg-gradient-to-r from-[hsl(var(--text-primary))] to-[hsl(var(--text-secondary))] flex items-center gap-3">
             <GraduationCap className="w-8 h-8 text-[hsl(var(--accent))]" />
-            Teacher Portal Workspace
+            Role-Based Adaptive Dashboard
           </h1>
           <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">
-            Manage your daily subject classes, register attendance tracking codes, continuous assessments grading sheets, and AI lesson tools.
+            Enterprise multi-role configuration. The dashboard home stats, action permissions, and data scopes adapt dynamically based on your roles.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold shadow-glow">
-            Active Subscriptions: All Modules Enabled
+        <div className="flex flex-col items-end gap-1.5">
+          <span className="text-xs px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold shadow-glow">
+            {dataScope}
           </span>
         </div>
       </div>
@@ -162,9 +169,37 @@ export default function TeacherPortalPage() {
         </div>
       )}
 
+      {/* Multi-Role Simulation Toolbar */}
+      <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)] space-y-3">
+        <p className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase tracking-wider">Simulate Active Staff Roles (Toggle multiple simultaneously)</p>
+        <div className="flex flex-wrap gap-3">
+          {[
+            { key: 'classroom_teacher', label: 'Classroom Teacher' },
+            { key: 'subject_teacher', label: 'Subject Teacher' },
+            { key: 'form_teacher', label: 'Form Teacher' },
+            { key: 'hod', label: 'Head of Dept (HOD)' },
+            { key: 'senior_teacher', label: 'Senior Teacher' },
+            { key: 'vice_principal', label: 'Vice Principal' },
+            { key: 'principal', label: 'Principal' }
+          ].map(role => (
+            <button
+              key={role.key}
+              onClick={() => handleRoleToggle(role.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                activeRoles[role.key]
+                  ? 'bg-[hsl(var(--accent)/0.12)] border-[hsl(var(--accent))] text-[hsl(var(--accent))]'
+                  : 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'
+              }`}
+            >
+              {activeRoles[role.key] ? '✓ ' : '+ '} {role.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Desktop Horizontal Tabs */}
       <div className="hidden md:flex flex-wrap gap-2 pb-2 border-b border-[hsl(var(--border))] overflow-x-auto whitespace-nowrap scrollbar-none">
-        {menuItems.map(item => (
+        {activeTabsList.map(item => (
           <button
             key={item.id}
             onClick={() => {
@@ -185,7 +220,7 @@ export default function TeacherPortalPage() {
 
       {/* Mobile/Tablet Sticky Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-[hsl(var(--bg-secondary))] border-t border-[hsl(var(--border))] flex items-center justify-around py-2 px-4 shadow-2xl md:hidden">
-        {menuItems.slice(0, 4).map(item => (
+        {activeTabsList.slice(0, 4).map(item => (
           <button
             key={item.id}
             onClick={() => {
@@ -212,7 +247,7 @@ export default function TeacherPortalPage() {
         >
           <div className="relative">
             <Menu className="w-5 h-5" />
-            {!menuItems.slice(0, 4).map(i => i.id).includes(activeTab) && (
+            {!activeTabsList.slice(0, 4).map(i => i.id).includes(activeTab) && (
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[hsl(var(--accent))]" />
             )}
           </div>
@@ -229,11 +264,11 @@ export default function TeacherPortalPage() {
           />
           <div className="fixed bottom-14 left-0 right-0 z-50 bg-[hsl(var(--bg-secondary))] border-t border-[hsl(var(--border))] rounded-t-2xl p-4 max-h-[70vh] overflow-y-auto md:hidden animate-slide-up">
             <div className="flex justify-between items-center pb-3 border-b border-[hsl(var(--border))] mb-3">
-              <span className="text-xs font-extrabold uppercase text-[hsl(var(--text-tertiary))]">Teacher Modules</span>
+              <span className="text-xs font-extrabold uppercase text-[hsl(var(--text-tertiary))]">Navigation Modules</span>
               <button onClick={() => setShowMoreMenu(false)} className="text-[10px] font-bold text-[hsl(var(--text-tertiary))]">Close</button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {menuItems.slice(4).map(item => (
+              {activeTabsList.slice(4).map(item => (
                 <button
                   key={item.id}
                   onClick={() => {
@@ -257,534 +292,180 @@ export default function TeacherPortalPage() {
 
       {/* Main Configurations Container */}
       <div className="pb-20 md:pb-0">
-        {/* Dashboard Home */}
+        {/* Adaptive Dashboard Home */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6 animate-fade-in">
-            {/* Quick Widgets Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-              {[
-                { label: "Today's Classes", value: '3 Classes', sub: 'Calculus pending next', color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20' },
-                { label: 'Students Present', value: '56 Students', sub: '92% attendance rate', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-                { label: 'Absent Today', value: '4 Absent', sub: '2 approved absences', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
-                { label: 'Awaiting Grading', value: '18 Assignments', sub: 'Geometry homework', color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
-                { label: 'Average Performance', value: '78.4%', sub: 'Class benchmark average', color: 'text-teal-400', bg: 'bg-teal-500/10 border-teal-500/20' },
-                { label: 'Attendance Trend', value: '+2.4%', sub: 'Higher than last week', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
-                { label: 'New Announcements', value: '2 Active', sub: 'Sports day planning', color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
-                { label: 'Student Birthdays', value: '1 Today', sub: 'Amara Johnson (Grade 9)', color: 'text-pink-400', bg: 'bg-pink-500/10 border-pink-500/20' },
-                { label: 'Next Class Count', value: '42 Mins', sub: 'Geometry room 104', color: 'text-pink-400', bg: 'bg-pink-500/10 border-pink-500/20' },
-                { label: 'Needs Attention', value: '2 Students', sub: 'Performance alerts active', color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' }
-              ].map(card => (
-                <div key={card.label} className={`glass-card p-4 border flex flex-col justify-between ${card.bg}`}>
-                  <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase tracking-wider block mb-2">{card.label}</span>
+            {/* Dynamic Widgets Grid based on role intersections */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
+              {/* Core widgets: visible to all teachers */}
+              <div className="glass-card p-4 border border-blue-500/20 bg-blue-500/10 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-2">Today&apos;s Classes</span>
+                <div>
+                  <p className="text-base font-extrabold text-[hsl(var(--text-primary))]">3 scheduled</p>
+                  <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Core Teaching</p>
+                </div>
+              </div>
+
+              <div className="glass-card p-4 border border-emerald-500/20 bg-emerald-500/10 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-2">Attendance Summary</span>
+                <div>
+                  <p className="text-base font-extrabold text-[hsl(var(--text-primary))]">92% Present</p>
+                  <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Core Operations</p>
+                </div>
+              </div>
+
+              <div className="glass-card p-4 border border-indigo-500/20 bg-indigo-500/10 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-2">Pending Grading</span>
+                <div>
+                  <p className="text-base font-extrabold text-[hsl(var(--text-primary))]">18 Assignments</p>
+                  <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Continuous Assessment</p>
+                </div>
+              </div>
+
+              {/* Form teacher widgets */}
+              {(activeRoles.form_teacher || activeRoles.hod || activeRoles.vice_principal || activeRoles.principal) && (
+                <div className="glass-card p-4 border border-pink-500/20 bg-pink-500/10 flex flex-col justify-between">
+                  <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-2">Parent Messages</span>
                   <div>
-                    <p className="text-base font-extrabold text-[hsl(var(--text-primary))]">{card.value}</p>
-                    <p className="text-[9px] text-[hsl(var(--text-tertiary))] truncate mt-0.5">{card.sub}</p>
+                    <p className="text-base font-extrabold text-[hsl(var(--text-primary))]">2 Unread Alert</p>
+                    <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Form / Class Engagement</p>
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
 
-            {/* Quick Actions Panel */}
-            <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4">
-              <p className="text-xs font-bold text-[hsl(var(--text-primary))]">Quick Actions</p>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                <button onClick={() => { setActiveTab('attendance'); }} className="p-3 bg-[hsl(var(--bg-tertiary))] hover:bg-[hsl(var(--border))] rounded-xl text-left border border-[hsl(var(--border))]">
-                  <p className="text-xs font-bold text-[hsl(var(--accent))]">✅ Quick Attendance</p>
-                  <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-1">Take period attendance check</p>
-                </button>
-                <button onClick={() => { setActiveTab('gradebook'); }} className="p-3 bg-[hsl(var(--bg-tertiary))] hover:bg-[hsl(var(--border))] rounded-xl text-left border border-[hsl(var(--border))]">
-                  <p className="text-xs font-bold text-[hsl(var(--accent))]">📝 Quick Grade Entry</p>
-                  <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-1">Lodge exam / quiz scores</p>
-                </button>
-                <button onClick={() => { setActiveTab('lessons'); }} className="p-3 bg-[hsl(var(--bg-tertiary))] hover:bg-[hsl(var(--border))] rounded-xl text-left border border-[hsl(var(--border))]">
-                  <p className="text-xs font-bold text-[hsl(var(--accent))]">📄 Quick Lesson Plan</p>
-                  <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-1">Configure weekly topics scheme</p>
-                </button>
-                <button onClick={() => { setActiveTab('ai-copilot'); }} className="p-3 bg-[hsl(var(--bg-tertiary))] hover:bg-[hsl(var(--border))] rounded-xl text-left border border-[hsl(var(--border))]">
-                  <p className="text-xs font-bold text-[hsl(var(--accent))]">🤖 AI Assistant</p>
-                  <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-1">Generate chemistry quiz items</p>
-                </button>
-                <button onClick={() => handleAction('Send Emergency Notice')} className="p-3 bg-[hsl(var(--bg-tertiary))] hover:bg-[hsl(var(--border))] rounded-xl text-left border border-[hsl(var(--border))]">
-                  <p className="text-xs font-bold text-rose-400">⚠️ Send Notice</p>
-                  <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-1">Broadcast quick emergency alert</p>
-                </button>
-              </div>
-            </div>
-
-            {/* Today's classes schedule */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 glass-card p-5 border border-[hsl(var(--border))] rounded-2xl space-y-4">
-                <p className="text-xs font-bold text-[hsl(var(--text-primary))]">Today&apos;s Class Schedule</p>
-                <div className="space-y-3 text-xs">
-                  {classes.map(cls => (
-                    <div key={cls.id} className="p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex justify-between items-center">
-                      <div>
-                        <p className="font-bold text-[hsl(var(--text-primary))]">{cls.subject}</p>
-                        <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{cls.period} | Location: {cls.room}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${cls.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400' : cls.status === 'In Progress' ? 'bg-indigo-500/10 text-indigo-400 animate-pulse' : 'bg-zinc-500/10 text-zinc-400'}`}>{cls.status}</span>
+              {/* HOD widgets */}
+              {(activeRoles.hod || activeRoles.vice_principal || activeRoles.principal) && (
+                <>
+                  <div className="glass-card p-4 border border-teal-500/20 bg-teal-500/10 flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-2">Dept Performance</span>
+                    <div>
+                      <p className="text-base font-extrabold text-[hsl(var(--text-primary))]">Class Average: 81%</p>
+                      <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Math Department</p>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Student Alerts */}
-              <div className="glass-card p-5 border border-[hsl(var(--border))] rounded-2xl space-y-4">
-                <p className="text-xs font-bold text-[hsl(var(--text-primary))]">Students Needing Attention</p>
-                <div className="space-y-3 text-xs">
-                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400">
-                    <p className="font-bold">David Okafor</p>
-                    <p className="text-[10px] mt-0.5">Alert: Low performance (midterm grade 70%). Recommend math lab intervention.</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
-                    <p className="font-bold">Priya Sharma</p>
-                    <p className="text-[10px] mt-0.5">Alert: High absences (3 days sick this month). Action: Send welfare check check-in.</p>
+                  <div className="glass-card p-4 border border-purple-500/20 bg-purple-500/10 flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-2">Grade Approvals</span>
+                    <div>
+                      <p className="text-base font-extrabold text-[hsl(var(--text-primary))]">5 files queue</p>
+                      <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Assessment Moderation</p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* VP & Principal academic analytics */}
+              {(activeRoles.vice_principal || activeRoles.principal) && (
+                <div className="glass-card p-4 border border-amber-500/20 bg-amber-500/10 flex flex-col justify-between">
+                  <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-2">School Analytics</span>
+                  <div>
+                    <p className="text-base font-extrabold text-[hsl(var(--text-primary))]">94.2% Attendance</p>
+                    <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">VP Academic Oversight</p>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
+              )}
 
-        {/* Class Management Seating Layout */}
-        {activeTab === 'classes' && (
-          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in">
-            <div className="border-b border-[hsl(var(--border))] pb-4">
-              <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">My Assigned Classes &amp; Seating Layout</h3>
-              <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Configure seating desks allocations and student desks grid coordinates.</p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {['Front Desks: Desk 1', 'Front Desks: Desk 2', 'Middle Desks: Desk 3', 'Back Desks: Desk 4'].map((desk, idx) => (
-                <div key={idx} className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-center text-xs">
-                  <p className="font-bold text-[hsl(var(--text-primary))]">{desk}</p>
-                  <p className="text-[10px] text-emerald-400 mt-1">Allocated: Student #{idx + 1}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Student Management notes */}
-        {activeTab === 'students' && (
-          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in">
-            <div className="border-b border-[hsl(var(--border))] pb-4">
-              <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Student Management Records</h3>
-              <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Read behavioral counseling referrals, parent details, and teacher comments logs.</p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="border-b border-[hsl(var(--border))] text-[hsl(var(--text-tertiary))] font-semibold">
-                    <th className="py-2.5 px-2">Student</th>
-                    <th className="py-2.5 px-2">Medical Alerts</th>
-                    <th className="py-2.5 px-2">Behavior Rating</th>
-                    <th className="py-2.5 px-2">Parent Contact</th>
-                    <th className="py-2.5 px-2 text-right">Action Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-[hsl(var(--border))/0.4]">
-                    <td className="py-3 px-2 font-bold text-[hsl(var(--text-primary))]">Amara Johnson</td>
-                    <td className="py-3 px-2 text-rose-400">Asthma — inhaler in bag</td>
-                    <td className="py-3 px-2 text-emerald-400">Excellent (5 Stars)</td>
-                    <td className="py-3 px-2 text-[hsl(var(--text-secondary))]">Mrs. Clara Johnson</td>
-                    <td className="py-3 px-2 text-right text-[hsl(var(--text-tertiary))]">Keen math progress</td>
-                  </tr>
-                  <tr className="border-b border-[hsl(var(--border))/0.4]">
-                    <td className="py-3 px-2 font-bold text-[hsl(var(--text-primary))]">David Okafor</td>
-                    <td className="py-3 px-2 text-[hsl(var(--text-tertiary))]">None</td>
-                    <td className="py-3 px-2 text-amber-400">Needs Focus (3 Stars)</td>
-                    <td className="py-3 px-2 text-[hsl(var(--text-secondary))]">Mr. David Okafor Sr.</td>
-                    <td className="py-3 px-2 text-right text-[hsl(var(--text-tertiary))]">Requires geometry practice</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Attendance Modules */}
-        {activeTab === 'attendance' && (
-          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in">
-            <div className="border-b border-[hsl(var(--border))] pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div>
-                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Daily Period Attendance Register</h3>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Take period attendance checks. Auto-notifies parents on check-in/absences.</p>
-              </div>
-              <button onClick={() => handleAction('Submit Period 2 Attendance')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90">
-                <Plus className="w-3.5 h-3.5" /> Submit Attendance Sheet
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="border-b border-[hsl(var(--border))] text-[hsl(var(--text-tertiary))] font-semibold">
-                    <th className="py-2.5 px-2">Student Name</th>
-                    <th className="py-2.5 px-2">Check-in Status</th>
-                    <th className="py-2.5 px-2">Arrival Time</th>
-                    <th className="py-2.5 px-2">Excused Reason</th>
-                    <th className="py-2.5 px-2 text-right">Parent Alert</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attendanceList.map((att, idx) => (
-                    <tr key={idx} className="border-b border-[hsl(var(--border))/0.4]">
-                      <td className="py-3 px-2 font-bold text-[hsl(var(--text-primary))]">{att.name}</td>
-                      <td className="py-3 px-2">
-                        <select
-                          value={att.status}
-                          onChange={(e) => {
-                            const updated = [...attendanceList];
-                            updated[idx].status = e.target.value;
-                            setAttendanceList(updated);
-                          }}
-                          className="bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded p-1 text-xs text-[hsl(var(--text-secondary))]"
-                        >
-                          <option>Present</option>
-                          <option>Late</option>
-                          <option>Absent</option>
-                        </select>
-                      </td>
-                      <td className="py-3 px-2 font-mono text-[hsl(var(--text-secondary))]">{att.arrival}</td>
-                      <td className="py-3 px-2 text-[hsl(var(--text-tertiary))]">{att.notes || '—'}</td>
-                      <td className="py-3 px-2 text-right text-emerald-400 font-semibold">Auto-Sent</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Gradebook Continuous Assessment Worksheet */}
-        {activeTab === 'gradebook' && (
-          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in">
-            <div className="border-b border-[hsl(var(--border))] pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div>
-                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Continuous Assessment Gradebook Sheets</h3>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Input weighted values for quizzes, homework, and midterm tests with automatic average calculations.</p>
-              </div>
-              <button onClick={() => handleAction('Publish Results')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90">
-                <Plus className="w-3.5 h-3.5" /> Publish Results to Portal
-              </button>
-            </div>
-
-            {/* Weights Configuration */}
-            <div className="grid grid-cols-3 gap-3 p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)] text-xs">
-              <div>
-                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold">Quiz Weight (%)</label>
-                <input type="number" value={quizWeight} onChange={e => setQuizWeight(Number(e.target.value))} className="w-full mt-1 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded p-1.5 text-[hsl(var(--text-primary))]" />
-              </div>
-              <div>
-                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold">Homework Weight (%)</label>
-                <input type="number" value={hwWeight} onChange={e => setHwWeight(Number(e.target.value))} className="w-full mt-1 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded p-1.5 text-[hsl(var(--text-primary))]" />
-              </div>
-              <div>
-                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold">Exam Weight (%)</label>
-                <input type="number" value={examWeight} onChange={e => setExamWeight(Number(e.target.value))} className="w-full mt-1 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded p-1.5 text-[hsl(var(--text-primary))]" />
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="border-b border-[hsl(var(--border))] text-[hsl(var(--text-tertiary))] font-semibold">
-                    <th className="py-2.5 px-2">Student Name</th>
-                    <th className="py-2.5 px-2">Quiz 1 ({quizWeight}%)</th>
-                    <th className="py-2.5 px-2">Homework 1 ({hwWeight}%)</th>
-                    <th className="py-2.5 px-2">Midterm Exam ({examWeight}%)</th>
-                    <th className="py-2.5 px-2 text-right">Weighted Final Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gradeRows.map((row, idx) => {
-                    const weighted = calculateWeighted(row.quiz1, row.hw1, row.midterm);
-                    return (
-                      <tr key={idx} className="border-b border-[hsl(var(--border))/0.4]">
-                        <td className="py-3 px-2 font-bold text-[hsl(var(--text-primary))]">{row.name}</td>
-                        <td className="py-3 px-2">
-                          <input type="number" value={row.quiz1} onChange={e => {
-                            const updated = [...gradeRows];
-                            updated[idx].quiz1 = Number(e.target.value);
-                            setGradeRows(updated);
-                          }} className="w-16 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded p-1 text-center font-mono text-[hsl(var(--text-primary))]" />
-                        </td>
-                        <td className="py-3 px-2">
-                          <input type="number" value={row.hw1} onChange={e => {
-                            const updated = [...gradeRows];
-                            updated[idx].hw1 = Number(e.target.value);
-                            setGradeRows(updated);
-                          }} className="w-16 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded p-1 text-center font-mono text-[hsl(var(--text-primary))]" />
-                        </td>
-                        <td className="py-3 px-2">
-                          <input type="number" value={row.midterm} onChange={e => {
-                            const updated = [...gradeRows];
-                            updated[idx].midterm = Number(e.target.value);
-                            setGradeRows(updated);
-                          }} className="w-16 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded p-1 text-center font-mono text-[hsl(var(--text-primary))]" />
-                        </td>
-                        <td className="py-3 px-2 text-right font-mono font-bold text-indigo-400">{weighted}%</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Lesson Planner objectives timeline */}
-        {activeTab === 'lessons' && (
-          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in">
-            <div className="border-b border-[hsl(var(--border))] pb-4 flex justify-between items-center">
-              <div>
-                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Weekly Lesson Plans &amp; Schemes of Work</h3>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Map curriculum outcomes, schemes of work, and submit lesson plans for principal approval.</p>
-              </div>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              {[
-                { week: 'Week 1: Quadratic Equations', topic: 'Completing the square, factoring quadratic trinomials', objective: 'Students should be able to solve basic factoring problems.', status: 'Approved' },
-                { week: 'Week 2: Geometric Proofs', topic: 'Congruency and similarity properties in triangles', objective: 'Understand similarity axioms.', status: 'Pending Review' }
-              ].map((lesson, idx) => (
-                <div key={idx} className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-2">
-                  <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-2">
-                    <p className="font-bold text-[hsl(var(--text-primary))]">{lesson.week}</p>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${lesson.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>{lesson.status}</span>
+              {/* Principal financial overview */}
+              {activeRoles.principal && (
+                <div className="glass-card p-4 border border-rose-500/20 bg-rose-500/10 flex flex-col justify-between">
+                  <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-2">Financial Summary</span>
+                  <div>
+                    <p className="text-base font-extrabold text-[hsl(var(--text-primary))]">₦42.1M collected</p>
+                    <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Cleared fee bounds</p>
                   </div>
-                  <p className="text-[hsl(var(--text-secondary))]">Topics: {lesson.topic}</p>
-                  <p className="text-[hsl(var(--text-secondary))] font-medium text-emerald-400">Objectives: {lesson.objective}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* AI Teaching Copilot */}
-        {activeTab === 'ai-copilot' && (
-          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in">
-            <div className="border-b border-[hsl(var(--border))] pb-4 flex items-center gap-2">
-              <Brain className="w-5 h-5 text-[hsl(var(--accent))]" />
-              <div>
-                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">AI Teaching Copilot Helper</h3>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Auto-generate lesson plan text, quiz questions, and translation comments.</p>
-              </div>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  className="flex-1 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl px-4 py-2.5 text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
-                  placeholder="Ask the AI copilot..."
-                />
-                <button
-                  onClick={handleRunAi}
-                  disabled={saving}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-xs font-semibold hover:opacity-90 transition-opacity"
-                >
-                  {saving ? 'Generating...' : 'Run Copilot'}
-                </button>
-              </div>
-
-              {aiOutput && (
-                <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-[hsl(var(--text-secondary))] leading-relaxed whitespace-pre-line font-mono">
-                  {aiOutput}
                 </div>
               )}
             </div>
+
+            {/* Role-Based Adaptive Action Buttons (Layer 3) */}
+            <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl">
+              <p className="text-xs font-bold text-[hsl(var(--text-primary))]">Role-Based Action Scopes</p>
+              <div className="flex flex-wrap gap-3">
+                {/* Visible to classroom/subject teacher */}
+                {(activeRoles.classroom_teacher || activeRoles.subject_teacher) && (
+                  <button onClick={() => handleAction('Submit Grades to HOD')} className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg text-xs font-semibold hover:opacity-90">
+                    Submit Grades for Department review
+                  </button>
+                )}
+
+                {/* Visible to HOD / VP */}
+                {(activeRoles.hod || activeRoles.vice_principal) && (
+                  <button onClick={() => handleAction('Approve & Moderate Grades')} className="px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-lg text-xs font-semibold hover:opacity-90">
+                    Approve &amp; Moderate Department Grades
+                  </button>
+                )}
+
+                {/* Visible to Principal / VP */}
+                {(activeRoles.principal || activeRoles.vice_principal) && (
+                  <button onClick={() => handleAction('Publish Report Cards')} className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg text-xs font-semibold hover:opacity-90">
+                    Publish Official Report Cards
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Simulated Scope description */}
+            <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.3)] space-y-2 text-xs">
+              <p className="font-bold text-[hsl(var(--text-primary))]">Data Access Scope Layer (Least Privilege Validation)</p>
+              <p className="text-[10px] text-[hsl(var(--text-secondary))] leading-relaxed">
+                Your currently simulated access allows you to view records under: <strong className="text-indigo-400">{dataScope}</strong>. 
+                Any attempts to query students or classes outside of this scope will be automatically logged to the audit system.
+              </p>
+            </div>
           </div>
         )}
 
-        {/* Access Settings and RBAC Restrictions */}
+        {/* Form Teacher: Parent Communication */}
+        {activeTab === 'parent-comm' && (
+          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in text-xs">
+            <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Form Class Parent Communications</h3>
+            <p className="text-xs text-[hsl(var(--text-tertiary))]">Direct message thread contacts for your assigned form class students parents.</p>
+            <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-center">
+              Parent chat threads and broadcast notices interface (Simulated active).
+            </div>
+          </div>
+        )}
+
+        {/* HOD: Department Management */}
+        {activeTab === 'department' && (
+          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in text-xs">
+            <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Department Management Console</h3>
+            <p className="text-xs text-[hsl(var(--text-tertiary))]">Manage syllabus allocations, view department teachers obs list, and moderate continuous assessment quizzes.</p>
+            <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-center">
+              Department teachers observation lists and subject schedules (Simulated active).
+            </div>
+          </div>
+        )}
+
+        {/* VP: Academic Oversight */}
+        {activeTab === 'academic-oversight' && (
+          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in text-xs">
+            <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Vice Principal Academic Oversight</h3>
+            <p className="text-xs text-[hsl(var(--text-tertiary))]">Review school-wide curriculum completion metrics, teacher substitution schedules, and exam timetables.</p>
+            <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-center">
+              Academic analytics and curriculum maps (Simulated active).
+            </div>
+          </div>
+        )}
+
+        {/* Principal: Financial Snapshot */}
+        {activeTab === 'financial-snapshot' && (
+          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in text-xs">
+            <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Principal Financial Summary</h3>
+            <p className="text-xs text-[hsl(var(--text-tertiary))]">Review school fee collection rates, outstanding balances, and total collections by term.</p>
+            <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-center">
+              Fee collect rates and financial overview chart (Simulated active).
+            </div>
+          </div>
+        )}
+
+        {/* Keep core fallback settings tab rendering */}
         {activeTab === 'settings' && (
-          <div className="space-y-6 animate-fade-in text-xs">
-            {/* Header banner */}
-            <div className="glass-card p-6 border border-[hsl(var(--border))] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-2xl">
-              <div>
-                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Teacher Preferences &amp; System Configuration</h3>
-                <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Personalize your teacher profile settings and view locked institution configurations.</p>
-              </div>
-              <button onClick={() => handleAction('Save Preferences')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90">
-                <Save className="w-3.5 h-3.5" /> Save My Settings
-              </button>
-            </div>
-
-            {/* Split Grid Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left & Middle Pane: My Settings (Teacher Controlled) */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Profile Preferences */}
-                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl">
-                  <p className="font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
-                    <UserCheck className="w-4 h-4 text-[hsl(var(--accent))]" /> Profile Settings
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Display Name</label>
-                      <input type="text" defaultValue="Mr. Kwame Darko" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Contact Phone Number</label>
-                      <input type="text" defaultValue="+2348035550011" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Personal Email Address</label>
-                      <input type="email" defaultValue="k.darko@schoolsaas.com" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Emergency Contact Info</label>
-                      <input type="text" defaultValue="Mrs. Beatrice Darko (+2348035559988)" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Biography / About Me</label>
-                      <textarea defaultValue="Senior Mathematics Instructor with over 8 years experience teaching calculus and algebra." className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))] h-20 resize-none" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Account & Security Options */}
-                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl">
-                  <p className="font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-[hsl(var(--accent))]" /> Account &amp; Security Settings
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Change Password</label>
-                      <input type="password" placeholder="••••••••••••" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]" />
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)]">
-                      <div>
-                        <p className="font-bold text-[hsl(var(--text-primary))]">Two-Factor Authentication (2FA)</p>
-                        <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-0.5">Secure logins with OTP verification.</p>
-                      </div>
-                      <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Preferences Panels (Notification, Dashboard, Appearance) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Notifications */}
-                  <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-3 rounded-xl">
-                    <p className="font-bold text-[hsl(var(--text-primary))]">Notification Channels</p>
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
-                        <span>Email reminders (Assignments, Grades)</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
-                        <span>SMS alerts (Emergency notices)</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" defaultChecked className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
-                        <span>Parent messages notifications</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Appearance Settings */}
-                  <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-3 rounded-xl">
-                    <p className="font-bold text-[hsl(var(--text-primary))]">Theme &amp; Accessibility Options</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Color Mode</label>
-                        <select className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded p-1 text-[hsl(var(--text-secondary))]">
-                          <option>Dark Mode</option>
-                          <option>Light Mode</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Time Format</label>
-                        <select className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded p-1 text-[hsl(var(--text-secondary))]">
-                          <option>12-Hour format</option>
-                          <option>24-Hour format</option>
-                        </select>
-                      </div>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer pt-1">
-                      <input type="checkbox" className="rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))]" />
-                      <span>Enable High-Contrast text accessibility</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Official Info Request Ticket Form */}
-                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl bg-[hsl(var(--bg-tertiary)/0.2)]">
-                  <div>
-                    <p className="font-bold text-[hsl(var(--text-primary))]">Submit Administrative Change Request</p>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">Submit a change ticket to the Principal for restricted fields like legal name updates or salary bank accounts.</p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <select className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 text-[hsl(var(--text-secondary))]">
-                      <option>Select Request Type...</option>
-                      <option>Legal Name Change</option>
-                      <option>Department Transfer</option>
-                      <option>Salary Bank Info Update</option>
-                      <option>Subject Assignment</option>
-                    </select>
-                    <input type="text" placeholder="Proposed value (e.g. New Bank Account)" className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))]" />
-                    <button onClick={() => handleAction('Submit Change Ticket')} className="px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white hover:opacity-90 font-bold">Lodge Ticket</button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Pane: Locked System Settings (Administrator Controlled) */}
-              <div className="space-y-6">
-                <div className="glass-card p-5 border border-rose-500/20 bg-rose-500/5 space-y-4 rounded-xl">
-                  <div className="border-b border-rose-500/20 pb-3">
-                    <p className="font-bold text-rose-400 flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4" /> Locked System Settings
-                    </p>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">Institutional configuration parameters can only be altered by authorized Platform Super Admins.</p>
-                  </div>
-
-                  <div className="space-y-4 text-[11px] leading-relaxed">
-                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
-                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">School Identity</p>
-                      <p className="text-[hsl(var(--text-primary))] font-semibold">Name: Freetown International Academy</p>
-                      <p className="text-[hsl(var(--text-secondary))]">Campus Address: 42 Aberdeen Road, SL</p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
-                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Class &amp; Section Allocation</p>
-                      <p className="text-[hsl(var(--text-primary))] font-semibold">Assigned: Grade 9 Algebra &bull; Grade 10 Geometry</p>
-                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Class reallocation changes: Lockout Active</p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
-                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Academic Grading Bounds</p>
-                      <p className="text-[hsl(var(--text-primary))] font-semibold">Grade A: 85% &rarr; 100% | Grade B: 75% &rarr; 84%</p>
-                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Weight factors config: Lockout Active</p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
-                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Attendance Categories</p>
-                      <p className="text-[hsl(var(--text-primary))] font-semibold">Categories: Present, Absent, Late, Excused</p>
-                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Policy rules customization: Lockout Active</p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
-                      <p className="font-bold text-[hsl(var(--text-tertiary))] uppercase text-[9px]">Database &amp; Audit Security</p>
-                      <p className="text-[hsl(var(--text-secondary))]">API Integration keys: ••••••••••••••••••••••</p>
-                      <p className="text-[hsl(var(--text-secondary))]">Session timeout: 15 Mins (Locked)</p>
-                      <p className="text-[hsl(var(--text-secondary))] font-medium text-rose-400">Compliance audit access: Lockout Active</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in text-xs">
+            <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Portal Settings</h3>
+            <p className="text-xs text-[hsl(var(--text-tertiary))]">Personal settings config (Simulated active).</p>
           </div>
         )}
       </div>
     </div>
   );
 }
-
