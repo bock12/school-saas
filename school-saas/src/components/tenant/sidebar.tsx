@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   School,
+  Landmark,
   Wallet,
   UserPlus,
   UserCheck,
@@ -314,7 +315,8 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
     {
       label: 'Resources',
       items: [
-        { label: 'Inventory', href: `${basePath}/inventory`, icon: Package },
+        { label: 'Resource Management', href: `${basePath}/resources`, icon: Landmark },
+        { label: 'Inventory Management', href: `${basePath}/inventory`, icon: Package },
         { label: 'Reports & Analytics', href: `${basePath}/reports`, icon: TrendingUp },
         { label: 'Approvals', href: `${basePath}/approvals`, icon: ClipboardList, badge: '5' },
       ],
