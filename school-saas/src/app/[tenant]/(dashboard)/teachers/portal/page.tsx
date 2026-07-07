@@ -46,6 +46,7 @@ export default function TeacherPortalPage() {
   // States for interactive demo actions
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState('classroom_teacher');
 
   // AI Copilot prompt state
   const [aiPrompt, setAiPrompt] = useState('Generate 5 organic chemistry questions for Grade 11');
@@ -600,7 +601,127 @@ export default function TeacherPortalPage() {
             </div>
           </div>
         )}
+
+        {/* Access Settings and RBAC Restrictions */}
+        {activeTab === 'settings' && (
+          <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in text-xs">
+            <div className="border-b border-[hsl(var(--border))] pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Role-Based Access Control (RBAC) Settings</h3>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Configure restrictions and granular permission scopes for different teacher roles under the Principle of Least Privilege.</p>
+              </div>
+              <button onClick={() => handleAction('Save Security Policies')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90">
+                <Save className="w-3.5 h-3.5" /> Save Security Policies
+              </button>
+            </div>
+
+            {/* Role presets selector */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Select Role to Configure</label>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value)}
+                  className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))] font-semibold"
+                >
+                  <option value="classroom_teacher">Classroom Teacher</option>
+                  <option value="subject_teacher">Subject Teacher</option>
+                  <option value="form_teacher">Form / Class Teacher</option>
+                  <option value="head_of_dept">Head of Department</option>
+                  <option value="senior_teacher">Senior Teacher</option>
+                  <option value="vice_principal">Vice Principal / Academic</option>
+                  <option value="principal">Principal</option>
+                  <option value="sys_admin">System Administrator</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Grading Deadline (Days)</label>
+                <input type="number" defaultValue={7} className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Attendance Correction Window (Hours)</label>
+                <input type="number" defaultValue={24} className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-[hsl(var(--text-primary))]" />
+              </div>
+            </div>
+
+            {/* Permissions lists switches */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+              {/* Allowed Actions */}
+              <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-4">
+                <p className="font-bold text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" /> Allowed Operations (Least Privilege Scopes)
+                </p>
+                <div className="space-y-3">
+                  {[
+                    { key: 'view_assigned_students', label: 'View Assigned Students &amp; Classes', desc: 'Allows looking up only students assigned to teachers schedule.' },
+                    { key: 'enter_assigned_grades', label: 'Enter Grades for Assigned Subjects', desc: 'Allows marks input prior to grading policy lockouts.' },
+                    { key: 'mark_class_attendance', label: 'Mark Attendance for Assigned Periods', desc: 'Allows checks during the designated daily periods.' },
+                    { key: 'view_fee_status_simple', label: 'View Simple Fee Status Indicator', desc: 'Shows "Cleared/Outstanding" badge without exposing totals.' },
+                    { key: 'ai_lesson_generation', label: 'Use AI to Generate Lesson Notes', desc: 'Allows creating lesson text and quizzes draft ideas.' }
+                  ].map(perm => (
+                    <label key={perm.key} className="flex items-start gap-3 cursor-pointer p-1">
+                      <input type="checkbox" defaultChecked className="mt-0.5 rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))] focus:ring-0" />
+                      <div>
+                        <p className="font-bold text-[hsl(var(--text-primary))]">{perm.label}</p>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{perm.desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Prohibited Restrictions */}
+              <div className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-4">
+                <p className="font-bold text-rose-400 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4" /> Restricted Actions (Principle of Least Privilege)
+                </p>
+                <div className="space-y-3">
+                  {[
+                    { key: 'edit_admission_records', label: 'Modify Official Student Admission Files', desc: 'Block editing enrollment numbers and names.' },
+                    { key: 'delete_student_accounts', label: 'Delete Student Accounts &amp; Profiles', desc: 'Block database removal actions.' },
+                    { key: 'view_staff_salaries', label: 'View Employee Salaries &amp; Contracts', desc: 'Block access to staff payroll ledger files.' },
+                    { key: 'edit_master_timetable', label: 'Edit Master School Timetable', desc: 'Block rearranging general periods or allocations.' },
+                    { key: 'issue_suspensions', label: 'Issue Student Suspensions / Expulsions', desc: 'Requires head Principal workflow authorization.' },
+                    { key: 'export_all_students_db', label: 'Export Complete Student Database (CSV)', desc: 'Block bulk record downloading to protect PII data.' },
+                    { key: 'access_audit_logs', label: 'Access System Audit Logs', desc: 'Restricted only to Platform Super Admin compliance officers.' },
+                    { key: 'ai_auto_update_grades', label: 'AI Auto-Update Official Grades', desc: 'Block automatic grading edits without teacher reviews.' }
+                  ].map(perm => (
+                    <label key={perm.key} className="flex items-start gap-3 cursor-pointer p-1">
+                      <input type="checkbox" defaultChecked={false} className="mt-0.5 rounded border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--accent))] focus:ring-0" />
+                      <div>
+                        <p className="font-bold text-[hsl(var(--text-primary))]">{perm.label}</p>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{perm.desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Temporary cover assignment */}
+            <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.3)] space-y-4">
+              <p className="font-bold text-[hsl(var(--text-primary))]">Temporary Cover &amp; Delegation Permission Override</p>
+              <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Temporarily assign another teacher cover permissions for sick leave coverage without modifying master security roles.</p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <select className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 flex-1 text-[hsl(var(--text-secondary))]">
+                  <option>Select Cover Teacher...</option>
+                  <option>Mr. Kofi Mensah</option>
+                  <option>Mr. Kwame Darko</option>
+                </select>
+                <select className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 flex-1 text-[hsl(var(--text-secondary))]">
+                  <option>Select Class to Delegate...</option>
+                  <option>Grade 9 Algebra (Period 1)</option>
+                  <option>Grade 10 Geometry (Period 2)</option>
+                </select>
+                <button onClick={() => handleAction('Assign Cover Delegation')} className="px-4 py-2 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--border))] font-semibold">Assign Temporary Override</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
