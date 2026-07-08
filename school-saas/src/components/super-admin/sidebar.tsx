@@ -3,46 +3,38 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
-  School,
-  CreditCard,
-  Activity,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Shield,
-  Megaphone,
+  LayoutDashboard, School, CreditCard, Activity, Settings, ChevronLeft, ChevronRight,
+  Shield, Megaphone, Users, Landmark, DollarSign, HelpCircle, FileText, Brain,
+  Layers, Plus, ToggleRight, UserCheck, HardDrive, Terminal, BarChart3, Heart, Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APP_NAME } from '@/lib/constants';
 import { useState } from 'react';
 
 const navItems = [
-  {
-    label: 'Overview',
-    href: '/super-admin',
-    icon: LayoutDashboard,
-  },
-  {
-    label: 'Schools',
-    href: '/super-admin/tenants',
-    icon: School,
-  },
-  {
-    label: 'Plans & Billing',
-    href: '/super-admin/plans',
-    icon: CreditCard,
-  },
-  {
-    label: 'System Health',
-    href: '/super-admin/system',
-    icon: Activity,
-  },
-  {
-    label: 'Settings',
-    href: '/super-admin/settings',
-    icon: Settings,
-  },
+  { label: 'Dashboard', href: '/super-admin', icon: LayoutDashboard },
+  { label: 'Tenant Management', href: '/super-admin/tenants', icon: Layers },
+  { label: 'Schools', href: '/super-admin/tenants', icon: School },
+  { label: 'Users', href: '/super-admin/tenants', icon: Users },
+  { label: 'Subscriptions', href: '/super-admin/plans', icon: CreditCard },
+  { label: 'Billing', href: '/super-admin/plans', icon: Landmark },
+  { label: 'Revenue', href: '/super-admin/plans', icon: DollarSign },
+  { label: 'Support', href: '/super-admin/system', icon: HelpCircle },
+  { label: 'Monitoring', href: '/super-admin/system', icon: Activity },
+  { label: 'Security', href: '/super-admin/settings', icon: Shield },
+  { label: 'Audit Logs', href: '/super-admin/system', icon: FileText },
+  { label: 'AI Insights', href: '/super-admin', icon: Brain },
+  { label: 'Communications', href: '/super-admin/system', icon: Megaphone },
+  { label: 'Marketplace', href: '/super-admin/settings', icon: Layers },
+  { label: 'Integrations', href: '/super-admin/settings', icon: Plus },
+  { label: 'Feature Flags', href: '/super-admin', icon: ToggleRight },
+  { label: 'Roles & Permissions', href: '/super-admin/settings', icon: UserCheck },
+  { label: 'Platform Settings', href: '/super-admin/settings', icon: Settings },
+  { label: 'Backups', href: '/super-admin/system', icon: HardDrive },
+  { label: 'Developer Console', href: '/super-admin/system', icon: Terminal },
+  { label: 'Reports', href: '/super-admin', icon: BarChart3 },
+  { label: 'System Health', href: '/super-admin/system', icon: Heart },
+  { label: 'Notifications', href: '/super-admin', icon: Clock },
 ];
 
 export function Sidebar() {
