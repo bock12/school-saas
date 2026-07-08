@@ -16,7 +16,7 @@ export default function ParentsDashboardPage() {
     { label: 'Add Parent', desc: 'Register parent profile', href: `/${tenant}/parents/parents`, icon: UserPlus, primary: true },
     { label: 'Add Guardian', desc: 'Register legal guardian', href: `/${tenant}/parents/guardians`, icon: ShieldCheck },
     { label: 'Link Parent', desc: 'Link parent to student', href: `/${tenant}/parents/relationships`, icon: Layers },
-    { label: 'Invite Parent Portal', desc: 'Dispatch portal invite email', href: `/${tenant}/parents/portal`, icon: Mail },
+    { label: 'Invite Parent Portal', desc: 'Dispatch portal invite email', href: `/${tenant}/parents/portal-approvals`, icon: Mail },
     { label: 'Print Parent Cards', desc: 'Batch ID card print', href: `/${tenant}/parents/bulk`, icon: LayoutGrid },
     { label: 'Bulk Import', desc: 'Upload CSV templates', href: `/${tenant}/parents/bulk`, icon: Download },
     { label: 'Send Announcement', desc: 'Dispatch broadcast to parents', href: `/${tenant}/parents/communication`, icon: MessageSquare },
