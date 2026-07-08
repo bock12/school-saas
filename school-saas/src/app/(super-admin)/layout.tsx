@@ -9,7 +9,7 @@ export default function SuperAdminLayout({
   return (
     <div className="min-h-screen bg-[hsl(var(--bg-primary))]">
       <Sidebar />
-      <div className="ml-[260px] transition-all duration-300">
+      <div className="ml-[280px] transition-all duration-300">
         <Topbar />
         <main className="p-6">{children}</main>
       </div>

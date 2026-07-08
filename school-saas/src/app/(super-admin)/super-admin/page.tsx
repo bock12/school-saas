@@ -1,785 +1,759 @@
 'use client';
 
-import { useState } from 'react';
-import { StatCard } from '@/components/super-admin/stat-card';
-import { StatusBadge } from '@/components/shared/status-badge';
+import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
-  School, CreditCard, DollarSign, Users, ArrowRight, Plus, Megaphone,
-  TrendingUp, Clock, ShieldAlert, Cpu, Database, HardDrive, LayoutGrid,
-  Activity, Layers, Heart, MessageSquare, AlertTriangle, Key, Terminal,
-  RefreshCw, CheckCircle, HelpCircle, FileText, CheckCircle2, Play, ToggleLeft, ToggleRight,
-  UserCheck, Shield, BookOpen, UserX, BarChart3, Settings, ShieldCheck, Download, Trash2, Search, ArrowUpRight, Brain, Sparkles
+  School, CreditCard, DollarSign, Users, ArrowRight, Plus,
+  Megaphone, TrendingUp, Clock, Shield, Cpu, Layers, Brain,
+  Search, ShieldAlert, Heart, HardDrive, RefreshCw, Radio,
+  Send, Save, Eye, Edit3, Trash2, Key, CheckCircle2, Lock,
+  PlusCircle, UserX, AlertTriangle, MessageSquare, ToggleLeft, ToggleRight,
+  Database, Server, Ban, CheckSquare, Download, Play, HelpCircle, Loader2
 } from 'lucide-react';
-import Link from 'next/link';
+import { StatusBadge } from '@/components/shared/status-badge';
+import { Suspense } from 'react';
 
-type ConsoleType = 'executive' | 'business' | 'platform' | 'customer';
-
-type PlatformRole =
-  | 'owner'
-  | 'super_admin'
-  | 'operations'
-  | 'customer_success'
-  | 'finance'
-  | 'support'
-  | 'security'
-  | 'infra'
-  | 'compliance'
-  | 'ai_ops';
-
-interface Tenant {
-  id: string;
-  name: string;
-  slug: string;
-  plan: string;
-  status: 'active' | 'trial' | 'suspended' | 'past_due';
-  students: number;
-  created_at: string;
-  domain: string;
-  mrr: number;
-  features: string[];
-}
-
-const initialTenants: Tenant[] = [
-  { id: 't1', name: 'Greenwood Academy', slug: 'greenwood', plan: 'Professional', status: 'active', students: 342, created_at: '2026-06-20', domain: 'greenwood.schoolsaas.com', mrr: 299, features: ['Library', 'Transport', 'Parent Portal', 'AI Assistant'] },
-  { id: 't2', name: 'Sunrise International School', slug: 'sunrise', plan: 'Enterprise', status: 'active', students: 1205, created_at: '2026-06-18', domain: 'sunrise.schoolsaas.com', mrr: 899, features: ['Library', 'Hostel', 'Transport', 'Parent Portal', 'AI Assistant', 'Payroll', 'Finance'] },
-  { id: 't3', name: 'Heritage Prep', slug: 'heritage-prep', plan: 'Basic', status: 'trial', students: 67, created_at: '2026-06-15', domain: 'heritage.schoolsaas.com', mrr: 0, features: ['Parent Portal'] },
-  { id: 't4', name: 'Oakwood Learning Center', slug: 'oakwood', plan: 'Professional', status: 'past_due', students: 189, created_at: '2026-06-12', domain: 'oakwood.schoolsaas.com', mrr: 299, features: ['Library', 'Parent Portal'] },
-  { id: 't5', name: 'Maple Ridge School', slug: 'maple-ridge', plan: 'Basic', status: 'active', students: 98, created_at: '2026-06-10', domain: 'mapleridge.schoolsaas.com', mrr: 99, features: ['Transport', 'Parent Portal'] }
+// Mock initial tenants data
+const initialTenants = [
+  { id: '1', name: 'Greenwood Academy', slug: 'greenwood', plan: 'Professional', status: 'active', students: 342, teachers: 28, users: 412, storage: '12 GB', expiry: '2027-06-20', dbSchema: 'sch_greenwood' },
+  { id: '2', name: 'Sunrise International', slug: 'sunrise', plan: 'Enterprise', status: 'active', students: 1205, teachers: 89, users: 1540, storage: '48 GB', expiry: '2028-02-15', dbSchema: 'sch_sunrise' },
+  { id: '3', name: 'Heritage Prep', slug: 'heritage-prep', plan: 'Starter', status: 'trial', students: 67, teachers: 8, users: 85, storage: '1.8 GB', expiry: '2026-08-15', dbSchema: 'sch_heritage' },
+  { id: '4', name: 'Oakwood Learning Center', slug: 'oakwood', plan: 'Professional', status: 'past_due', students: 189, teachers: 15, users: 220, storage: '8 GB', expiry: '2026-07-28', dbSchema: 'sch_oakwood' },
+  { id: '5', name: 'Maple Ridge School', slug: 'maple-ridge', plan: 'Starter', status: 'active', students: 98, teachers: 9, users: 110, storage: '2.5 GB', expiry: '2027-01-10', dbSchema: 'sch_maple' },
+  { id: '6', name: 'Riverdale Academy', slug: 'riverdale', plan: 'Professional', status: 'suspended', students: 410, teachers: 32, users: 512, storage: '15 GB', expiry: '2026-05-28', dbSchema: 'sch_riverdale' }
 ];
 
-export default function SuperAdminDashboard() {
-  const [activeConsole, setActiveConsole] = useState<ConsoleType>('executive');
-  const [activeRole, setActiveRole] = useState<PlatformRole>('owner');
-  const [tenants, setTenants] = useState<Tenant[]>(initialTenants);
+// Mock support tickets
+const initialTickets = [
+  { id: 't-101', school: 'Greenwood Academy', title: 'Payment integration failing at checkout', status: 'critical', time: '10 mins ago', category: 'billing' },
+  { id: 't-102', school: 'Heritage Prep', title: 'Staff import fails CSV header verification', status: 'open', time: '2 hours ago', category: 'onboarding' },
+  { id: 't-103', school: 'Sunrise International', title: 'SSO configuration mapping validation failed', status: 'critical', time: '4 hours ago', category: 'security' },
+  { id: 't-104', school: 'Maple Ridge School', title: 'LMS quiz results report exports slow down', status: 'resolved', time: '1 day ago', category: 'performance' }
+];
 
-  // Form states for provisioning
-  const [newSchoolName, setNewSchoolName] = useState('St. Jude Collegiate');
-  const [newSchoolSlug, setNewSchoolSlug] = useState('st-jude');
-  const [newSchoolPlan, setNewSchoolPlan] = useState('Professional');
-  const [provisionProgress, setProvisionProgress] = useState<string[]>([]);
-  const [isProvisioning, setIsProvisioning] = useState(false);
-
-  // Broadcast settings
+function SuperAdminControlCenterContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  // Dynamic console active selection
+  const consoleParam = searchParams.get('console') || 'executive';
+  
+  const [tenants, setTenants] = useState(initialTenants);
+  const [tickets, setTickets] = useState(initialTickets);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  
+  // Interactive action logs
+  const [notif, setNotif] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+  
+  // Form controls
+  const [newSchoolName, setNewSchoolName] = useState('');
+  const [newSchoolPlan, setNewSchoolPlan] = useState('Starter');
+  const [newSchoolSlug, setNewSchoolSlug] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  
+  // Broadcast announcement
   const [broadcastTarget, setBroadcastTarget] = useState('all');
-  const [broadcastSubject, setBroadcastSubject] = useState('Platform Scheduled Maintenance (v2.4.0)');
-  const [broadcastBody, setBroadcastBody] = useState('Dear administrators, SchoolSaas will undergo a 15-minute maintenance window on Sunday at 02:00 AM UTC.');
-  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastChannel, setBroadcastChannel] = useState('email');
+  const [broadcastMessage, setBroadcastMessage] = useState('Scheduled system maintenance notice...');
 
-  // AI predictions state
-  const [aiReport, setAiReport] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  // Support reply state
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const [ticketReplyText, setTicketReplyText] = useState('Checking the logs. Will get back with a fix soon.');
 
-  // Security policy states
+  // Global feature flags
+  const [featureFlags, setFeatureFlags] = useState({
+    library: true,
+    hostel: true,
+    transport: true,
+    aiAssistant: true,
+    payroll: false,
+    inventory: true,
+    finance: true,
+    lms: true
+  });
+
+  // Security Policy
   const [mfaEnforced, setMfaEnforced] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState('30');
 
-  // Action feedback alert
-  const [notifMessage, setNotifMessage] = useState<string | null>(null);
-
-  const displayNotif = (msg: string) => {
-    setNotifMessage(msg);
-    setTimeout(() => setNotifMessage(null), 4000);
+  // Trigger Notification Helper
+  const triggerNotification = (msg: string) => {
+    setNotif(msg);
+    setTimeout(() => setNotif(null), 4000);
   };
 
-  // Roles verification matrix
-  const isConsoleLocked = (console: ConsoleType): boolean => {
-    if (activeRole === 'owner' || activeRole === 'super_admin') return false;
+  // Onboard new school database provisioning workflow simulator
+  const handleOnboardSchool = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSchoolName || !newSchoolSlug) return;
     
-    if (activeRole === 'operations') {
-      return ['executive', 'business'].includes(console);
-    }
-    if (activeRole === 'customer_success') {
-      return ['platform', 'business'].includes(console);
-    }
-    if (activeRole === 'finance') {
-      return ['platform', 'customer'].includes(console);
-    }
-    if (activeRole === 'support') {
-      return ['platform', 'business'].includes(console);
-    }
-    if (activeRole === 'security') {
-      return ['executive', 'business', 'customer'].includes(console);
-    }
-    if (activeRole === 'infra') {
-      return ['executive', 'business', 'customer'].includes(console);
-    }
-    if (activeRole === 'compliance') {
-      return ['executive', 'business', 'customer'].includes(console);
-    }
-    if (activeRole === 'ai_ops') {
-      return !['executive'].includes(console);
-    }
-    return false;
-  };
-
-  // Run school provisioning simulation
-  const handleProvisionSchool = () => {
-    setIsProvisioning(true);
-    setProvisionProgress([]);
-    const steps = [
-      'Authenticating merchant payment confirmation...',
-      'Provisioning schema database node db_shard_stjude...',
-      'Setting default security groups and administrative roles...',
-      'Applying custom brand templates (st-jude.schoolsaas.com)...',
-      'Initialization successful! Tenant online.'
-    ];
-
-    steps.forEach((step, idx) => {
+    setWorking(true);
+    triggerNotification(`Initializing database provisioning pipeline for ${newSchoolName}...`);
+    
+    setTimeout(() => {
+      // Step 2: Provision db schema
+      triggerNotification(`Database Schema [sch_${newSchoolSlug}] created successfully. Applying academic templates...`);
+      
       setTimeout(() => {
-        setProvisionProgress(prev => [...prev, step]);
-        if (idx === steps.length - 1) {
-          setIsProvisioning(false);
-          const newTenant: Tenant = {
-            id: `t_${Date.now()}`,
-            name: newSchoolName,
-            slug: newSchoolSlug,
-            plan: newSchoolPlan,
-            status: 'active',
-            students: 120,
-            created_at: new Date().toISOString().split('T')[0],
-            domain: `${newSchoolSlug}.schoolsaas.com`,
-            mrr: newSchoolPlan === 'Enterprise' ? 899 : newSchoolPlan === 'Professional' ? 299 : 99,
-            features: ['Parent Portal', 'Library']
-          };
-          setTenants(prev => [newTenant, ...prev]);
-          displayNotif(`Successfully onboarded ${newSchoolName}!`);
-        }
-      }, (idx + 1) * 900);
-    });
+        // Step 3: Register Tenant metadata
+        const newSchool = {
+          id: String(tenants.length + 1),
+          name: newSchoolName,
+          slug: newSchoolSlug.toLowerCase().replace(/\s+/g, '-'),
+          plan: newSchoolPlan,
+          status: 'trial' as const,
+          students: 0,
+          teachers: 0,
+          users: 1,
+          storage: '0.1 GB',
+          expiry: '2026-09-08',
+          dbSchema: `sch_${newSchoolSlug.toLowerCase()}`
+        };
+        setTenants(prev => [...prev, newSchool]);
+        setWorking(false);
+        setShowAddModal(false);
+        setNewSchoolName('');
+        setNewSchoolSlug('');
+        triggerNotification(`New school "${newSchoolName}" is fully provisioned and ready! Admin credentials generated.`);
+      }, 1500);
+    }, 1500);
   };
 
-  // Global feature flags toggle simulator
-  const toggleFeatureForTenant = (tenantId: string, feature: string) => {
+  // Suspends, Reactivate, deletes schools
+  const handleTenantAction = (id: string, action: 'suspend' | 'reactivate' | 'archive' | 'impersonate') => {
     setTenants(prev => prev.map(t => {
-      if (t.id === tenantId) {
-        const hasFeature = t.features.includes(feature);
-        const updatedFeatures = hasFeature
-          ? t.features.filter(f => f !== feature)
-          : [...t.features, feature];
-        return { ...t, features: updatedFeatures };
+      if (t.id === id) {
+        if (action === 'suspend') return { ...t, status: 'suspended' };
+        if (action === 'reactivate') return { ...t, status: 'active' };
       }
       return t;
     }));
-    displayNotif(`Toggled feature "${feature}" for tenant.`);
+    
+    if (action === 'impersonate') {
+      triggerNotification(`Accessing secure administrative session. Logging impersonation action to Platform Audit log...`);
+      setTimeout(() => {
+        router.push(`/${tenants.find(t => t.id === id)?.slug}/dashboard`);
+      }, 1200);
+    } else {
+      triggerNotification(`Tenant ID ${id} set to status: ${action === 'suspend' ? 'SUSPENDED' : 'ACTIVE'}.`);
+    }
   };
 
-  // Run AI Predictive Analysis
-  const handlePredictiveRun = () => {
-    setIsAnalyzing(true);
-    setAiReport(null);
+  // Backups triggering
+  const handleBackupTrigger = () => {
+    setWorking(true);
+    triggerNotification('Dispatching backup script to AWS S3 & GCP cold storage nodes...');
     setTimeout(() => {
-      setIsAnalyzing(false);
-      setAiReport(
-        "🧠 AI System Forecast Report:\n\n" +
-        "1. Churn Risk Warning: Oakwood Learning Center has shown past-due invoices for 18 days. High churn probability predicted (84%).\n" +
-        "2. Infrastructure Scaling Advice: CPU utilization spikes logged consistently on Sunrise sharding server. Recommend auto-scale up to 16 vCPU.\n" +
-        "3. Pricing Optimization: Standard tier conversion holds a +14% lift margin. Recommend offering a limited coupon code to trial targets."
-      );
-    }, 1200);
+      setWorking(false);
+      triggerNotification('Daily backup completed successfully! SNAPSHOT-20260708.sql created.');
+    }, 2000);
   };
 
-  const handleBroadcastSubmit = () => {
-    setIsBroadcasting(true);
-    setTimeout(() => {
-      setIsBroadcasting(false);
-      displayNotif(`Broadcast successfully dispatched to target group "${broadcastTarget}"!`);
-      setBroadcastSubject('');
-      setBroadcastBody('');
-    }, 1000);
+  // Support Reply Action
+  const handleResolveTicket = (id: string) => {
+    setTickets(prev => prev.map(t => {
+      if (t.id === id) return { ...t, status: 'resolved' };
+      return t;
+    }));
+    setActiveTicketId(null);
+    triggerNotification(`Support reply sent and ticket #${id} status updated to RESOLVED.`);
   };
 
   return (
-    <div className="space-y-8 max-w-[1600px] animate-fade-in px-4 sm:px-6">
-      {/* Title Header */}
+    <div className="space-y-6 max-w-[1400px] animate-fade-in">
+      {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[hsl(var(--border))]">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[hsl(var(--text-primary))] bg-clip-text bg-gradient-to-r from-[hsl(var(--text-primary))] to-[hsl(var(--text-secondary))] flex items-center gap-3">
-            <ShieldCheck className="w-8 h-8 text-[hsl(var(--accent))]" />
-            SaaS Platform Control Center
+          <h1 className="text-2xl font-black tracking-tight text-[hsl(var(--text-primary))] bg-clip-text bg-gradient-to-r from-[hsl(var(--text-primary))] to-[hsl(var(--text-secondary))] flex items-center gap-2">
+            <Shield className="w-7 h-7 text-[hsl(var(--accent))]" />
+            Super Admin Control Center
           </h1>
-          <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">
-            Global management portal for multi-tenant database partitioning, billing streams, and resource monitoring.
+          <p className="text-sm text-[hsl(var(--text-secondary))] mt-0.5">
+            Cross-tenant system manager, DB provisioning automation, billing schedules, and AI analytics dashboards.
           </p>
         </div>
-
-        {/* Global Action Notifications */}
-        {notifMessage && (
-          <div className="p-3 text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold rounded-xl flex items-center gap-2 animate-fade-in">
-            <CheckCircle className="w-4 h-4" /> {notifMessage}
-          </div>
-        )}
-      </div>
-
-      {/* Role Simulation Control Toolbar */}
-      <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)] space-y-3">
-        <div>
-          <p className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase tracking-wider">Configure Active Platform Administrator Role</p>
-          <p className="text-[11px] text-[hsl(var(--text-secondary))] mt-0.5">Test restricted views matching granular platform administration roles.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {[
-            { id: 'owner', label: 'Platform Owner' },
-            { id: 'super_admin', label: 'Super Admin' },
-            { id: 'operations', label: 'Operations Manager' },
-            { id: 'customer_success', label: 'Customer Success' },
-            { id: 'finance', label: 'Finance Admin' },
-            { id: 'support', label: 'Support Admin' },
-            { id: 'security', label: 'Security Admin' },
-            { id: 'infra', label: 'Infrastructure Admin' },
-            { id: 'compliance', label: 'Compliance Officer' },
-            { id: 'ai_ops', label: 'AI Operations Manager' }
-          ].map(r => (
-            <button
-              key={r.id}
-              onClick={() => {
-                setActiveRole(r.id as PlatformRole);
-                displayNotif(`Switched platform role to ${r.label}`);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                activeRole === r.id
-                  ? 'bg-[hsl(var(--accent)/0.12)] border-[hsl(var(--accent))] text-[hsl(var(--accent))]'
-                  : 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'
-              }`}
-            >
-              {activeRole === r.id ? '✓ ' : ''} {r.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold shadow-glow">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            All 56 Node clusters active
+          </span>
         </div>
       </div>
 
-      {/* The 4 Major SaaS Consoles Selector */}
-      <div className="flex flex-wrap gap-3 pb-2 border-b border-[hsl(var(--border))]">
+      {notif && (
+        <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 animate-fade-in">
+          <CheckCircle2 className="w-4 h-4" /> {notif}
+        </div>
+      )}
+
+      {/* Dynamic Selector toolbar for Consoles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-2xl p-2.5">
         {[
-          { id: 'executive', label: 'Executive Intelligence', icon: BarChart3, desc: 'Uptime, KPIs, revenue and AI forecasting insights.' },
-          { id: 'business', label: 'Business Operations', icon: DollarSign, desc: 'Tenants subscription pricing levels, invoicing logs.' },
-          { id: 'platform', label: 'Platform Operations', icon: Activity, desc: 'Realtime CPU monitoring, SSO keys & MFA policy limits.' },
-          { id: 'customer', label: 'Customer Administration', icon: Layers, desc: 'Database provisioning automation, custom feature flags.' }
-        ].map(item => {
-          const locked = isConsoleLocked(item.id as ConsoleType);
+          { key: 'executive', label: 'Executive Intelligence', desc: 'KPIs, AI forecasts', icon: Brain },
+          { key: 'business_tenants', label: 'Business Ops', desc: 'Tenants & Billing', icon: DollarSign },
+          { key: 'platform_health', label: 'Platform Ops', desc: 'System monitor, Backups', icon: Cpu },
+          { key: 'customer_users', label: 'Customer Admin', desc: 'HelpDesk, Feature Flags', icon: Megaphone }
+        ].map(cons => {
+          const isActive = consoleParam.startsWith(cons.key.split('_')[0]);
           return (
             <button
-              key={item.id}
-              onClick={() => setActiveConsole(item.id as ConsoleType)}
-              className={`flex-1 min-w-[200px] text-left p-4 rounded-xl border transition-all ${
-                activeConsole === item.id
-                  ? 'bg-[hsl(var(--accent)/0.12)] border-[hsl(var(--accent))] text-[hsl(var(--text-primary))] shadow-glow'
+              key={cons.key}
+              onClick={() => router.push(`/super-admin?console=${cons.key}`)}
+              className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3.5 ${
+                isActive
+                  ? 'bg-gradient-to-br from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white border-transparent shadow-lg shadow-[hsl(var(--accent)/0.12)]'
                   : 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'
               }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <item.icon className="w-5 h-5 text-[hsl(var(--accent))]" />
-                {locked && <Lock className="w-3.5 h-3.5 text-rose-400" />}
+              <cons.icon className="w-5 h-5 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="font-bold text-xs truncate">{cons.label}</p>
+                <p className={`text-[10px] mt-0.5 truncate ${isActive ? 'text-white/80' : 'text-[hsl(var(--text-tertiary))]'}`}>{cons.desc}</p>
               </div>
-              <p className="text-xs font-bold">{item.label}</p>
-              <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1 line-clamp-1">{item.desc}</p>
             </button>
           );
         })}
       </div>
 
-      {/* Main console content window */}
-      <div className="pb-16">
-        
-        {/* Lock Screen if Role is Unauthorized */}
-        {isConsoleLocked(activeConsole) ? (
-          <div className="glass-card p-12 border border-rose-500/20 bg-rose-500/5 rounded-2xl text-center space-y-4 max-w-md mx-auto animate-fade-in">
-            <Lock className="w-12 h-12 text-rose-400 mx-auto" />
-            <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Console Access Restriced</h3>
-            <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">
-              Your active platform role (<strong className="text-rose-400 font-bold uppercase">{activeRole.replace('_', ' ')}</strong>) 
-              is restricted from accessing the {activeConsole.toUpperCase()} console records.
-            </p>
+      {/* CONSOLE DISPLAY CONDITIONAL SWITCH */}
+
+      {/* 1. EXECUTIVE INTELLIGENCE CONSOLE */}
+      {consoleParam.startsWith('executive') || consoleParam === 'ai' ? (
+        <div className="space-y-8">
+          {/* Platform status grid KPIs */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { title: 'Platform Total Tenants', val: '56 Schools', desc: '48 Active • 8 Trial/Suspended', icon: School },
+              { title: 'Daily Active Users (DAU)', val: '12,847 Users', desc: '4,120 logged in today', icon: Users },
+              { title: 'Platform MRR / ARR', val: '$18,400 / $220.8k', desc: '98% Payment success rate', icon: DollarSign },
+              { title: 'Cluster CPU Usage', val: '24.1% Average', desc: 'Memory: 41% • DB Nodes OK', icon: Cpu }
+            ].map(kpi => (
+              <div key={kpi.title} className="glass-card p-5 border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] rounded-2xl">
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase tracking-wider">{kpi.title}</span>
+                  <div className="p-2 rounded-lg bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]">
+                    <kpi.icon className="w-4 h-4" />
+                  </div>
+                </div>
+                <p className="text-2xl font-black text-[hsl(var(--text-primary))]">{kpi.val}</p>
+                <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">{kpi.desc}</p>
+              </div>
+            ))}
           </div>
-        ) : (
-          <>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             
-            {/* CONSOLE 1: EXECUTIVE INTELLIGENCE */}
-            {activeConsole === 'executive' && (
-              <div className="space-y-6 animate-fade-in">
-                
-                {/* Platform & Financial KPI grid */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="glass-card p-4 border border-[hsl(var(--border))] rounded-xl">
-                    <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-1">Platform Tenants</span>
-                    <p className="text-2xl font-black text-[hsl(var(--text-primary))]">{tenants.length} Schools</p>
-                    <p className="text-[9px] text-[hsl(var(--text-secondary))] mt-1">4 Active &bull; 1 Trial &bull; 0 Suspended</p>
-                  </div>
-
-                  <div className="glass-card p-4 border border-[hsl(var(--border))] rounded-xl">
-                    <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-1">Monthly Recurring Revenue</span>
-                    <p className="text-2xl font-black text-[hsl(var(--text-primary))]">
-                      ₦{(tenants.reduce((acc, t) => acc + t.mrr, 0) * 1000).toLocaleString()}
-                    </p>
-                    <p className="text-[9px] text-[hsl(var(--text-secondary))] mt-1">ARR: ₦{(tenants.reduce((acc, t) => acc + t.mrr, 0) * 12 * 1000).toLocaleString()}</p>
-                  </div>
-
-                  <div className="glass-card p-4 border border-[hsl(var(--border))] rounded-xl">
-                    <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-1">Total Users Managed</span>
-                    <p className="text-2xl font-black text-[hsl(var(--text-primary))]">12,847</p>
-                    <p className="text-[9px] text-[hsl(var(--text-secondary))] mt-1">3,412 Active Sessions Today</p>
-                  </div>
-
-                  <div className="glass-card p-4 border border-[hsl(var(--border))] rounded-xl">
-                    <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block mb-1">Platform Open Tickets</span>
-                    <p className="text-2xl font-black text-[hsl(var(--text-primary))]">8 Support</p>
-                    <p className="text-[9px] text-[hsl(var(--text-secondary))] mt-1">Avg response time: 24 mins</p>
-                  </div>
+            {/* System growth and analytics projections SVG */}
+            <div className="xl:col-span-2 glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-6">
+              <div>
+                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">SaaS Revenue Growth Trend</h3>
+                <p className="text-xs text-[hsl(var(--text-tertiary))]">Platform MRR growth curves and customer acquisitions monthly.</p>
+              </div>
+              <div className="h-60 w-full relative pt-2">
+                <svg className="w-full h-full overflow-visible" viewBox="0 0 500 200" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="mrrGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity="0.4" />
+                      <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <line x1="0" y1="50" x2="500" y2="50" stroke="hsl(var(--border)/0.4)" strokeWidth="1" strokeDasharray="4" />
+                  <line x1="0" y1="100" x2="500" y2="100" stroke="hsl(var(--border)/0.4)" strokeWidth="1" strokeDasharray="4" />
+                  <line x1="0" y1="150" x2="500" y2="150" stroke="hsl(var(--border)/0.4)" strokeWidth="1" strokeDasharray="4" />
+                  <path d="M 0 180 Q 125 140 250 90 T 500 40 L 500 200 L 0 200 Z" fill="url(#mrrGrad)" />
+                  <path d="M 0 180 Q 125 140 250 90 T 500 40" fill="none" stroke="hsl(var(--accent))" strokeWidth="3" />
+                  <circle cx="250" cy="90" r="5" fill="hsl(var(--accent))" stroke="white" strokeWidth="2" />
+                  <circle cx="500" cy="40" r="5" fill="hsl(var(--accent))" stroke="white" strokeWidth="2" />
+                </svg>
+                <div className="absolute bottom-0 left-0 right-0 flex justify-between text-[9px] text-[hsl(var(--text-tertiary))] pt-1">
+                  <span>Q1</span>
+                  <span>Q2</span>
+                  <span>Q3 (Current)</span>
+                  <span>Target Forecast</span>
                 </div>
+              </div>
+            </div>
 
-                {/* Infrastructure Performance Indicators & Charts */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  
-                  {/* Visual Infrastructure usages */}
-                  <div className="lg:col-span-2 glass-card p-5 border border-[hsl(var(--border))] space-y-6 rounded-xl">
-                    <h3 className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Infrastructure Usage Indicators</h3>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {[
-                        { label: 'API Requests Count', val: '8.4M', fill: '84%', desc: 'Capacity load 42%' },
-                        { label: 'Database Load/Storage', val: '128 GB', fill: '64%', desc: '6.4M queries / min' },
-                        { label: 'Cache Performance Hits', val: '97.2%', fill: '97%', desc: 'Redis in-memory store' }
-                      ].map((item, idx) => (
-                        <div key={idx} className="p-3 border border-[hsl(var(--border))] rounded-lg bg-[hsl(var(--bg-secondary))] space-y-2">
-                          <span className="text-[9px] font-bold text-[hsl(var(--text-tertiary))] uppercase block">{item.label}</span>
-                          <p className="text-xl font-bold text-[hsl(var(--text-primary))]">{item.val}</p>
-                          <div className="h-1.5 w-full bg-[hsl(var(--bg-tertiary))] rounded-full overflow-hidden">
-                            <div className="h-full bg-[hsl(var(--accent))] rounded-full" style={{ width: item.fill }} />
-                          </div>
-                          <p className="text-[8px] text-[hsl(var(--text-tertiary))]">{item.desc}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* SVG Resource Load Line Chart */}
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase">Daily Active Session Trends (Monthly)</p>
-                      <div className="h-40 relative">
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 500 150" preserveAspectRatio="none">
-                          <defs>
-                            <linearGradient id="saasSessionGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity="0.3" />
-                              <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="0" />
-                            </linearGradient>
-                          </defs>
-                          <path d="M 0 120 Q 125 100 250 70 T 500 30 L 500 150 L 0 150 Z" fill="url(#saasSessionGrad)" />
-                          <path d="M 0 120 Q 125 100 250 70 T 500 30" fill="none" stroke="hsl(var(--accent))" strokeWidth="2.5" />
-                        </svg>
-                        <div className="absolute bottom-0 left-0 right-0 flex justify-between text-[8px] text-[hsl(var(--text-tertiary))] pt-1">
-                          <span>Week 1</span>
-                          <span>Week 2</span>
-                          <span>Week 3</span>
-                          <span>Active Week 4</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* AI Predictions Advisor */}
-                  <div className="glass-card p-5 border border-indigo-500/20 bg-indigo-500/5 space-y-4 rounded-xl">
-                    <p className="font-bold text-indigo-400 flex items-center gap-1.5">
-                      <Brain className="w-4 h-4" /> AI Operations Copilot
-                    </p>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] leading-relaxed">
-                      Analyze metrics across all tenant sharding databases to forecast school churn risk and suggest auto-scaling limits.
-                    </p>
-                    <button
-                      onClick={handlePredictiveRun}
-                      disabled={isAnalyzing}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all text-xs flex items-center justify-center gap-1"
-                    >
-                      {isAnalyzing ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Compiling Platform Metrics...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5" /> Run Churn &amp; Scaling Predictor
-                        </>
-                      )}
-                    </button>
-                    {aiReport && (
-                      <div className="p-3 border border-indigo-500/15 bg-indigo-950/40 text-[9px] leading-relaxed text-indigo-300 font-mono rounded-lg whitespace-pre-line animate-fade-in">
-                        {aiReport}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Academic metrics aggregator */}
-                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl">
-                  <p className="font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
-                    <BookOpen className="w-4 h-4 text-[hsl(var(--accent))]" /> Global Academic Aggregations
+            {/* AI Platform Insights panel */}
+            <div className="glass-card p-6 border border-indigo-500/20 bg-indigo-500/5 rounded-2xl space-y-4">
+              <div className="flex items-center gap-2">
+                <Brain className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-indigo-400">AI Platform Insights</h3>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-xl border border-indigo-500/10 bg-indigo-950/20 space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-indigo-300">Customer Churn Warning Alert</p>
+                  <p className="text-[11px] text-[hsl(var(--text-secondary))] leading-relaxed">
+                    <strong>Riverdale Academy</strong> has shown a 45% decline in login trends over the last 30 days. Recommend outreach.
                   </p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                    <div>
-                      <p className="text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold">Total Students Managed</p>
-                      <p className="font-semibold text-[hsl(var(--text-primary))]">12,847 kids</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold">Teaching Staff Members</p>
-                      <p className="font-semibold text-[hsl(var(--text-primary))]">648 educators</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold">Attendance Completion Rate</p>
-                      <p className="font-semibold text-[hsl(var(--text-primary))]">96.8% Average</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-[hsl(var(--text-tertiary))] uppercase font-bold">Terminal Exam Success Margin</p>
-                      <p className="font-semibold text-[hsl(var(--text-primary))]">84.2% Passed</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* CONSOLE 2: BUSINESS OPERATIONS */}
-            {activeConsole === 'business' && (
-              <div className="space-y-6 animate-fade-in">
-                
-                {/* Billing ledger */}
-                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl">
-                  <div>
-                    <h3 className="text-sm font-bold text-[hsl(var(--text-primary))]">SaaS Tenants Subscriptions Ledger</h3>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">Review outstanding invoices and manage refund logs.</p>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead>
-                        <tr className="border-b border-[hsl(var(--border))]">
-                          <th className="py-2.5 px-3">School Name</th>
-                          <th className="py-2.5 px-3">Domain Reference</th>
-                          <th className="py-2.5 px-3">Plan Class</th>
-                          <th className="py-2.5 px-3">Status</th>
-                          <th className="py-2.5 px-3">Monthly Charge</th>
-                          <th className="py-2.5 px-3 text-right">Invoice / Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tenants.map(t => (
-                          <tr key={t.id} className="border-b border-[hsl(var(--border)/0.5)]">
-                            <td className="py-3 px-3 font-semibold text-[hsl(var(--text-primary))]">{t.name}</td>
-                            <td className="py-3 px-3 font-mono text-[hsl(var(--text-secondary))]">{t.domain}</td>
-                            <td className="py-3 px-3">{t.plan}</td>
-                            <td className="py-3 px-3">
-                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                                t.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
-                              }`}>
-                                {t.status}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 font-bold">₦{(t.mrr * 1000).toLocaleString()}</td>
-                            <td className="py-3 px-3 text-right space-x-2">
-                              <button onClick={() => displayNotif(`Refund request submitted for ${t.name}.`)} className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 hover:text-white transition-all text-rose-400 font-bold rounded">
-                                Refund
-                              </button>
-                              <button onClick={() => displayNotif(`Downloading invoice log for ${t.name}`)} className="px-2 py-1 bg-[hsl(var(--bg-tertiary))] hover:bg-[hsl(var(--border))] rounded">
-                                Invoice
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
                 </div>
 
-                {/* Simulated Coupons and Pricing discount creator */}
-                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl bg-[hsl(var(--bg-tertiary)/0.2)]">
-                  <p className="font-bold text-[hsl(var(--text-primary))]">Discount Coupons Generator</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-                    <input type="text" placeholder="Coupon Code (e.g. SUMMER15)" className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-primary))]" />
-                    <select className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-secondary))]">
-                      <option>15% Discount</option>
-                      <option>25% Discount</option>
-                      <option>Free Trial Extension</option>
-                    </select>
-                    <input type="text" placeholder="Applicable Tenant Slug" className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-primary))]" />
-                    <button onClick={() => displayNotif('Promotion coupon registered globally.')} className="px-4 py-2.5 rounded-lg bg-[hsl(var(--accent))] text-white font-bold hover:opacity-90 transition-all">Create Coupon</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* CONSOLE 3: PLATFORM OPERATIONS */}
-            {activeConsole === 'platform' && (
-              <div className="space-y-6 animate-fade-in">
-                
-                {/* Real-time Infrastructure Monitoring */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  
-                  <div className="lg:col-span-2 glass-card p-5 border border-[hsl(var(--border))] space-y-6 rounded-xl">
-                    <h3 className="text-sm font-bold text-[hsl(var(--text-primary))]">Real-Time Infrastructure Monitor</h3>
-                    
-                    <div className="space-y-4 text-xs">
-                      {[
-                        { label: 'Platform CPU Usage Core', status: 'Healthy', val: '42% load', color: 'bg-emerald-400' },
-                        { label: 'DB Sharding Queue Processors', status: 'Idle', val: '0 pending tasks', color: 'bg-emerald-400' },
-                        { label: 'Automatic Nightly Backup Logs', status: 'Succeeded', val: 'Completed 6 hours ago', color: 'bg-emerald-400' }
-                      ].map((log, idx) => (
-                        <div key={idx} className="p-3.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex justify-between items-center">
-                          <div>
-                            <p className="font-bold text-[hsl(var(--text-primary))]">{log.label}</p>
-                            <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">{log.val}</p>
-                          </div>
-                          <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            {log.status}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex gap-3">
-                      <button onClick={() => displayNotif('Triggered snapshot database backup.')} className="px-4 py-2 bg-[hsl(var(--accent))] hover:opacity-90 text-white font-bold rounded-lg text-xs transition-all">
-                        Run Manual Database Snapshot Backup
-                      </button>
-                      <button onClick={() => displayNotif('Cleared cache logs successfully.')} className="px-4 py-2 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] hover:bg-[hsl(var(--border))] rounded-lg text-xs font-bold transition-all">
-                        Flush Cache Stores
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Security Center policy controls */}
-                  <div className="glass-card p-5 border border-rose-500/20 bg-rose-500/5 space-y-4 rounded-xl text-xs">
-                    <p className="font-bold text-rose-400 flex items-center gap-1.5">
-                      <Shield className="w-4 h-4" /> Global MFA &amp; Security Policy
-                    </p>
-                    
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-[hsl(var(--text-primary))]">Enforce Multi-Factor (MFA)</p>
-                          <p className="text-[9px] text-[hsl(var(--text-tertiary))]">Require MFA for all platform admins.</p>
-                        </div>
-                        <button onClick={() => setMfaEnforced(prev => !prev)} className="text-[hsl(var(--accent))]">
-                          {mfaEnforced ? <ToggleRight className="w-10 h-10" /> : <ToggleLeft className="w-10 h-10 text-[hsl(var(--text-tertiary))]" />}
-                        </button>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold">Max Idle Session Timeout (Minutes)</label>
-                        <select
-                          value={sessionTimeout}
-                          onChange={e => {
-                            setSessionTimeout(e.target.value);
-                            displayNotif(`Configured timeout policy: ${e.target.value} minutes.`);
-                          }}
-                          className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2 text-[hsl(var(--text-primary))]"
-                        >
-                          <option value="15">15 Minutes</option>
-                          <option value="30">30 Minutes (Recommended)</option>
-                          <option value="60">60 Minutes</option>
-                        </select>
-                      </div>
-
-                      <div className="pt-2 border-t border-[hsl(var(--border))] space-y-1">
-                        <p className="text-[10px] text-rose-400 font-bold uppercase">Blocked IPs Range</p>
-                        <p className="font-mono text-[9px] text-[hsl(var(--text-tertiary))]">41.82.119.5 (Brute Force Blocked)</p>
-                      </div>
-                    </div>
-                  </div>
+                <div className="p-3.5 rounded-xl border border-indigo-500/10 bg-indigo-950/20 space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-indigo-300">Infrastructure Scaler Suggestion</p>
+                  <p className="text-[11px] text-[hsl(var(--text-secondary))] leading-relaxed">
+                    Database traffic spikes expected at Q3 final exams. Suggest spin up of 2 backup replication nodes.
+                  </p>
                 </div>
 
-                {/* Audit Logs Trail */}
-                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl text-xs">
-                  <p className="font-bold text-[hsl(var(--text-primary))]">Platform Audit Logs (Immutable Log Trail)</p>
-                  <div className="space-y-2.5 font-mono text-[10px]">
-                    <div className="p-2 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded flex justify-between">
-                      <span className="text-[hsl(var(--accent))]">SEC_MFA_UPDATE</span>
-                      <span className="text-[hsl(var(--text-secondary))]">Admin configured MFA constraint globally</span>
-                      <span className="text-[hsl(var(--text-tertiary))]">12 mins ago</span>
-                    </div>
-                    <div className="p-2 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded flex justify-between">
-                      <span className="text-rose-400 font-bold">SYS_REFUND</span>
-                      <span className="text-[hsl(var(--text-secondary))]">Issued partial credit balance to Sunrise Prep</span>
-                      <span className="text-[hsl(var(--text-tertiary))]">1 hour ago</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* CONSOLE 4: CUSTOMER ADMINISTRATION */}
-            {activeConsole === 'customer' && (
-              <div className="space-y-6 animate-fade-in">
-                
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  
-                  {/* Onboarding provisioning automator */}
-                  <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl text-xs">
-                    <div>
-                      <h3 className="text-sm font-bold text-[hsl(var(--text-primary))]">Automated Tenant Provisioning</h3>
-                      <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">Spin up new isolated databases sharding models and configure branding.</p>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">School Legal Name</label>
-                        <input
-                          type="text"
-                          value={newSchoolName}
-                          onChange={e => setNewSchoolName(e.target.value)}
-                          className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-primary))]"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Subdomain Slug</label>
-                          <input
-                            type="text"
-                            value={newSchoolSlug}
-                            onChange={e => setNewSchoolSlug(e.target.value)}
-                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-primary))] font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Select Tier Plan</label>
-                          <select
-                            value={newSchoolPlan}
-                            onChange={e => setNewSchoolPlan(e.target.value)}
-                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-secondary))]"
-                          >
-                            <option>Basic</option>
-                            <option>Professional</option>
-                            <option>Enterprise</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={handleProvisionSchool}
-                        disabled={isProvisioning}
-                        className="w-full py-2.5 bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-bold rounded-lg hover:opacity-90 flex items-center justify-center gap-1.5"
-                      >
-                        {isProvisioning ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin" /> Provisioning Node Databases...
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-4 h-4" /> Provision &amp; Onboard School Tenant
-                          </>
-                        )}
-                      </button>
-
-                      {provisionProgress.length > 0 && (
-                        <div className="p-3 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg space-y-1.5">
-                          <p className="text-[10px] font-bold uppercase text-[hsl(var(--text-tertiary))]">Provision Status Console Logs</p>
-                          {provisionProgress.map((step, idx) => (
-                            <p key={idx} className="text-[9px] font-mono text-emerald-400 flex items-center gap-1">
-                              ✓ {step}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Feature flags manager */}
-                  <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl text-xs">
-                    <div>
-                      <h3 className="text-sm font-bold text-[hsl(var(--text-primary))]">Global Modules Feature Flags</h3>
-                      <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">Enable or disable SaaS modules dynamically per tenant base.</p>
-                    </div>
-
-                    <div className="space-y-4">
-                      {tenants.slice(0, 3).map(tenant => (
-                        <div key={tenant.id} className="p-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-2">
-                          <p className="font-bold text-[hsl(var(--text-primary))]">{tenant.name} ({tenant.plan})</p>
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            {['Library', 'Hostel', 'Transport', 'AI Assistant', 'Payroll', 'Finance'].map(feat => {
-                              const active = tenant.features.includes(feat);
-                              return (
-                                <button
-                                  key={feat}
-                                  onClick={() => toggleFeatureForTenant(tenant.id, feat)}
-                                  className={`px-2 py-1 rounded text-[9px] font-bold border transition-all ${
-                                    active
-                                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                                      : 'bg-[hsl(var(--bg-tertiary))] border-[hsl(var(--border))] text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))]'
-                                  }`}
-                                >
-                                  {feat} {active ? 'On' : 'Off'}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Broadcaster announcement board */}
-                <div className="glass-card p-5 border border-[hsl(var(--border))] space-y-4 rounded-xl text-xs">
-                  <div>
-                    <h3 className="text-sm font-bold text-[hsl(var(--text-primary))]">SaaS Broadcast Emergency Announcer</h3>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">Dispatch email notifications or push alerts directly to customer databases.</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Target Group</label>
-                      <select
-                        value={broadcastTarget}
-                        onChange={e => setBroadcastTarget(e.target.value)}
-                        className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-secondary))]"
-                      >
-                        <option value="all">All School Admins</option>
-                        <option value="teachers">All Teaching Staff</option>
-                        <option value="parents">All Parents</option>
-                      </select>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Subject Header</label>
-                      <input
-                        type="text"
-                        value={broadcastSubject}
-                        onChange={e => setBroadcastSubject(e.target.value)}
-                        className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-primary))]"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Announcements Body</label>
-                    <textarea
-                      value={broadcastBody}
-                      onChange={e => setBroadcastBody(e.target.value)}
-                      className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-primary))] h-20"
-                    />
-                  </div>
-
-                  <button
-                    onClick={handleBroadcastSubmit}
-                    disabled={isBroadcasting}
-                    className="px-5 py-2.5 bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-bold rounded-lg text-xs hover:opacity-90 transition-all flex items-center gap-1.5"
-                  >
-                    {isBroadcasting ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Dispatching Broadcast...
-                      </>
-                    ) : (
-                      <>
-                        <Megaphone className="w-3.5 h-3.5" /> Dispatch Global Announcement
-                      </>
-                    )}
+                <div className="p-3.5 rounded-xl border border-indigo-500/10 bg-indigo-950/20 space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-indigo-300">Pricing Optimization Optimizer</p>
+                  <p className="text-[11px] text-[hsl(var(--text-secondary))] leading-relaxed">
+                    8 trials expiring next week. Auto-dispatch 10% coupon promo to increase conversions.
+                  </p>
+                  <button onClick={() => triggerNotification('Coupons promo sent to trial candidates!')} className="mt-2 py-1 px-3 bg-indigo-600 text-white rounded font-bold text-[10px] hover:opacity-90">
+                    Apply Suggestion
                   </button>
                 </div>
               </div>
-            )}
-            
-          </>
-        )}
+            </div>
 
-      </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 2. BUSINESS OPERATIONS CONSOLE */}
+      {consoleParam.startsWith('business') ? (
+        <div className="space-y-8">
+          
+          {/* Tenant registries listing */}
+          <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-4">
+              <div>
+                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Registered Tenants &amp; Organizations</h3>
+                <p className="text-xs text-[hsl(var(--text-tertiary))]">Complete database schemas, expiry details, and owner permissions.</p>
+              </div>
+              <button onClick={() => setShowAddModal(true)} className="px-4 py-2 bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white rounded-xl text-xs font-bold flex items-center gap-1.5">
+                <PlusCircle className="w-4 h-4" /> Provision New School
+              </button>
+            </div>
+
+            {/* Tenants list table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[hsl(var(--border))]">
+                    {['Tenant School', 'Subscription Plan', 'Usage / Storage', 'Expiry Date', 'Status', ''].map(h => (
+                      <th key={h} className="text-left font-bold text-[hsl(var(--text-tertiary))] uppercase tracking-wider px-5 py-3">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenants.map(t => (
+                    <tr key={t.id} className="border-b border-[hsl(var(--border)/0.5)] table-row-hover transition-colors">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-[hsl(var(--accent)/0.12)] text-[hsl(var(--accent))] flex items-center justify-center font-bold">
+                            {t.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                          </div>
+                          <div>
+                            <p className="font-bold text-[hsl(var(--text-primary))]">{t.name}</p>
+                            <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono">DB Schema: {t.dbSchema}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="font-semibold text-[hsl(var(--text-primary))]">{t.plan}</span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="text-[hsl(var(--text-secondary))]">{t.users} users logged</p>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{t.storage} quota used</p>
+                      </td>
+                      <td className="px-5 py-4 font-mono text-[hsl(var(--text-secondary))]">{t.expiry}</td>
+                      <td className="px-5 py-4">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                          t.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                          t.status === 'trial' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                        }`}>
+                          {t.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => handleTenantAction(t.id, 'impersonate')} className="p-1.5 hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] rounded border border-[hsl(var(--border))]" title="Impersonate School Admin">
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          {t.status === 'active' ? (
+                            <button onClick={() => handleTenantAction(t.id, 'suspend')} className="p-1.5 hover:bg-[hsl(var(--bg-tertiary))] text-rose-400 rounded border border-[hsl(var(--border))]" title="Suspend Tenant">
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button onClick={() => handleTenantAction(t.id, 'reactivate')} className="p-1.5 hover:bg-[hsl(var(--bg-tertiary))] text-emerald-400 rounded border border-[hsl(var(--border))]" title="Reactivate Tenant">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Pricing plan limits editor */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4">
+              <h3 className="text-base font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
+                <CreditCard className="w-4 h-4 text-[hsl(var(--accent))]" /> Subscription Tier Configurator
+              </h3>
+              <p className="text-xs text-[hsl(var(--text-tertiary))]">Edit platform plans storage quotas and fee schedules globally.</p>
+              
+              <div className="space-y-3 text-xs">
+                {[
+                  { plan: 'Starter tier package', users: '100 max users', storage: '5 GB max quota' },
+                  { plan: 'Professional tier package', users: '1000 max users', storage: '25 GB max quota' },
+                  { plan: 'Enterprise tier package', users: 'Unlimited users', storage: '100 GB max quota' }
+                ].map(p => (
+                  <div key={p.plan} className="p-3 border border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--bg-secondary))] flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-[hsl(var(--text-primary))]">{p.plan}</p>
+                      <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{p.users} &bull; {p.storage}</p>
+                    </div>
+                    <button onClick={() => triggerNotification(`Configuration saved for ${p.plan}`)} className="px-3 py-1 bg-[hsl(var(--bg-tertiary))] hover:bg-[hsl(var(--border))] rounded font-bold">
+                      Edit Limits
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4">
+              <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Promo Code &amp; Coupons manager</h3>
+              <p className="text-xs text-[hsl(var(--text-tertiary))]">Set early discount schedules for school organizations groups.</p>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <input type="text" placeholder="Promo code (e.g. BACKTOSCHOOL)" className="bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-primary))]" />
+                <button onClick={() => triggerNotification('New coupon code BACKTOSCHOOL created successfully!')} className="py-2.5 bg-[hsl(var(--accent))] text-white rounded-lg font-bold">
+                  Generate Coupon
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      ) : null}
+
+      {/* 3. PLATFORM OPERATIONS CONSOLE */}
+      {consoleParam.startsWith('platform') ? (
+        <div className="space-y-8">
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Real-time server diagnostics dials */}
+            <div className="lg:col-span-2 glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-6">
+              <div>
+                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Real-Time Platform Infrastructure Load</h3>
+                <p className="text-xs text-[hsl(var(--text-tertiary))]">System diagnostic outputs for virtual CPU threads, DB replications, and cache loads.</p>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="p-4 border border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--bg-secondary))]">
+                  <Cpu className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
+                  <p className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase">V-CPU Load</p>
+                  <p className="text-xl font-extrabold text-[hsl(var(--text-primary))]">24.1%</p>
+                </div>
+                <div className="p-4 border border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--bg-secondary))]">
+                  <Database className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
+                  <p className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase">DB Schema pool</p>
+                  <p className="text-xl font-extrabold text-[hsl(var(--text-primary))]">12%</p>
+                </div>
+                <div className="p-4 border border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--bg-secondary))]">
+                  <Server className="w-6 h-6 text-amber-400 mx-auto mb-2" />
+                  <p className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase">Memory Quota</p>
+                  <p className="text-xl font-extrabold text-[hsl(var(--text-primary))]">41%</p>
+                </div>
+              </div>
+
+              {/* Dynamic trigger backup script */}
+              <div className="p-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
+                <div>
+                  <p className="font-bold text-[hsl(var(--text-primary))]">Disaster Recovery &amp; S3 Snapshots</p>
+                  <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">Generate platform-wide schema snapshot files immediately.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleBackupTrigger} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:opacity-90">
+                    Backup Snapshot now
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Compliance, SSO, and MFA configurations panel */}
+            <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4">
+              <h3 className="text-base font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
+                <Shield className="w-4 h-4 text-[hsl(var(--accent))]" /> Global Security Policy
+              </h3>
+              <p className="text-xs text-[hsl(var(--text-tertiary))]">Enforce access parameters globally for all multi-tenant users.</p>
+              
+              <div className="space-y-4 text-xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-bold text-[hsl(var(--text-primary))]">Enforce Multi-Factor (MFA)</p>
+                    <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Requires mobile app verification code</p>
+                  </div>
+                  <button onClick={() => setMfaEnforced(!mfaEnforced)} className="text-[hsl(var(--accent))]">
+                    {mfaEnforced ? <ToggleRight className="w-8 h-8 text-[hsl(var(--accent))]" /> : <ToggleLeft className="w-8 h-8 text-[hsl(var(--text-tertiary))]" />}
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] uppercase font-bold text-[hsl(var(--text-tertiary))]">Max Session Idle Timeout (Minutes)</label>
+                  <select
+                    value={sessionTimeout}
+                    onChange={e => {
+                      setSessionTimeout(e.target.value);
+                      triggerNotification(`Global session timeout changed to ${e.target.value} minutes.`);
+                    }}
+                    className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]"
+                  >
+                    <option value="15">15 Minutes</option>
+                    <option value="30">30 Minutes</option>
+                    <option value="60">60 Minutes</option>
+                  </select>
+                </div>
+
+                <div className="p-3 rounded-lg bg-[hsl(var(--bg-secondary))] border border-rose-500/10 space-y-1 text-[11px] leading-relaxed">
+                  <p className="font-bold text-rose-400 flex items-center gap-1"><ShieldAlert className="w-3.5 h-3.5" /> Block suspicious access attempts</p>
+                  <p className="text-[hsl(var(--text-secondary))]">14 failed logins detected from outside authorized campus IPs. Automatic brute force blocks deployed.</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      ) : null}
+
+      {/* 4. CUSTOMER ADMINISTRATION CONSOLE */}
+      {consoleParam.startsWith('customer') ? (
+        <div className="space-y-8 animate-fade-in text-xs">
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Helpdesk ticket support records desk */}
+            <div className="lg:col-span-2 glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4">
+              <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Direct Customer Support Desk</h3>
+              <p className="text-xs text-[hsl(var(--text-tertiary))]">Answer system requests from school coordinators.</p>
+              
+              <div className="space-y-3">
+                {tickets.map(ticket => (
+                  <div key={ticket.id} className="p-4 border border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--bg-secondary))] flex justify-between items-center">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                          ticket.status === 'critical' ? 'bg-rose-500/10 text-rose-400' :
+                          ticket.status === 'open' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'
+                        }`}>
+                          {ticket.status.toUpperCase()}
+                        </span>
+                        <span className="font-bold text-[hsl(var(--text-primary))]">#{ticket.id} &bull; {ticket.school}</span>
+                      </div>
+                      <p className="text-[11px] text-[hsl(var(--text-secondary))] mt-1">{ticket.title}</p>
+                      <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{ticket.time}</p>
+                    </div>
+                    {ticket.status !== 'resolved' && (
+                      <button
+                        onClick={() => {
+                          setActiveTicketId(ticket.id);
+                          setTicketReplyText(`Investigating details for ticket #${ticket.id}. Action update dispatched shortly.`);
+                        }}
+                        className="px-3.5 py-1.5 bg-[hsl(var(--accent))] text-white font-bold rounded-lg"
+                      >
+                        Reply &amp; Close
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Global Feature Flags toggle desk */}
+            <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4">
+              <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Modular Feature Flags Control</h3>
+              <p className="text-xs text-[hsl(var(--text-tertiary))]">Enable or disable SaaS modules globally across all campuses.</p>
+              
+              <div className="space-y-3.5">
+                {[
+                  { key: 'library', label: 'Library & Resource Desk' },
+                  { key: 'hostel', label: 'Hostel Boarding Manager' },
+                  { key: 'transport', label: 'Bus Transit Route Logs' },
+                  { key: 'aiAssistant', label: 'AI Study/Parent Assistants' }
+                ].map(flag => {
+                  const val = featureFlags[flag.key as keyof typeof featureFlags];
+                  return (
+                    <div key={flag.key} className="flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-[hsl(var(--text-primary))]">{flag.label}</p>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Toggle SaaS endpoint capability</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setFeatureFlags(prev => ({ ...prev, [flag.key]: !val }));
+                          triggerNotification(`Feature Flag "${flag.label}" toggled to ${!val ? 'ENABLED' : 'DISABLED'}.`);
+                        }}
+                      >
+                        {val ? <ToggleRight className="w-8 h-8 text-[hsl(var(--accent))]" /> : <ToggleLeft className="w-8 h-8 text-[hsl(var(--text-tertiary))]" />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Announcements Broadcasting tool */}
+          <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4 bg-[hsl(var(--bg-tertiary)/0.2)]">
+            <div>
+              <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Global Communications Broadcast System</h3>
+              <p className="text-xs text-[hsl(var(--text-tertiary))] mt-0.5">Send alerts, update schedules, or emergency notices to all registered schools, staff, or families.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase font-bold text-[hsl(var(--text-tertiary))]">Select Target Scope</label>
+                <select value={broadcastTarget} onChange={e => setBroadcastTarget(e.target.value)} className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-secondary))]">
+                  <option value="all">All Registered Tenants</option>
+                  <option value="active">Active Schools Only</option>
+                  <option value="trials">Trial Schools Only</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase font-bold text-[hsl(var(--text-tertiary))]">Select Transmission Channel</label>
+                <select value={broadcastChannel} onChange={e => setBroadcastChannel(e.target.value)} className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-secondary))]">
+                  <option value="email">Email SMTP Broadcast</option>
+                  <option value="sms">SMS Text Alert Gateway</option>
+                  <option value="push">In-App Push Message</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[10px] uppercase font-bold text-[hsl(var(--text-tertiary))]">Announcement Content</label>
+                <input
+                  type="text"
+                  value={broadcastMessage}
+                  onChange={e => setBroadcastMessage(e.target.value)}
+                  className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-primary))]"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                triggerNotification(`Broadcast dispatched successfully to ${broadcastTarget} scope via ${broadcastChannel.toUpperCase()}!`);
+                setBroadcastMessage('');
+              }}
+              className="px-5 py-2.5 rounded-lg bg-[hsl(var(--accent))] text-white font-bold hover:opacity-90 transition-all flex items-center gap-1.5 w-fit"
+            >
+              <Send className="w-4 h-4" /> Dispatch System Announcement
+            </button>
+          </div>
+
+        </div>
+      ) : null}
+
+      {/* TICKET REPLY DIALOG MODAL SIMULATOR */}
+      {activeTicketId && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setActiveTicketId(null)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md p-6 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl space-y-4 animate-scale-in text-xs">
+            <h3 className="text-base font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
+              <MessageSquare className="w-5 h-5 text-[hsl(var(--accent))]" /> Send HelpDesk Reply
+            </h3>
+            <p className="text-xs text-[hsl(var(--text-secondary))]">Send ticket resolution status answer for ticket #{activeTicketId}.</p>
+            <textarea
+              value={ticketReplyText}
+              onChange={e => setTicketReplyText(e.target.value)}
+              className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-3 h-28 text-[hsl(var(--text-primary))]"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setActiveTicketId(null)} className="px-4 py-2 border border-[hsl(var(--border))] rounded-xl hover:bg-[hsl(var(--bg-tertiary))] font-semibold">Cancel</button>
+              <button onClick={() => handleResolveTicket(activeTicketId)} className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold hover:opacity-90">Send &amp; Resolve Ticket</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* PROVISIONING NEW SCHOOL MODAL SIMULATOR */}
+      {showAddModal && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowAddModal(false)} />
+          <form onSubmit={handleOnboardSchool} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md p-6 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl space-y-4 animate-scale-in text-xs">
+            <h3 className="text-base font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
+              <Database className="w-5 h-5 text-[hsl(var(--accent))]" /> Auto-Provision Tenant Database
+            </h3>
+            <p className="text-xs text-[hsl(var(--text-secondary))]">Trigger SaaS onboarding process. Installs schemas, sets default roles, configurations, and brand setups.</p>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-[hsl(var(--text-tertiary))] mb-1">School Legal Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newSchoolName}
+                  onChange={e => {
+                    setNewSchoolName(e.target.value);
+                    setNewSchoolSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-'));
+                  }}
+                  placeholder="e.g. St. Gregory College"
+                  className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-[hsl(var(--text-tertiary))] mb-1">Subdomain Slug</label>
+                <div className="flex">
+                  <input
+                    type="text"
+                    required
+                    value={newSchoolSlug}
+                    onChange={e => setNewSchoolSlug(e.target.value)}
+                    className="flex-1 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-l-xl p-2.5 text-[hsl(var(--text-primary))] font-mono"
+                  />
+                  <span className="bg-[hsl(var(--bg-tertiary))] border-y border-r border-[hsl(var(--border))] p-2.5 rounded-r-xl text-[hsl(var(--text-tertiary))]">.schoolsaas.com</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-[hsl(var(--text-tertiary))] mb-1">Subscription plan level</label>
+                <select
+                  value={newSchoolPlan}
+                  onChange={e => setNewSchoolPlan(e.target.value)}
+                  className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-[hsl(var(--text-primary))]"
+                >
+                  <option value="Starter">Starter tier</option>
+                  <option value="Professional">Professional tier</option>
+                  <option value="Enterprise">Enterprise tier</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 border border-[hsl(var(--border))] rounded-xl hover:bg-[hsl(var(--bg-tertiary))] font-semibold">Cancel</button>
+              <button type="submit" disabled={working} className="px-5 py-2 bg-[hsl(var(--accent))] text-white rounded-xl font-bold hover:opacity-90 disabled:opacity-50">
+                {working ? 'Provisioning...' : 'Provision Schema & Onboard'}
+              </button>
+            </div>
+          </form>
+        </>
+      )}
+
     </div>
   );
 }
 
-// Simulated inline lock component
-function Lock({ className }: { className?: string }) {
-  return <ShieldAlert className={className} />;
+export default function SuperAdminControlCenter() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 text-[hsl(var(--accent))] animate-spin mx-auto" />
+          <p className="text-sm text-[hsl(var(--text-secondary))] animate-pulse">Loading SaaS Control Center...</p>
+        </div>
+      </div>
+    }>
+      <SuperAdminControlCenterContent />
+    </Suspense>
+  );
 }
