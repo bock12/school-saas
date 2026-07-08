@@ -1,11 +1,15 @@
 'use client';
 
-import { Bell, Search, LogOut, User, ChevronDown, Loader2 } from 'lucide-react';
+import { Bell, Search, LogOut, User, ChevronDown, Loader2, Menu } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { APP_NAME } from '@/lib/constants';
 import { signOut } from '@/app/[tenant]/login/actions';
 
-export function Topbar() {
+interface TopbarProps {
+  onMenuToggle: () => void;
+}
+
+export function Topbar({ onMenuToggle }: TopbarProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isSigningOut, startSignOut] = useTransition();
@@ -17,10 +21,19 @@ export function Topbar() {
   };
 
   return (
-    <header className="sticky top-0 z-30 h-16 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg-primary)/0.8)] backdrop-blur-xl">
-      <div className="flex items-center justify-between h-full px-6">
-        {/* Left: Page context */}
+    <header className="sticky top-0 z-30 h-16 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg-primary)/0.8)] backdrop-blur-xl flex-shrink-0">
+      <div className="flex items-center justify-between h-full px-4 sm:px-6">
+        
+        {/* Left: Mobile menu toggle and search */}
         <div className="flex items-center gap-4">
+          <button
+            onClick={onMenuToggle}
+            className="lg:hidden p-2 rounded-lg hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))]"
+            aria-label="Open sidebar"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          
           <div className="hidden md:flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-tertiary))]" />
