@@ -108,7 +108,7 @@ export default function TenantsPage() {
                       </button>
                       {activeMenu === tenant.id && (
                         <div className="absolute right-0 top-8 w-44 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] shadow-lg z-10 animate-fade-in-scale overflow-hidden p-1">
-                          <Link href={`/super-admin/tenants/${tenant.id}`} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"><Eye className="w-4 h-4" />View Details</Link>
+                          <Link href={`/super-admin/tenants/directory/${tenant.id}`} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"><Eye className="w-4 h-4" />View Details</Link>
                           <button className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-amber-400 hover:bg-amber-500/10 transition-all"><Pause className="w-4 h-4" />Suspend</button>
                           <button className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger)/0.1)] transition-all"><Trash2 className="w-4 h-4" />Delete</button>
                         </div>

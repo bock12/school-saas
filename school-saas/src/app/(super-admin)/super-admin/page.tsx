@@ -190,16 +190,16 @@ function SuperAdminControlCenterContent() {
       {/* Dynamic Selector toolbar for Consoles */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-2xl p-2.5">
         {[
-          { key: 'executive', label: 'Executive Intelligence', desc: 'KPIs, AI forecasts', icon: Brain },
-          { key: 'business_tenants', label: 'Business Ops', desc: 'Tenants & Billing', icon: DollarSign },
-          { key: 'platform_health', label: 'Platform Ops', desc: 'System monitor, Backups', icon: Cpu },
-          { key: 'customer_users', label: 'Customer Admin', desc: 'HelpDesk, Feature Flags', icon: Megaphone }
+          { key: 'executive', label: 'Executive Intelligence', desc: 'KPIs, AI forecasts', icon: Brain, href: '/super-admin?console=executive' },
+          { key: 'business_tenants', label: 'Tenant Management', desc: 'Tenants & Billing', icon: DollarSign, href: '/super-admin/tenants/dashboard' },
+          { key: 'platform_health', label: 'Platform Ops', desc: 'System monitor, Backups', icon: Cpu, href: '/super-admin?console=platform_health' },
+          { key: 'customer_users', label: 'Customer Admin', desc: 'HelpDesk, Feature Flags', icon: Megaphone, href: '/super-admin?console=customer_users' }
         ].map(cons => {
-          const isActive = consoleParam.startsWith(cons.key.split('_')[0]);
+          const isActive = consoleParam.startsWith(cons.key.split('_')[0]) && cons.href.startsWith('?');
           return (
             <button
               key={cons.key}
-              onClick={() => router.push(`/super-admin?console=${cons.key}`)}
+              onClick={() => router.push(cons.href)}
               className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3.5 ${
                 isActive
                   ? 'bg-gradient-to-br from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white border-transparent shadow-lg shadow-[hsl(var(--accent)/0.12)]'
@@ -313,126 +313,7 @@ function SuperAdminControlCenterContent() {
         </div>
       ) : null}
 
-      {/* 2. BUSINESS OPERATIONS CONSOLE */}
-      {consoleParam.startsWith('business') ? (
-        <div className="space-y-8">
-          
-          {/* Tenant registries listing */}
-          <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-4">
-              <div>
-                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Registered Tenants &amp; Organizations</h3>
-                <p className="text-xs text-[hsl(var(--text-tertiary))]">Complete database schemas, expiry details, and owner permissions.</p>
-              </div>
-              <button onClick={() => setShowAddModal(true)} className="px-4 py-2 bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white rounded-xl text-xs font-bold flex items-center gap-1.5">
-                <PlusCircle className="w-4 h-4" /> Provision New School
-              </button>
-            </div>
-
-            {/* Tenants list table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-[hsl(var(--border))]">
-                    {['Tenant School', 'Subscription Plan', 'Usage / Storage', 'Expiry Date', 'Status', ''].map(h => (
-                      <th key={h} className="text-left font-bold text-[hsl(var(--text-tertiary))] uppercase tracking-wider px-5 py-3">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {tenants.map(t => (
-                    <tr key={t.id} className="border-b border-[hsl(var(--border)/0.5)] table-row-hover transition-colors">
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-[hsl(var(--accent)/0.12)] text-[hsl(var(--accent))] flex items-center justify-center font-bold">
-                            {t.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                          </div>
-                          <div>
-                            <p className="font-bold text-[hsl(var(--text-primary))]">{t.name}</p>
-                            <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono">DB Schema: {t.dbSchema}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="font-semibold text-[hsl(var(--text-primary))]">{t.plan}</span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <p className="text-[hsl(var(--text-secondary))]">{t.users} users logged</p>
-                        <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{t.storage} quota used</p>
-                      </td>
-                      <td className="px-5 py-4 font-mono text-[hsl(var(--text-secondary))]">{t.expiry}</td>
-                      <td className="px-5 py-4">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                          t.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                          t.status === 'trial' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                        }`}>
-                          {t.status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => handleTenantAction(t.id, 'impersonate')} className="p-1.5 hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] rounded border border-[hsl(var(--border))]" title="Impersonate School Admin">
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          {t.status === 'active' ? (
-                            <button onClick={() => handleTenantAction(t.id, 'suspend')} className="p-1.5 hover:bg-[hsl(var(--bg-tertiary))] text-rose-400 rounded border border-[hsl(var(--border))]" title="Suspend Tenant">
-                              <Ban className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <button onClick={() => handleTenantAction(t.id, 'reactivate')} className="p-1.5 hover:bg-[hsl(var(--bg-tertiary))] text-emerald-400 rounded border border-[hsl(var(--border))]" title="Reactivate Tenant">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Pricing plan limits editor */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4">
-              <h3 className="text-base font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
-                <CreditCard className="w-4 h-4 text-[hsl(var(--accent))]" /> Subscription Tier Configurator
-              </h3>
-              <p className="text-xs text-[hsl(var(--text-tertiary))]">Edit platform plans storage quotas and fee schedules globally.</p>
-              
-              <div className="space-y-3 text-xs">
-                {[
-                  { plan: 'Starter tier package', users: '100 max users', storage: '5 GB max quota' },
-                  { plan: 'Professional tier package', users: '1000 max users', storage: '25 GB max quota' },
-                  { plan: 'Enterprise tier package', users: 'Unlimited users', storage: '100 GB max quota' }
-                ].map(p => (
-                  <div key={p.plan} className="p-3 border border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--bg-secondary))] flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-[hsl(var(--text-primary))]">{p.plan}</p>
-                      <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{p.users} &bull; {p.storage}</p>
-                    </div>
-                    <button onClick={() => triggerNotification(`Configuration saved for ${p.plan}`)} className="px-3 py-1 bg-[hsl(var(--bg-tertiary))] hover:bg-[hsl(var(--border))] rounded font-bold">
-                      Edit Limits
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-4">
-              <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Promo Code &amp; Coupons manager</h3>
-              <p className="text-xs text-[hsl(var(--text-tertiary))]">Set early discount schedules for school organizations groups.</p>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <input type="text" placeholder="Promo code (e.g. BACKTOSCHOOL)" className="bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-lg p-2.5 text-[hsl(var(--text-primary))]" />
-                <button onClick={() => triggerNotification('New coupon code BACKTOSCHOOL created successfully!')} className="py-2.5 bg-[hsl(var(--accent))] text-white rounded-lg font-bold">
-                  Generate Coupon
-                </button>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      ) : null}
+      {/* 2. BUSINESS OPERATIONS CONSOLE HAS MOVED TO /super-admin/tenants/* ROUTING */}
 
       {/* 3. PLATFORM OPERATIONS CONSOLE */}
       {consoleParam.startsWith('platform') ? (
