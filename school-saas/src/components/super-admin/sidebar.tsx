@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
-  LayoutDashboard, School, CreditCard, ChevronLeft, ChevronRight, Shield, 
-  Megaphone, Cpu, Users, Brain, Layers, X, ChevronDown, Building2, 
-  FolderTree, MapPin, GraduationCap, Tent, UserPlus, Globe, HardDrive, 
+  LayoutDashboard, School, CreditCard, ChevronLeft, ChevronRight, Shield,
+  Megaphone, Cpu, Users, Brain, Layers, X, ChevronDown, Building2,
+  FolderTree, MapPin, GraduationCap, Tent, UserPlus, Globe, HardDrive,
   Blocks, Copy, Palette, Settings, HelpCircle, FileText, BarChart3, Database
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -124,7 +124,7 @@ export function Sidebar() {
           active ? 'text-[hsl(var(--accent))]' : 'text-[hsl(var(--text-tertiary))] group-hover:text-[hsl(var(--text-secondary))]'
         )} />
         {!isCollapsed && <span className="truncate flex-1">{item.label}</span>}
-        
+
         {/* Tooltip when collapsed */}
         {isCollapsed && (
           <span className="pointer-events-none absolute left-full ml-3 hidden group-hover:flex items-center px-2.5 py-1.5 rounded-lg bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] text-xs font-medium text-[hsl(var(--text-primary))] whitespace-nowrap shadow-lg z-50">
@@ -174,7 +174,7 @@ export function Sidebar() {
               </p>
             )}
             {isCollapsed && <div className="my-2 mx-3 border-t border-[hsl(var(--border)/0.4)]" />}
-            
+
             {/* Render Subsections */}
             {section.subSections?.map((sub) => {
               const isOpen = openSubMenus[sub.label] ?? false;
@@ -224,7 +224,7 @@ export function Sidebar() {
                 </div>
               );
             })}
-            
+
             {/* Render direct items */}
             <div className="space-y-0.5">
               {section.items.map((item) => renderNavItem(item))}
