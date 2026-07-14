@@ -63,7 +63,7 @@ export function Topbar() {
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 top-12 w-80 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] shadow-lg animate-fade-in-scale overflow-hidden">
+              <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] max-w-sm rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] shadow-lg animate-fade-in-scale overflow-hidden">
                 <div className="px-4 py-3 border-b border-[hsl(var(--border))]">
                   <h3 className="text-sm font-semibold text-[hsl(var(--text-primary))]">
                     Notifications

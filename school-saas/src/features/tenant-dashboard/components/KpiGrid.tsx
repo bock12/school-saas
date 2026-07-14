@@ -17,7 +17,7 @@ export function KpiGrid() {
   // Loading skeleton state
   if (isLoading || !kpis) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {[1, 2, 3, 4].map(i => (
           <KpiCard key={i} metric={{} as unknown as KpiMetric} isLoading={true} />
         ))}
@@ -26,7 +26,7 @@ export function KpiGrid() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {kpis.map(kpi => (
         <KpiCard key={kpi.id} metric={kpi} />
       ))}

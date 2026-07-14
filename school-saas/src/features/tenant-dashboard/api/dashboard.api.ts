@@ -1,56 +1,168 @@
+import { createClient } from '@/lib/supabase/client';
 import { KpiMetric, RevenueDataPoint, ProvisioningActivity, Alert } from '../types/dashboard';
 import { School, Users, DollarSign, AlertTriangle } from 'lucide-react';
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Mock Data Generators
-const generateKpis = (): KpiMetric[] => [
-  { id: 'kpi-1', title: 'Total Registered Schools', value: 542, trend: '+12 this month', trendDirection: 'up', icon: School },
-  { id: 'kpi-2', title: 'Platform MRR', value: '$248.5k', trend: '+4.2% MRR', trendDirection: 'up', icon: DollarSign },
-  { id: 'kpi-3', title: 'Total End Users', value: '1.24M', trend: 'Active across platform', trendDirection: 'up', icon: Users },
-  { id: 'kpi-4', title: 'Risk / Suspended', value: 18, trend: 'Needs review', trendDirection: 'down', icon: AlertTriangle }
-];
-
-const generateRevenueData = (): RevenueDataPoint[] => [
-  { name: 'Jan', revenue: 150000, tenants: 450 },
-  { name: 'Feb', revenue: 165000, tenants: 470 },
-  { name: 'Mar', revenue: 180000, tenants: 495 },
-  { name: 'Apr', revenue: 210000, tenants: 512 },
-  { name: 'May', revenue: 235000, tenants: 530 },
-  { name: 'Jun', revenue: 248500, tenants: 542 },
-];
-
-const generateProvisioningFeed = (): ProvisioningActivity[] => [
-  { id: 'p-1', schoolName: 'Global Tech Academy', plan: 'Enterprise', geography: 'North America', status: 'active', timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), createdBy: 'System' },
-  { id: 'p-2', schoolName: 'Summit International', plan: 'Pro', geography: 'Europe', status: 'trial', timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), createdBy: 'John Smith' },
-  { id: 'p-3', schoolName: 'Westside High', plan: 'Starter', geography: 'North America', status: 'trial', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), createdBy: 'Alice Johnson' },
-  { id: 'p-4', schoolName: 'Northstar School', plan: 'Enterprise', geography: 'Asia', status: 'pending', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), createdBy: 'System' },
-];
-
-const generateAlerts = (): Alert[] => [
-  { id: 'a-1', title: 'Provisioning Job Failed', description: 'Tenant DB creation timeout for ID: 8829', severity: 'critical', timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString() },
-  { id: 'a-2', title: 'High Storage Usage', description: 'District 4 is at 95% of quota.', severity: 'warning', timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString() },
-  { id: 'a-3', title: 'Billing Sync Delayed', description: 'Stripe webhook sync is delayed by 2 minutes.', severity: 'info', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
-];
-
+// ---------------------------------------------------------------------------
+// KPIs — derived from real tenants table aggregates
+// ---------------------------------------------------------------------------
 export const dashboardApi = {
   getKpis: async (): Promise<KpiMetric[]> => {
-    await delay(500);
-    return generateKpis();
+    const supabase = createClient();
+
+    // Count all school-type tenants (active + trial)
+    const { count: schoolCount } = await supabase
+      .from('tenants')
+      .select('*', { count: 'exact', head: true })
+      .eq('type', 'school');
+
+    // Count suspended tenants
+    const { count: suspendedCount } = await supabase
+      .from('tenants')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'suspended');
+
+    // Sum students across all tenants
+    const { data: studentSum } = await supabase
+      .from('tenants')
+      .select('students_count');
+
+    const totalStudents = (studentSum ?? []).reduce(
+      (sum, r) => sum + (r.students_count ?? 0), 0
+    );
+
+    // Count new schools this month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const { count: newThisMonth } = await supabase
+      .from('tenants')
+      .select('*', { count: 'exact', head: true })
+      .eq('type', 'school')
+      .gte('created_at', startOfMonth.toISOString());
+
+    const formatStudents = (n: number) => {
+      if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+      if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+      return String(n);
+    };
+
+    return [
+      {
+        id: 'kpi-1',
+        title: 'Total Registered Schools',
+        value: schoolCount ?? 0,
+        trend: `+${newThisMonth ?? 0} this month`,
+        trendDirection: 'up',
+        icon: School,
+      },
+      {
+        id: 'kpi-2',
+        title: 'Platform MRR',
+        value: '—',
+        trend: 'Connect billing to show',
+        trendDirection: 'neutral',
+        icon: DollarSign,
+      },
+      {
+        id: 'kpi-3',
+        title: 'Total Students',
+        value: formatStudents(totalStudents),
+        trend: 'Across all schools',
+        trendDirection: 'up',
+        icon: Users,
+      },
+      {
+        id: 'kpi-4',
+        title: 'Suspended / At Risk',
+        value: suspendedCount ?? 0,
+        trend: suspendedCount ? 'Needs review' : 'All clear',
+        trendDirection: suspendedCount ? 'down' : 'neutral',
+        icon: AlertTriangle,
+      },
+    ];
   },
-  
+
+  // Revenue data — placeholder until a billing table is wired
+  // We return tenant growth per month as a proxy
   getRevenueData: async (_timeRange: string = '6m'): Promise<RevenueDataPoint[]> => {
-    await delay(700);
-    return generateRevenueData();
+    const supabase = createClient();
+
+    // Get monthly tenant creation counts for the last 6 months
+    const { data } = await supabase
+      .from('tenants')
+      .select('created_at')
+      .eq('type', 'school')
+      .order('created_at', { ascending: true });
+
+    if (!data || data.length === 0) return [];
+
+    // Bucket by month
+    const monthMap: Record<string, number> = {};
+    data.forEach(row => {
+      const d = new Date(row.created_at);
+      const key = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+      monthMap[key] = (monthMap[key] ?? 0) + 1;
+    });
+
+    // Last 6 months only
+    const months: RevenueDataPoint[] = Object.entries(monthMap)
+      .slice(-6)
+      .map(([name, tenants]) => ({
+        name: name.split(' ')[0], // just "Jan", "Feb" etc.
+        tenants,
+        revenue: 0, // Replace when billing table exists
+      }));
+
+    return months;
   },
-  
+
+  // Provisioning feed — most recently created tenants
   getProvisioningFeed: async (): Promise<ProvisioningActivity[]> => {
-    await delay(600);
-    return generateProvisioningFeed();
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+      .from('tenants')
+      .select('id, name, status, region, created_at')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (error || !data) return [];
+
+    return data.map(row => ({
+      id: row.id,
+      schoolName: row.name,
+      plan: 'Unknown',   // plan_id is a UUID FK; resolve later
+      geography: row.region ?? 'Unknown',
+      status: row.status,
+      timestamp: row.created_at,
+      createdBy: 'System',
+    }));
   },
-  
+
+  // Alerts — suspended/provisioning-stuck tenants
   getAlerts: async (): Promise<Alert[]> => {
-    await delay(400);
-    return generateAlerts();
-  }
+    const supabase = createClient();
+
+    const { data } = await supabase
+      .from('tenants')
+      .select('id, name, status, updated_at')
+      .in('status', ['suspended', 'provisioning'])
+      .order('updated_at', { ascending: false })
+      .limit(10);
+
+    if (!data || data.length === 0) return [];
+
+    return data.map(row => ({
+      id: row.id,
+      title: row.status === 'suspended'
+        ? `Suspended Tenant: ${row.name}`
+        : `Provisioning Stalled: ${row.name}`,
+      description: row.status === 'suspended'
+        ? `This tenant has been suspended. Review billing or compliance.`
+        : `This tenant has been in provisioning state since ${new Date(row.updated_at).toLocaleDateString()}.`,
+      severity: row.status === 'suspended' ? 'critical' : 'warning',
+      timestamp: row.updated_at,
+    }));
+  },
 };

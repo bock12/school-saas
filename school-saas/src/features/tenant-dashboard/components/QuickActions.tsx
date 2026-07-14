@@ -13,7 +13,7 @@ const actions: (QuickAction & { description: string })[] = [
 
 export function QuickActions() {
   return (
-    <div className="glass-card p-5 border border-[hsl(var(--border))] rounded-2xl">
+    <div className="glass-card p-5 border border-[hsl(var(--border))] rounded-2xl h-[280px] flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-bold text-[hsl(var(--text-primary))] uppercase tracking-wider">
           Quick Actions
@@ -24,20 +24,20 @@ export function QuickActions() {
       </div>
 
       {/* Horizontal scroll strip on mobile, 2-col grid on larger screens */}
-      <div className="flex sm:grid sm:grid-cols-2 gap-2.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+      <div className="flex-1 flex sm:grid sm:grid-cols-2 gap-2.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none content-start sm:content-center">
         {actions.map(action => (
           <button
             key={action.id}
-            className="flex-shrink-0 w-36 sm:w-auto flex flex-row sm:flex-col items-center sm:items-start gap-3 p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] 
+            className="flex-shrink-0 w-40 sm:w-auto flex flex-row items-center gap-2.5 p-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] 
               hover:border-[hsl(var(--border-hover))] hover:bg-[hsl(var(--bg-tertiary))] hover:shadow-sm
               transition-all duration-150 group text-left"
           >
-            <div className={`p-2 rounded-lg ring-1 flex-shrink-0 ${action.color} group-hover:scale-105 transition-transform duration-150`}>
-              <action.icon className="w-4 h-4" />
+            <div className={`p-1.5 rounded-lg ring-1 flex-shrink-0 ${action.color} group-hover:scale-105 transition-transform duration-150`}>
+              <action.icon className="w-3.5 h-3.5" />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-bold text-[hsl(var(--text-primary))] truncate">{action.label}</p>
-              <p className="text-[10px] text-[hsl(var(--text-tertiary))] leading-tight mt-0.5 hidden sm:block">{action.description}</p>
+              <p className="text-[10px] text-[hsl(var(--text-tertiary))] leading-tight mt-0.5 truncate hidden sm:block">{action.description}</p>
             </div>
           </button>
         ))}

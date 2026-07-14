@@ -46,26 +46,28 @@ const sidebarGroups: NavSection[] = [
         label: 'Tenant Management',
         icon: Database,
         items: [
-          { label: 'Dashboard', href: '/super-admin/tenants/dashboard', icon: LayoutDashboard },
-          { label: 'Tenant Directory', href: '/super-admin/tenants/directory', icon: School },
-          { label: 'Organizations', href: '/super-admin/tenants/hierarchy?view=organizations', icon: Building2 },
-          { label: 'Groups', href: '/super-admin/tenants/hierarchy?view=groups', icon: FolderTree },
-          { label: 'Districts', href: '/super-admin/tenants/hierarchy?view=districts', icon: MapPin },
-          { label: 'Schools', href: '/super-admin/tenants/hierarchy?view=schools', icon: GraduationCap },
-          { label: 'Campuses', href: '/super-admin/tenants/hierarchy?view=campuses', icon: Tent },
-          { label: 'Provisioning', href: '/super-admin/tenants/provisioning', icon: UserPlus },
-          { label: 'Subscriptions', href: '/super-admin/tenants/subscriptions', icon: CreditCard },
-          { label: 'Domains', href: '/super-admin/tenants/domains', icon: Globe },
-          { label: 'Storage', href: '/super-admin/tenants/storage', icon: HardDrive },
-          { label: 'Feature Modules', href: '/super-admin/tenants/modules', icon: Blocks },
-          { label: 'Templates', href: '/super-admin/tenants/templates', icon: Copy },
-          { label: 'Branding', href: '/super-admin/tenants/branding', icon: Palette },
-          { label: 'Tenant Settings', href: '/super-admin/tenants/settings', icon: Settings },
-          { label: 'Support Tools', href: '/super-admin/tenants/support', icon: HelpCircle },
-          { label: 'Audit History', href: '/super-admin/tenants/audit-logs', icon: FileText },
-          { label: 'Reports', href: '/super-admin/tenants/reports', icon: BarChart3 },
+          { label: 'Dashboard',       href: '/super-admin/tenants/dashboard',    icon: LayoutDashboard },
+          { label: 'Tenant Directory',href: '/super-admin/tenants/directory',    icon: School },
+          { label: 'Hierarchy',       href: '/super-admin/tenants/hierarchy',    icon: FolderTree },
+          { label: 'Provisioning',    href: '/super-admin/tenants/provisioning', icon: UserPlus },
+          { label: 'Subscriptions',   href: '/super-admin/tenants/subscriptions',icon: CreditCard },
+          { label: 'Support Tools',   href: '/super-admin/tenants/support',      icon: HelpCircle },
+          { label: 'Reports',         href: '/super-admin/tenants/reports',      icon: BarChart3 },
         ],
-      }
+      },
+      {
+        label: 'Tenant Configuration',
+        icon: Settings,
+        items: [
+          { label: 'Domains',         href: '/super-admin/tenants/domains',      icon: Globe },
+          { label: 'Storage',         href: '/super-admin/tenants/storage',      icon: HardDrive },
+          { label: 'Feature Modules', href: '/super-admin/tenants/modules',      icon: Blocks },
+          { label: 'Templates',       href: '/super-admin/tenants/templates',    icon: Copy },
+          { label: 'Branding',        href: '/super-admin/tenants/branding',     icon: Palette },
+          { label: 'Audit History',   href: '/super-admin/tenants/audit-logs',   icon: FileText },
+          { label: 'Tenant Settings', href: '/super-admin/tenants/settings',     icon: Settings },
+        ],
+      },
     ]
   },
   {
@@ -254,29 +256,37 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile Overlay Backdrop */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden animate-fade-in"
-          onClick={closeMobile}
-        />
-      )}
+      {/* Backdrop — covers content behind the open mobile drawer */}
+      <div
+        aria-hidden="true"
+        onClick={closeMobile}
+        className={cn(
+          'lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[49] transition-opacity duration-300',
+          isMobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        )}
+      />
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar — visible only at lg+ */}
       <aside
         className={cn(
-          'fixed left-0 top-0 bottom-0 z-40 hidden lg:flex flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] transition-all duration-300 ease-in-out',
+          'fixed left-0 top-0 h-screen z-40',
+          'hidden lg:flex flex-col',
+          'border-r border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))]',
+          'transition-all duration-300 ease-in-out',
           isCollapsed ? 'w-[68px]' : 'w-[280px]'
         )}
       >
         {sidebarContent}
       </aside>
 
-      {/* Mobile Drawer */}
+      {/* Mobile/Tablet Drawer — slides in below lg */}
       <aside
         className={cn(
-          'fixed left-0 top-0 bottom-0 z-50 flex flex-col w-[280px] border-r border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] transition-transform duration-300 ease-in-out lg:hidden',
-          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+          'lg:hidden fixed left-0 top-0 h-screen z-50',
+          'flex flex-col w-[280px]',
+          'border-r border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))]',
+          'transition-transform duration-300 ease-in-out',
+          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         )}
       >
         {sidebarContent}

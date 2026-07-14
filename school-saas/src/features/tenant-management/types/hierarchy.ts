@@ -11,22 +11,38 @@ export type TenantStatus =
   | 'provisioning'
   | 'pending'
   | 'suspended'
-  | 'archived';
+  | 'archived'
+  | 'past_due'
+  | 'deleted';
+
+export type SubscriptionPlan = 'enterprise' | 'pro' | 'starter' | 'trial';
 
 export interface TenantNode {
   id: string;
   name: string;
   type: HierarchyType;
-  parentId?: string; // null if top-level organization
+  parentId?: string;
   childrenCount: number;
   usersCount: number;
   studentsCount: number;
-  storageUsed: number; // in bytes or GB
+  storageUsed: number;
   subscriptionId?: string;
+  plan?: SubscriptionPlan;
   status: TenantStatus;
   lastLoginAt?: string;
   createdAt: string;
   updatedAt: string;
+  // Standalone: org and school are the same entity
+  isStandaloneSchool?: boolean;
+  // Domain / identity
+  slug?: string;
+  region?: string;
+  schoolType?: string;
+  schoolLevels?: string[];
+  schoolShifts?: string[];
+  address?: string;
+  // Tree building (populated client-side)
+  children?: TenantNode[];
 }
 
 export interface HierarchyFilterParams {
@@ -37,6 +53,7 @@ export interface HierarchyFilterParams {
   limit?: number;
   sortBy?: keyof TenantNode;
   sortOrder?: 'asc' | 'desc';
+  parentId?: string; // fetch direct children of a node
 }
 
 export interface PaginatedResponse<T> {

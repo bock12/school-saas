@@ -19,7 +19,7 @@ export default function StoragePage() {
   const totalQuota = mockStorage.reduce((acc, curr) => acc + curr.quota, 0);
 
   return (
-    <div className="space-y-6 max-w-[1200px] animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[hsl(var(--border))]">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-[hsl(var(--text-primary))] flex items-center gap-2">

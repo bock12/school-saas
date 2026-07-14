@@ -40,7 +40,7 @@ export function AlertsPanel() {
   const criticalCount = alerts?.filter(a => a.severity === 'critical').length ?? 0;
 
   return (
-    <div className="glass-card p-5 border border-[hsl(var(--border))] rounded-2xl flex flex-col">
+    <div className="glass-card p-5 border border-[hsl(var(--border))] rounded-2xl flex flex-col flex-1 min-h-[300px]">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2.5">
           <h3 className="text-sm font-bold text-[hsl(var(--text-primary))] uppercase tracking-wider">
@@ -58,7 +58,7 @@ export function AlertsPanel() {
         </button>
       </div>
 
-      <div className="space-y-2.5">
+      <div className="space-y-2.5 flex-1 overflow-y-auto pr-0.5 scrollbar-none">
         {isLoading ? (
           [1, 2, 3].map(i => (
             <div key={i} className="h-[72px] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.3)] animate-pulse" />
