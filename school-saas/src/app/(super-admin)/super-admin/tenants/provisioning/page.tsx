@@ -36,7 +36,7 @@ export default function ProvisioningWizardPage() {
     provision,
   } = useProvisionWizard();
 
-  const { step, data, isProvisioning, provisionProgress, provisionDone, provisionError } = state;
+  const { step, data, isProvisioning, provisionProgress, provisionDone, provisionError, invitesSent } = state;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in pb-10">
@@ -68,8 +68,24 @@ export default function ProvisioningWizardPage() {
             </div>
             <h3 className="text-lg font-black text-[hsl(var(--text-primary))]">Tenant Provisioned!</h3>
             <p className="text-sm text-[hsl(var(--text-secondary))] max-w-sm">
-              <strong>{data.orgName}</strong> has been successfully provisioned. The admin invitation email has been sent to <span className="font-mono">{data.adminEmail}</span>.
+              <strong>{data.orgName}</strong> has been successfully provisioned.
             </p>
+            {invitesSent.length > 0 && (
+              <div className="w-full max-w-sm text-left space-y-2">
+                <p className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Invitations Sent</p>
+                {invitesSent.map((inv, i) => (
+                  <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-[hsl(var(--text-primary))] truncate">{inv.email}</p>
+                      <p className="text-[10px] text-[hsl(var(--text-tertiary))]">
+                        {inv.role === 'org_admin' ? 'Org Admin' : 'School Admin'} · {inv.tenantName}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex gap-3 mt-2">
               <a
                 href="/super-admin/tenants/hierarchy"
@@ -120,7 +136,7 @@ export default function ProvisioningWizardPage() {
             )}
 
             {currentStepDef?.id === 'admin' && (
-              <AdminStep data={data} updateField={updateField} />
+              <AdminStep data={data} updateField={updateField} updateSchool={updateSchool} />
             )}
 
             {currentStepDef?.id === 'review' && (

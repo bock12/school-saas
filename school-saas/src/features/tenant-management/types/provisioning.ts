@@ -1,4 +1,5 @@
 import { SubscriptionPlan } from './hierarchy';
+import { AdminRole } from '@/app/actions/tenant';
 
 export type OrgMode = 'standalone' | 'multi';
 
@@ -9,6 +10,9 @@ export interface SchoolEntry {
   schoolType: string;
   schoolLevels: string[];
   schoolShifts: string[];
+  // Optional per-school admin assigned during provisioning
+  adminName?: string;
+  adminEmail?: string;
 }
 
 export interface WizardData {
@@ -23,7 +27,8 @@ export interface WizardData {
   modules: string[];
   adminName: string;
   adminEmail: string;
-  adminPassword?: string;
+  adminRole: AdminRole;
+  // adminPassword intentionally removed — use invite flow instead
 }
 
 export interface WizardState {
@@ -33,4 +38,6 @@ export interface WizardState {
   provisionProgress: number;
   provisionDone: boolean;
   provisionError: string | null;
+  // Tracks all invites sent on completion for the success screen
+  invitesSent: Array<{ email: string; name: string; role: AdminRole; tenantName: string }>;
 }

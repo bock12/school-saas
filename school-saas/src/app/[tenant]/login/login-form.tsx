@@ -2,8 +2,8 @@
 
 import { Shield, Mail, Lock, ArrowRight, Loader2, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, Suspense } from 'react';
 
 export function TenantLoginForm({
   tenantSlug,
@@ -23,7 +23,18 @@ export function TenantLoginForm({
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  // Translate OAuth/Magic Link callback error codes into human-readable messages
+  const callbackErrorMap: Record<string, string> = {
+    AuthFailed: 'Authentication failed. Please try again.',
+    ProfileNotFound: 'No account found for this email. Contact your school administrator.',
+    SchoolNotFound: 'This school portal does not exist.',
+    AccessDenied: 'Access denied. Your account does not belong to this school portal.',
+  };
+  const callbackError = searchParams.get('error');
+  const callbackErrorMsg = callbackError ? (callbackErrorMap[callbackError] ?? 'An unexpected error occurred.') : null;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,10 +149,10 @@ export function TenantLoginForm({
         </div>
 
         <div className="glass-card p-6 space-y-6">
-          {error && (
+          {(error || callbackErrorMsg) && (
             <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
               <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-red-400 font-medium">{error}</p>
+              <p className="text-xs text-red-400 font-medium">{error ?? callbackErrorMsg}</p>
             </div>
           )}
 

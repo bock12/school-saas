@@ -2,7 +2,8 @@ import { useReducer, useCallback, useMemo } from 'react';
 import { WizardState, WizardData, SchoolEntry, OrgMode } from '../types/provisioning';
 import { STEPS, REGIONS } from '../constants/provisioning';
 import { hierarchyApi } from '../api/hierarchy.api';
-import { createTenantAdmin } from '@/app/actions/tenant';
+import { inviteTenantAdmin } from '@/app/actions/tenant';
+import type { AdminRole } from '@/app/actions/tenant';
 
 const INITIAL_DATA: WizardData = {
   orgMode: 'standalone',
@@ -16,7 +17,7 @@ const INITIAL_DATA: WizardData = {
   modules: ['core'],
   adminName: '',
   adminEmail: '',
-  adminPassword: '',
+  adminRole: 'school_admin',
 };
 
 const INITIAL_STATE: WizardState = {
@@ -26,6 +27,7 @@ const INITIAL_STATE: WizardState = {
   provisionProgress: 0,
   provisionDone: false,
   provisionError: null,
+  invitesSent: [],
 };
 
 type Action =
@@ -43,7 +45,7 @@ type Action =
   | { type: 'TOGGLE_MODULE'; payload: string }
   | { type: 'PROVISION_START' }
   | { type: 'PROVISION_INCREMENT'; payload: number }
-  | { type: 'PROVISION_SUCCESS' }
+  | { type: 'PROVISION_SUCCESS'; payload: WizardState['invitesSent'] }
   | { type: 'PROVISION_ERROR'; payload: string }
   | { type: 'RESET' };
 
@@ -208,6 +210,7 @@ function wizardReducer(state: WizardState, action: Action): WizardState {
         isProvisioning: false,
         provisionProgress: 100,
         provisionDone: true,
+        invitesSent: action.payload,
       };
     case 'PROVISION_ERROR':
       return {
@@ -291,6 +294,14 @@ export function validateCurrentStep(stepId: string, data: WizardData): { valid: 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(data.adminEmail.trim())) {
         return { valid: false, error: 'Please enter a valid email address.' };
+      }
+      // Validate per-school admin emails if provided
+      if (data.orgMode === 'multi') {
+        for (const school of data.schools) {
+          if (school.adminEmail && !emailRegex.test(school.adminEmail.trim())) {
+            return { valid: false, error: `Invalid email for school "${school.name || 'Unnamed'}".` };
+          }
+        }
       }
       return { valid: true, error: null };
     default:
@@ -376,7 +387,6 @@ export function useProvisionWizard() {
   }, []);
 
   const provision = useCallback(async () => {
-    // Perform final check validation on review step
     const { valid, error } = validateCurrentStep('admin', state.data);
     if (!valid && error) {
       dispatch({ type: 'PROVISION_ERROR', payload: error });
@@ -386,15 +396,15 @@ export function useProvisionWizard() {
     dispatch({ type: 'PROVISION_START' });
 
     let ticker: NodeJS.Timeout | undefined;
+    const invitesSent: WizardState['invitesSent'] = [];
 
     try {
       ticker = setInterval(() => {
-        // Random incremental ticks between 5% and 15%
         const increment = Math.floor(Math.random() * 10) + 5;
         dispatch({ type: 'PROVISION_INCREMENT', payload: increment });
       }, 500);
 
-      const { orgId } = await hierarchyApi.provisionOrganization({
+      const { orgId, schoolIds } = await hierarchyApi.provisionOrganization({
         orgName: state.data.orgName,
         orgMode: state.data.orgMode,
         orgSlug: state.data.orgSlug,
@@ -409,17 +419,51 @@ export function useProvisionWizard() {
         modules: state.data.modules,
       });
 
+      // ── Send invites ───────────────────────────────────────────
       if (state.data.adminEmail) {
-        await createTenantAdmin(
+        // For standalone: invite as school_admin scoped to the actual school (schoolIds[0])
+        // For multi-school org: invite as org_admin scoped to the org
+        const primaryTenantId = state.data.orgMode === 'standalone'
+          ? (schoolIds[0] ?? orgId)
+          : orgId;
+        const primaryRole: AdminRole = state.data.orgMode === 'standalone'
+          ? 'school_admin'
+          : (state.data.adminRole ?? 'org_admin');
+        const primaryTenantName = state.data.orgName;
+
+        await inviteTenantAdmin(
           state.data.adminEmail,
           state.data.adminName,
-          state.data.adminPassword,
-          orgId
+          primaryTenantId,
+          primaryRole
         );
+        invitesSent.push({ email: state.data.adminEmail, name: state.data.adminName, role: primaryRole, tenantName: primaryTenantName });
+      }
+
+      // For multi-school orgs, send per-school admin invites
+      if (state.data.orgMode === 'multi') {
+        for (let i = 0; i < state.data.schools.length; i++) {
+          const school = state.data.schools[i];
+          const schoolId = schoolIds[i];
+          if (school.adminEmail && schoolId) {
+            try {
+              await inviteTenantAdmin(
+                school.adminEmail,
+                school.adminName ?? '',
+                schoolId,
+                'school_admin'
+              );
+              invitesSent.push({ email: school.adminEmail, name: school.adminName ?? '', role: 'school_admin', tenantName: school.name });
+            } catch (inviteErr: any) {
+              // Don't fail the whole provisioning if one school invite fails
+              console.error(`[provision] Failed to invite admin for school "${school.name}":`, inviteErr.message);
+            }
+          }
+        }
       }
 
       if (ticker) clearInterval(ticker);
-      dispatch({ type: 'PROVISION_SUCCESS' });
+      dispatch({ type: 'PROVISION_SUCCESS', payload: invitesSent });
     } catch (err: any) {
       if (ticker) clearInterval(ticker);
       dispatch({ type: 'PROVISION_ERROR', payload: err.message || 'Provisioning failed. Please try again.' });
