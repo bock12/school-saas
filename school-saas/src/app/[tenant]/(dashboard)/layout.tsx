@@ -1,5 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
+import { requireTenantUser } from '@/lib/auth/guards';
 import { TenantSidebar } from '@/components/tenant/sidebar';
 import { TenantTopbar } from '@/components/tenant/topbar';
 import { SidebarProvider } from '@/components/tenant/sidebar-provider';
@@ -13,41 +12,7 @@ export default async function TenantDashboardLayout({
   params: Promise<{ tenant: string }>;
 }) {
   const { tenant } = await params;
-  const supabase = await createClient();
-
-  // ── 1. Verify the user is authenticated ───────────────────────
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    redirect(`/${tenant}/login`);
-  }
-
-  // ── 2. Fetch the user's profile and verify tenant membership ──
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('id, full_name, role, tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError || !profile) {
-    await supabase.auth.signOut();
-    redirect(`/${tenant}/login`);
-  }
-
-  // ── 3. Resolve the tenant and enforce isolation ────────────────
-  const { data: school } = await supabase
-    .from('tenants')
-    .select('id, name, primary_color, logo_url')
-    .eq('slug', tenant)
-    .single();
-
-  if (!school || profile.tenant_id !== school.id) {
-    await supabase.auth.signOut();
-    redirect(`/${tenant}/login`);
-  }
+  const { user, profile, school } = await requireTenantUser(tenant);
 
   // ── 4. Build display name ──────────────────────────────────────
   const displayName =

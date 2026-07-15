@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/shared/status-badge';
@@ -30,6 +30,7 @@ interface Tenant {
   created_at: string;
   parent_id: string | null;
   parent?: { name: string } | null;
+  subRows?: Tenant[];
 }
 
 // ---------------------------------------------------------------------------
@@ -51,10 +52,33 @@ async function fetchTenants(search: string, status: string): Promise<Tenant[]> {
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row: any) => ({
+  
+  const rawTenants = (data ?? []).map((row: any) => ({
     ...row,
     parent: Array.isArray(row.parent) ? row.parent[0] : row.parent,
+    subRows: [],
   })) as Tenant[];
+
+  // If searching, return flat results to avoid losing isolated children
+  if (search) {
+    return rawTenants;
+  }
+
+  // Build tree hierarchy
+  const tenantMap = new Map<string, Tenant>();
+  const rootTenants: Tenant[] = [];
+
+  rawTenants.forEach(t => tenantMap.set(t.id, t));
+
+  rawTenants.forEach(t => {
+    if (t.parent_id && tenantMap.has(t.parent_id)) {
+      tenantMap.get(t.parent_id)!.subRows!.push(tenantMap.get(t.id)!);
+    } else {
+      rootTenants.push(tenantMap.get(t.id)!);
+    }
+  });
+
+  return rootTenants;
 }
 
 async function updateStatus(id: string, status: TenantStatus) {
@@ -65,30 +89,8 @@ async function updateStatus(id: string, status: TenantStatus) {
 
 async function deleteTenant(id: string) {
   const supabase = createClient();
-  // Hard-delete from database
   const { error } = await supabase.from('tenants').delete().eq('id', id);
   if (error) throw new Error(error.message);
-}
-
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-const PLANS = [
-  { value: 'starter',      label: 'Starter',      price: '$29/mo',   desc: 'Up to 100 students' },
-  { value: 'pro',          label: 'Professional',  price: '$79/mo',   desc: 'Up to 500 students' },
-  { value: 'enterprise',   label: 'Enterprise',    price: '$199/mo',  desc: 'Unlimited students' },
-];
-
-const REGIONS = [
-  'US East (N. Virginia)', 'US West (Oregon)', 'EU (Frankfurt)',
-  'EU (Ireland)', 'Asia Pacific (Singapore)', 'Africa (Cape Town)',
-];
-
-const COUNTRIES = ['Nigeria', 'Kenya', 'Ghana', 'South Africa', 'United States', 'United Kingdom', 'India', 'Other'];
-
-function slugify(v: string) {
-  return v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 }
 
 const queryClient = new QueryClient({
@@ -115,6 +117,7 @@ function DirectoryContent() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Tenant | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -130,8 +133,7 @@ function DirectoryContent() {
   const paginated = tenants.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const suspendMutation = useMutation({
-    mutationFn: (t: Tenant) =>
-      updateStatus(t.id, t.status === 'suspended' ? 'active' : 'suspended'),
+    mutationFn: (t: Tenant) => updateStatus(t.id, t.status === 'suspended' ? 'active' : 'suspended'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['directory-tenants'] });
       setActiveMenu(null);
@@ -154,6 +156,155 @@ function DirectoryContent() {
     setPage(1);
   }, []);
 
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newSet = new Set(expandedRows);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setExpandedRows(newSet);
+  };
+
+  const renderRow = (tenant: Tenant, level: number = 0) => {
+    const isExpanded = expandedRows.has(tenant.id);
+    const hasSubRows = tenant.subRows && tenant.subRows.length > 0;
+
+    return (
+      <React.Fragment key={tenant.id}>
+        <tr
+          className={cn(
+            "border-b border-[hsl(var(--border)/0.4)] hover:bg-[hsl(var(--bg-tertiary)/0.3)] transition-colors",
+            level > 0 && "bg-[hsl(var(--bg-tertiary)/0.15)]"
+          )}
+          onClick={() => setActiveMenu(null)}
+        >
+          {/* School name + domain with indentation */}
+          <td className="px-5 py-3.5">
+            <div className="flex items-center gap-3" style={{ paddingLeft: `${level * 1.5}rem` }}>
+              {hasSubRows ? (
+                <button 
+                  onClick={(e) => toggleExpand(tenant.id, e)} 
+                  className="p-1 hover:bg-[hsl(var(--bg-secondary))] rounded transition-colors -ml-2"
+                >
+                  <ChevronRight className={cn("w-4 h-4 text-[hsl(var(--text-secondary))] transition-transform", isExpanded && "rotate-90")} />
+                </button>
+              ) : (
+                <div className="w-5 -ml-2 flex-shrink-0" />
+              )}
+              
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[hsl(var(--accent)/0.2)] to-[hsl(var(--info)/0.2)] flex items-center justify-center text-[hsl(var(--accent))] text-xs font-black flex-shrink-0">
+                {tenant.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[hsl(var(--text-primary))] truncate">{tenant.name}</p>
+                {tenant.slug ? (
+                  <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1 truncate">
+                    <Globe className="w-3 h-3 flex-shrink-0" />
+                    {tenant.slug}.schoolsaas.com
+                  </p>
+                ) : (
+                  <p className="text-xs text-[hsl(var(--text-tertiary))] italic">No domain assigned</p>
+                )}
+              </div>
+            </div>
+          </td>
+
+          {/* Type badge */}
+          <td className="px-5 py-3.5">
+            <span className={cn(
+              "px-2 py-0.5 rounded-md text-[10px] font-bold capitalize",
+              tenant.type === 'organization' || tenant.type === 'district' 
+                ? "bg-[hsl(var(--info)/0.15)] text-[hsl(var(--info))]" 
+                : "bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))]"
+            )}>
+              {tenant.type}
+            </span>
+          </td>
+
+          {/* Parent */}
+          <td className="px-5 py-3.5 text-sm text-[hsl(var(--text-secondary))]">
+            {tenant.parent ? tenant.parent.name : <span className="italic text-[hsl(var(--text-tertiary))]">Standalone</span>}
+          </td>
+
+          {/* Status */}
+          <td className="px-5 py-3.5"><StatusBadge status={tenant.status} /></td>
+
+          {/* Students */}
+          <td className="px-5 py-3.5">
+            <span className="flex items-center gap-1.5 text-sm text-[hsl(var(--text-secondary))]">
+              <Users className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" />
+              {(tenant.students_count ?? 0).toLocaleString()}
+            </span>
+          </td>
+
+          {/* Region */}
+          <td className="px-5 py-3.5 text-sm text-[hsl(var(--text-secondary))]">
+            {tenant.region ?? '—'}
+          </td>
+
+          {/* Date */}
+          <td className="px-5 py-3.5">
+            <span className="flex items-center gap-1.5 text-xs text-[hsl(var(--text-tertiary))]">
+              <Clock className="w-3 h-3" />
+              {new Date(tenant.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          </td>
+
+          {/* Actions menu */}
+          <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+            <div className="relative">
+              <button
+                onClick={() => setActiveMenu(activeMenu === tenant.id ? null : tenant.id)}
+                className="p-1.5 rounded-lg hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+              >
+                <MoreHorizontal className="w-4 h-4 text-[hsl(var(--text-tertiary))]" />
+              </button>
+
+              {activeMenu === tenant.id && (
+                <div className="absolute right-0 top-9 w-48 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] shadow-xl z-20 animate-fade-in-scale overflow-hidden p-1">
+                  <Link
+                    href={`/super-admin/tenants/directory/${tenant.id}`}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"
+                  >
+                    <Eye className="w-4 h-4" /> View Details
+                  </Link>
+
+                  <Link
+                    href={`/super-admin/tenants/hierarchy`}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"
+                  >
+                    <GitMerge className="w-4 h-4" /> View in Hierarchy
+                  </Link>
+
+                  <button
+                    onClick={() => suspendMutation.mutate(tenant)}
+                    disabled={suspendMutation.isPending}
+                    className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-all disabled:opacity-50"
+                    style={{ color: tenant.status === 'suspended' ? 'hsl(var(--success))' : 'hsl(60 80% 60%)' }}
+                  >
+                    {tenant.status === 'suspended'
+                      ? <><Play className="w-4 h-4" /> Reactivate</>
+                      : <><Pause className="w-4 h-4" /> Suspend</>
+                    }
+                  </button>
+
+                  <div className="my-1 border-t border-[hsl(var(--border)/0.5)]" />
+
+                  <button
+                    onClick={() => setConfirmDelete(tenant)}
+                    className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+        {isExpanded && hasSubRows && tenant.subRows!.map(child => renderRow(child, level + 1))}
+      </React.Fragment>
+    );
+  };
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -161,7 +312,7 @@ function DirectoryContent() {
         <div>
           <h1 className="text-2xl font-black text-[hsl(var(--text-primary))] tracking-tight">Tenant Directory</h1>
           <p className="text-sm text-[hsl(var(--text-secondary))] mt-0.5">
-            {isLoading ? 'Loading…' : `${tenants.length} tenant${tenants.length !== 1 ? 's' : ''} registered`}
+            {isLoading ? 'Loading…' : `${tenants.length} parent tenant${tenants.length !== 1 ? 's' : ''} registered`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -231,8 +382,8 @@ function DirectoryContent() {
 
       {/* Table */}
       <div className="glass-card">
-        <div className="w-full pb-24">
-          <table className="w-full">
+        <div className="w-full pb-24 overflow-x-auto">
+          <table className="w-full min-w-[800px]">
             <thead>
               <tr className="border-b border-[hsl(var(--border))]">
                 {['Tenant', 'Type', 'Parent', 'Status', 'Students', 'Region', 'Registered', ''].map(h => (
@@ -262,120 +413,7 @@ function DirectoryContent() {
                   </td>
                 </tr>
               ) : (
-                paginated.map(tenant => (
-                  <tr
-                    key={tenant.id}
-                    className="border-b border-[hsl(var(--border)/0.4)] hover:bg-[hsl(var(--bg-tertiary)/0.3)] transition-colors"
-                    onClick={() => setActiveMenu(null)}
-                  >
-                    {/* School name + domain */}
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[hsl(var(--accent)/0.2)] to-[hsl(var(--info)/0.2)] flex items-center justify-center text-[hsl(var(--accent))] text-xs font-black flex-shrink-0">
-                          {tenant.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[hsl(var(--text-primary))] truncate">{tenant.name}</p>
-                          {tenant.slug ? (
-                            <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1 truncate">
-                              <Globe className="w-3 h-3 flex-shrink-0" />
-                              {tenant.slug}.schoolsaas.com
-                            </p>
-                          ) : (
-                            <p className="text-xs text-[hsl(var(--text-tertiary))] italic">No domain assigned</p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Type badge */}
-                    <td className="px-5 py-3.5">
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] capitalize">
-                        {tenant.type}
-                      </span>
-                    </td>
-
-                    {/* Parent */}
-                    <td className="px-5 py-3.5 text-sm text-[hsl(var(--text-secondary))]">
-                      {tenant.parent ? tenant.parent.name : <span className="italic text-[hsl(var(--text-tertiary))]">Standalone</span>}
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-5 py-3.5"><StatusBadge status={tenant.status} /></td>
-
-                    {/* Students */}
-                    <td className="px-5 py-3.5">
-                      <span className="flex items-center gap-1.5 text-sm text-[hsl(var(--text-secondary))]">
-                        <Users className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" />
-                        {(tenant.students_count ?? 0).toLocaleString()}
-                      </span>
-                    </td>
-
-                    {/* Region */}
-                    <td className="px-5 py-3.5 text-sm text-[hsl(var(--text-secondary))]">
-                      {tenant.region ?? '—'}
-                    </td>
-
-                    {/* Date */}
-                    <td className="px-5 py-3.5">
-                      <span className="flex items-center gap-1.5 text-xs text-[hsl(var(--text-tertiary))]">
-                        <Clock className="w-3 h-3" />
-                        {new Date(tenant.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    </td>
-
-                    {/* Actions menu */}
-                    <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                      <div className="relative">
-                        <button
-                          onClick={() => setActiveMenu(activeMenu === tenant.id ? null : tenant.id)}
-                          className="p-1.5 rounded-lg hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
-                        >
-                          <MoreHorizontal className="w-4 h-4 text-[hsl(var(--text-tertiary))]" />
-                        </button>
-
-                        {activeMenu === tenant.id && (
-                          <div className="absolute right-0 top-9 w-48 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] shadow-xl z-20 animate-fade-in-scale overflow-hidden p-1">
-                            <Link
-                              href={`/super-admin/tenants/directory/${tenant.id}`}
-                              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"
-                            >
-                              <Eye className="w-4 h-4" /> View Details
-                            </Link>
-
-                            <Link
-                              href={`/super-admin/tenants/hierarchy`}
-                              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"
-                            >
-                              <GitMerge className="w-4 h-4" /> View in Hierarchy
-                            </Link>
-
-                            <button
-                              onClick={() => suspendMutation.mutate(tenant)}
-                              disabled={suspendMutation.isPending}
-                              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-all disabled:opacity-50"
-                              style={{ color: tenant.status === 'suspended' ? 'hsl(var(--success))' : 'hsl(60 80% 60%)' }}
-                            >
-                              {tenant.status === 'suspended'
-                                ? <><Play className="w-4 h-4" /> Reactivate</>
-                                : <><Pause className="w-4 h-4" /> Suspend</>
-                              }
-                            </button>
-
-                            <div className="my-1 border-t border-[hsl(var(--border)/0.5)]" />
-
-                            <button
-                              onClick={() => setConfirmDelete(tenant)}
-                              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-all"
-                            >
-                              <Trash2 className="w-4 h-4" /> Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                paginated.map(tenant => renderRow(tenant))
               )}
             </tbody>
           </table>
@@ -384,7 +422,7 @@ function DirectoryContent() {
         {/* Pagination */}
         <div className="px-5 py-4 border-t border-[hsl(var(--border))] flex items-center justify-between">
           <p className="text-xs text-[hsl(var(--text-tertiary))]">
-            Showing {Math.min((page - 1) * PAGE_SIZE + 1, tenants.length)} to {Math.min(page * PAGE_SIZE, tenants.length)} of {tenants.length} tenants
+            Showing {Math.min((page - 1) * PAGE_SIZE + 1, tenants.length)} to {Math.min(page * PAGE_SIZE, tenants.length)} of {tenants.length} parent tenants
           </p>
           <div className="flex items-center gap-2">
             <button

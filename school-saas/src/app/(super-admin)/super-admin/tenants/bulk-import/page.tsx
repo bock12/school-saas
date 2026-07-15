@@ -8,6 +8,7 @@ import { UploadCloud, CheckCircle2, AlertCircle, Play, Server, ArrowLeft, Loader
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { SubscriptionPlan } from '@/features/tenant-management/types/hierarchy';
+import { createTenantAdmin } from '@/app/actions/tenant';
 
 interface ParsedSchool {
   id: string; // temp id
@@ -139,17 +140,18 @@ function BulkImportSchoolsContent() {
       const indexInData = newData.findIndex(d => d.id === school.id);
       
       try {
-        await hierarchyApi.createNode({
+        const node = await hierarchyApi.createNode({
           name: school.name,
           slug: school.slug,
-          type: 'tenant', // It's a school, which is a tenant node
+          type: 'school', // Use valid HierarchyType
           parentId: selectedParentId,
           schoolType: school.schoolType,
           plan: school.plan,
-          modules: ['core'],
-          adminName: school.adminName,
-          adminEmail: school.adminEmail,
         });
+
+        if (school.adminEmail && school.adminName) {
+          await createTenantAdmin(school.adminEmail, school.adminName, undefined, node.id);
+        }
 
         newData[indexInData] = { ...school, status: 'success', errorMessage: undefined };
         setImportProgress(prev => ({ ...prev, current: i + 1, success: prev.success + 1 }));

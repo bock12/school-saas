@@ -7,7 +7,7 @@ const ROOT_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN
 
 export default async function proxy(request: NextRequest) {
   // 1. Refresh the Supabase auth session (cookie-based)
-  const response = await updateSession(request);
+  const { supabaseResponse: response, user } = await updateSession(request);
 
   const url = request.nextUrl.clone();
   const { pathname } = url;
@@ -29,7 +29,16 @@ export default async function proxy(request: NextRequest) {
 
   // ── 4. Super Admin panel (admin.yoursaas.com) ──────────────────
   if (subdomain === 'admin') {
-    url.pathname = `/super-admin${pathname}`;
+    if (!user && pathname !== '/login') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    if (user && pathname === '/login') {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+
+    if (!pathname.startsWith('/super-admin')) {
+      url.pathname = `/super-admin${pathname}`;
+    }
     const rewriteResponse = NextResponse.rewrite(url);
     // Forward session cookies from Supabase middleware
     response.cookies.getAll().forEach((cookie) => {
@@ -39,6 +48,15 @@ export default async function proxy(request: NextRequest) {
   }
 
   // ── 5. Tenant school subdomains (greenwood.yoursaas.com) ───────
+  // Enforce edge protection: Only allow /login if unauthenticated
+  // (Update this condition if you add public pages like /enrollment)
+  if (!user && pathname !== '/login') {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+  if (user && pathname === '/login') {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
   // Rewrite internally to the dynamic [tenant] route folder
   url.pathname = `/${subdomain}${pathname}`;
   const rewriteResponse = NextResponse.rewrite(url);

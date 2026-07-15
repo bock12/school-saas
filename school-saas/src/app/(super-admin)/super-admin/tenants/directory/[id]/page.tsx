@@ -257,7 +257,7 @@ function TenantDetailContent() {
     setActionError(null);
     try {
       const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
       
       const url = await getImpersonationLink(id, session?.access_token);
       if (url) {
@@ -602,14 +602,23 @@ interface ChangePlanModalProps {
   isPending: boolean;
 }
 
-const AVAILABLE_PLANS = [
-  { id: '22d01ca5-468d-4b8a-810f-fa2b68063bc4', name: 'Starter', price: '$29/mo', desc: 'Up to 100 students, 5GB storage' },
-  { id: '3f147f70-b0b0-48b2-aea3-34a865e2f86f', name: 'Professional', price: '$79/mo', desc: 'Up to 500 students, 10GB storage' },
-  { id: 'ba04df5d-ff11-4221-83b1-87d97db55a39', name: 'Enterprise', price: '$199/mo', desc: 'Unlimited students, 50GB storage' }
-];
-
 function ChangePlanModal({ isOpen, onClose, currentPlanId, onSelect, isPending }: ChangePlanModalProps) {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(currentPlanId);
+
+  const { data: availablePlans = [], isLoading } = useQuery({
+    queryKey: ['subscription-plans'],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('subscription_plans')
+        .select('id, name, price_monthly, description, max_students, max_storage_gb')
+        .eq('is_active', true)
+        .order('sort_order');
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    enabled: isOpen,
+  });
 
   React.useEffect(() => {
     setSelectedPlanId(currentPlanId);
@@ -629,7 +638,9 @@ function ChangePlanModal({ isOpen, onClose, currentPlanId, onSelect, isPending }
         </div>
 
         <div className="space-y-2.5">
-          {AVAILABLE_PLANS.map(p => (
+          {isLoading ? (
+            <div className="text-center py-4 text-xs text-[hsl(var(--text-tertiary))] animate-pulse">Loading plans...</div>
+          ) : availablePlans.map(p => (
             <label
               key={p.id}
               className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
@@ -657,9 +668,9 @@ function ChangePlanModal({ isOpen, onClose, currentPlanId, onSelect, isPending }
                     <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-[hsl(var(--accent)/0.12)] text-[hsl(var(--accent))] uppercase tracking-wider">Current</span>
                   )}
                 </p>
-                <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{p.desc}</p>
+                <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{p.description || `Up to ${p.max_students} students, ${p.max_storage_gb}GB storage`}</p>
               </div>
-              <span className="text-xs font-bold text-[hsl(var(--accent))]">{p.price}</span>
+              <span className="text-xs font-bold text-[hsl(var(--accent))]">${p.price_monthly}/mo</span>
             </label>
           ))}
         </div>

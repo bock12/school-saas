@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -14,11 +14,26 @@ export default function HomePage() {
   const [showPortalModal, setShowPortalModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [slug, setSlug] = useState('');
+  const [adminUrl, setAdminUrl] = useState('/super-admin');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      const cleanHost = hostname.replace(/^(www\.|admin\.)/, '');
+      const port = window.location.port ? `:${window.location.port}` : '';
+      setAdminUrl(`${window.location.protocol}//admin.${cleanHost}${port}`);
+    }
+  }, []);
 
   const handleGoToPortal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!slug.trim()) return;
-    router.push(`/${slug.trim().toLowerCase()}/login`);
+    
+    const hostname = window.location.hostname;
+    const cleanHost = hostname.replace(/^(www\.|admin\.)/, '');
+    const port = window.location.port ? `:${window.location.port}` : '';
+    
+    window.location.href = `${window.location.protocol}//${slug.trim().toLowerCase()}.${cleanHost}${port}/login`;
   };
 
   return (
@@ -45,13 +60,13 @@ export default function HomePage() {
               <LogIn className="w-4 h-4" /> School Portal
             </button>
             <Link
-              href="/super-admin"
+              href={adminUrl}
               className="text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] transition-colors"
             >
               Admin
             </Link>
             <Link
-              href="/super-admin"
+              href={adminUrl}
               className="px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
             >
               Get Started
@@ -78,14 +93,14 @@ export default function HomePage() {
               <LogIn className="w-4 h-4" /> School Portal Login
             </button>
             <Link
-              href="/super-admin"
+              href={adminUrl}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] font-semibold"
             >
               Admin Dashboard
             </Link>
             <Link
-              href="/super-admin"
+              href={adminUrl}
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-semibold"
             >
@@ -115,7 +130,7 @@ export default function HomePage() {
           {/* CTA buttons — stack on mobile, row on sm+ */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8 px-4">
             <Link
-              href="/super-admin"
+              href={adminUrl}
               className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-semibold hover:opacity-90 transition-opacity text-sm sm:text-base"
             >
               Launch Super-Admin Dashboard <ArrowRight className="w-4 h-4" />

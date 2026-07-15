@@ -204,14 +204,21 @@ export const hierarchyApi = {
     const supabase = createClient();
 
     let planId = null;
-    const { data: planData } = await supabase
-      .from('subscription_plans')
-      .select('id')
-      .ilike('name', opts.plan)
-      .single();
-    
-    if (planData) {
-      planId = planData.id;
+    const finalStatus = opts.plan === 'trial' ? 'trial' : 'active';
+    const dbPlanName = opts.plan === 'pro' ? 'Professional' : 
+                       opts.plan === 'starter' ? 'Starter' : 
+                       opts.plan === 'enterprise' ? 'Enterprise' : null;
+
+    if (dbPlanName) {
+      const { data: planData } = await supabase
+        .from('subscription_plans')
+        .select('id')
+        .ilike('name', dbPlanName)
+        .single();
+      
+      if (planData) {
+        planId = planData.id;
+      }
     }
 
     // 1. Insert the organization
@@ -220,7 +227,7 @@ export const hierarchyApi = {
       .insert({
         name: opts.orgName,
         type: 'organization',
-        slug: opts.isStandaloneSchool ? null : opts.orgSlug,
+        slug: (opts.isStandaloneSchool ? null : opts.orgSlug) || null,
         is_standalone_school: opts.isStandaloneSchool,
         status: 'provisioning',
         region: opts.region,
@@ -249,7 +256,7 @@ export const hierarchyApi = {
             type: 'school',
             slug: school.slug || null,
             parent_id: orgId,
-            status: 'trial',
+            status: finalStatus,
             school_type: school.schoolType,
             school_levels: school.schoolLevels ?? [],
             school_shifts: school.schoolShifts ?? [],
@@ -276,7 +283,7 @@ export const hierarchyApi = {
           type: 'school',
           slug: opts.orgSlug || null,
           parent_id: orgId,
-          status: 'provisioning',
+          status: finalStatus,
           region: opts.region,
           school_levels: opts.schoolLevels ?? [],
           school_shifts: opts.schoolShifts ?? [],
@@ -291,7 +298,7 @@ export const hierarchyApi = {
     // 4. Mark org as active after provisioning
     await supabase
       .from('tenants')
-      .update({ status: 'active' })
+      .update({ status: finalStatus })
       .eq('id', orgId);
 
     return { orgId, schoolIds };
