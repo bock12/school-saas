@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-export type TenantRole = 'super_admin' | 'school_admin' | 'teacher' | 'student' | 'parent';
+export type TenantRole = 'super_admin' | 'org_admin' | 'school_admin' | 'teacher' | 'student' | 'parent';
 
 // ---------------------------------------------------------------------------
 // Super Admin Guard
@@ -45,6 +45,12 @@ export async function requireSuperAdmin() {
  * Ensures the current user is authorized to access the specified tenant,
  * and optionally that their role matches one of the allowed roles.
  *
+ * Access matrix:
+ *   - super_admin    → any tenant, any role
+ *   - org_admin      → their own org + any child schools of that org
+ *   - school_admin   → their exact school only
+ *   - teacher/student/parent → their exact school only
+ *
  * @param tenantSlug  The URL slug of the tenant
  * @param allowedRoles  Optional list of roles permitted. If omitted, any role belonging to this tenant is allowed.
  */
@@ -69,21 +75,31 @@ export async function requireTenantRole(tenantSlug: string, allowedRoles?: Tenan
 
   const { data: school } = await supabase
     .from('tenants')
-    .select('id, name, primary_color, logo_url')
+    .select('id, name, type, primary_color, logo_url, parent_id')
     .eq('slug', tenantSlug)
     .single();
 
-  // Tenant isolation: super_admin can access any tenant; others must belong to this school
-  if (!school || (profile.role !== 'super_admin' && profile.tenant_id !== school.id)) {
+  // ── Tenant isolation ─────────────────────────────────────────────────────
+  // Access is allowed if:
+  //   a) super_admin — platform-wide access
+  //   b) user's tenant_id matches this tenant directly
+  //   c) org_admin — their org (tenant_id) is the parent of this school
+  const isSuperAdmin = profile.role === 'super_admin';
+  const isDirectMember = profile.tenant_id === school?.id;
+  const isOrgAdminOfParent =
+    profile.role === 'org_admin' &&
+    school?.parent_id != null &&
+    profile.tenant_id === school.parent_id;
+
+  if (!school || (!isSuperAdmin && !isDirectMember && !isOrgAdminOfParent)) {
     await supabase.auth.signOut();
     redirect(`/${tenantSlug}/login`);
   }
 
-  // Role-specific check: if allowedRoles is provided, enforce it
-  // (super_admin bypasses role check — they can see everything)
-  if (allowedRoles && profile.role !== 'super_admin' && !allowedRoles.includes(profile.role as TenantRole)) {
-    // User belongs to the tenant but doesn't have the required role
-    // Redirect to their tenant home rather than signing them out
+  // ── Role check ────────────────────────────────────────────────────────────
+  // super_admin and org_admin bypass role checks — they can see everything
+  const bypassRoleCheck = isSuperAdmin || profile.role === 'org_admin';
+  if (allowedRoles && !bypassRoleCheck && !allowedRoles.includes(profile.role as TenantRole)) {
     redirect(`/${tenantSlug}`);
   }
 
@@ -99,11 +115,18 @@ export async function requireTenantUser(tenantSlug: string) {
 }
 
 /**
- * Restricts access to school admins (and super admins) only.
+ * Restricts access to school admins and org admins (and super admins) only.
  * Regular teachers, students, and parents will be redirected to the tenant home.
  */
 export async function requireSchoolAdmin(tenantSlug: string) {
   return requireTenantRole(tenantSlug, ['school_admin']);
+}
+
+/**
+ * Restricts access to org admins (and super admins) only.
+ */
+export async function requireOrgAdmin(tenantSlug: string) {
+  return requireTenantRole(tenantSlug, ['org_admin']);
 }
 
 /**

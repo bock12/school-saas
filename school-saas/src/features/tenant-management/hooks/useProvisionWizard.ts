@@ -435,7 +435,8 @@ export function useProvisionWizard() {
           state.data.adminEmail,
           state.data.adminName,
           primaryTenantId,
-          primaryRole
+          primaryRole,
+          state.data.tempPassword
         );
         invitesSent.push({ email: state.data.adminEmail, name: state.data.adminName, role: primaryRole, tenantName: primaryTenantName });
       }
@@ -451,7 +452,8 @@ export function useProvisionWizard() {
                 school.adminEmail,
                 school.adminName ?? '',
                 schoolId,
-                'school_admin'
+                'school_admin',
+                school.tempPassword
               );
               invitesSent.push({ email: school.adminEmail, name: school.adminName ?? '', role: 'school_admin', tenantName: school.name });
             } catch (inviteErr: any) {

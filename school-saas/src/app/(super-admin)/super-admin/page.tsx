@@ -161,7 +161,7 @@ function SuperAdminControlCenterContent() {
   };
 
   return (
-    <div className="space-y-6 max-w-[1400px] animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[hsl(var(--border))]">
         <div>
@@ -219,7 +219,7 @@ function SuperAdminControlCenterContent() {
       {/* CONSOLE DISPLAY CONDITIONAL SWITCH */}
 
       {/* 1. EXECUTIVE INTELLIGENCE CONSOLE */}
-      {consoleParam.startsWith('executive') || consoleParam === 'ai' ? (
+      {consoleParam.startsWith('executive') ? (
         <div className="space-y-8">
           {/* Platform status grid KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -242,10 +242,10 @@ function SuperAdminControlCenterContent() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             
             {/* System growth and analytics projections SVG */}
-            <div className="xl:col-span-2 glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-6">
+            <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-2xl space-y-6">
               <div>
                 <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">SaaS Revenue Growth Trend</h3>
                 <p className="text-xs text-[hsl(var(--text-tertiary))]">Platform MRR growth curves and customer acquisitions monthly.</p>
@@ -275,40 +275,62 @@ function SuperAdminControlCenterContent() {
               </div>
             </div>
 
-            {/* AI Platform Insights panel */}
-            <div className="glass-card p-6 border border-indigo-500/20 bg-indigo-500/5 rounded-2xl space-y-4">
+          </div>
+        </div>
+      ) : null}
+
+      {/* AI PLATFORM INSIGHTS CONSOLE */}
+      {consoleParam === 'ai' ? (
+        <div className="space-y-8 animate-fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-3 glass-card p-6 border border-indigo-500/20 bg-indigo-500/5 rounded-2xl space-y-4">
               <div className="flex items-center gap-2">
                 <Brain className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-base font-bold text-indigo-400">AI Platform Insights</h3>
+                <h3 className="text-base font-bold text-indigo-400">AI Platform Insights Overview</h3>
               </div>
-              
-              <div className="space-y-3">
-                <div className="p-3.5 rounded-xl border border-indigo-500/10 bg-indigo-950/20 space-y-1">
-                  <p className="text-[10px] uppercase font-bold text-indigo-300">Customer Churn Warning Alert</p>
-                  <p className="text-[11px] text-[hsl(var(--text-secondary))] leading-relaxed">
-                    <strong>Riverdale Academy</strong> has shown a 45% decline in login trends over the last 30 days. Recommend outreach.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-xl border border-indigo-500/10 bg-indigo-950/20 space-y-1">
-                  <p className="text-[10px] uppercase font-bold text-indigo-300">Infrastructure Scaler Suggestion</p>
-                  <p className="text-[11px] text-[hsl(var(--text-secondary))] leading-relaxed">
-                    Database traffic spikes expected at Q3 final exams. Suggest spin up of 2 backup replication nodes.
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-xl border border-indigo-500/10 bg-indigo-950/20 space-y-1">
-                  <p className="text-[10px] uppercase font-bold text-indigo-300">Pricing Optimization Optimizer</p>
-                  <p className="text-[11px] text-[hsl(var(--text-secondary))] leading-relaxed">
-                    8 trials expiring next week. Auto-dispatch 10% coupon promo to increase conversions.
-                  </p>
-                  <button onClick={() => triggerNotification('Coupons promo sent to trial candidates!')} className="mt-2 py-1 px-3 bg-indigo-600 text-white rounded font-bold text-[10px] hover:opacity-90">
-                    Apply Suggestion
-                  </button>
-                </div>
-              </div>
+              <p className="text-xs text-[hsl(var(--text-secondary))] mb-4">
+                Our machine learning models have analyzed platform usage and suggest the following optimizations across your multi-tenant environment.
+              </p>
             </div>
 
+            <div className="glass-card p-5 border border-indigo-500/20 bg-[hsl(var(--bg-secondary))] rounded-2xl space-y-3">
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-indigo-400" />
+              </div>
+              <p className="text-[10px] uppercase font-bold text-indigo-400">Customer Churn Warning Alert</p>
+              <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
+                <strong>Riverdale Academy</strong> has shown a 45% decline in login trends over the last 30 days. Model confidence: 92%.
+              </p>
+              <button className="mt-2 py-1.5 px-3 bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-primary))] border border-[hsl(var(--border))] rounded-lg font-bold text-xs hover:bg-[hsl(var(--bg-elevated))] transition-colors">
+                Schedule Outreach
+              </button>
+            </div>
+
+            <div className="glass-card p-5 border border-indigo-500/20 bg-[hsl(var(--bg-secondary))] rounded-2xl space-y-3">
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                <Server className="w-4 h-4 text-indigo-400" />
+              </div>
+              <p className="text-[10px] uppercase font-bold text-indigo-400">Infrastructure Scaler Suggestion</p>
+              <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
+                Database traffic spikes expected at Q3 final exams for 12 active tenants. Suggest spin up of 2 backup replication nodes.
+              </p>
+              <button onClick={() => triggerNotification('Spinning up 2 additional read replicas...')} className="mt-2 py-1.5 px-3 bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-primary))] border border-[hsl(var(--border))] rounded-lg font-bold text-xs hover:bg-[hsl(var(--bg-elevated))] transition-colors">
+                Deploy Nodes
+              </button>
+            </div>
+
+            <div className="glass-card p-5 border border-indigo-500/20 bg-[hsl(var(--bg-secondary))] rounded-2xl space-y-3">
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                <DollarSign className="w-4 h-4 text-indigo-400" />
+              </div>
+              <p className="text-[10px] uppercase font-bold text-indigo-400">Pricing Optimization Optimizer</p>
+              <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
+                8 trials expiring next week have high engagement scores. Auto-dispatch 10% coupon promo to increase conversions.
+              </p>
+              <button onClick={() => triggerNotification('Coupons promo sent to trial candidates!')} className="mt-2 py-1.5 px-3 bg-indigo-600 text-white rounded-lg font-bold text-xs hover:opacity-90 shadow-lg shadow-indigo-500/20 transition-all">
+                Apply Suggestion
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

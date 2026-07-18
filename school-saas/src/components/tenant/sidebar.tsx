@@ -95,7 +95,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
     Communication: true,
   });
 
-  const basePath = `/${tenantSlug}`;
+  const basePath = '';
 
   // Close mobile sidebar on navigation
   useEffect(() => {
@@ -110,7 +110,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
     {
       label: 'Main',
       items: [
-        { label: 'Dashboard', href: basePath, icon: LayoutDashboard, exact: true },
+        { label: 'Dashboard', href: basePath || '/', icon: LayoutDashboard, exact: true },
       ],
     },
     {

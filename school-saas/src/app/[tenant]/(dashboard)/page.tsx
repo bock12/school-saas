@@ -31,6 +31,7 @@ import {
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { DashboardCharts } from './_components/dashboard-charts';
+import { OrgDashboard } from './_components/org-dashboard';
 
 // ── Demo data for charts and feeds ───────────────────────────────
 const attendanceData = [
@@ -106,12 +107,24 @@ export default async function SchoolDashboardPage({
 
   const { data: tenantData } = await supabase
     .from('tenants')
-    .select('id, name')
+    .select('id, name, type')
     .eq('slug', tenant)
     .single();
 
   const tenantId = tenantData?.id;
 
+  // ── Branch: if this is an Organization portal, render Org Dashboard ──────
+  if (tenantData?.type === 'organization') {
+    return (
+      <OrgDashboard
+        tenant={tenant}
+        orgId={tenantId ?? ''}
+        orgName={tenantData.name ?? tenant}
+      />
+    );
+  }
+
+  // ── Below: School Dashboard (unchanged) ──────────────────────────────────
   // Parallel fetches for core KPIs
   const [
     { count: studentCount },

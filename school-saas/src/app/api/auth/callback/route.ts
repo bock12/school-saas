@@ -78,7 +78,11 @@ export async function GET(request: Request) {
   const tenantSlug = nextPathSegments.length > 0 ? nextPathSegments[0] : null;
 
   // 3. If we're targeting a specific tenant, enforce tenant isolation.
-  if (tenantSlug && tenantSlug !== 'super-admin') {
+  //    Skip the check entirely for special routes like `set-password`.
+  const lastSegment = nextPathSegments[nextPathSegments.length - 1];
+  const isSpecialRoute = lastSegment === 'set-password';
+
+  if (tenantSlug && tenantSlug !== 'super-admin' && !isSpecialRoute) {
     // Fetch the user's profile to get their role and tenant_id
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -112,10 +116,26 @@ export async function GET(request: Request) {
 
       // ── TENANT ISOLATION CHECK ────────────────────────────────
       if (profile.tenant_id !== school.id) {
-        await supabase.auth.signOut();
-        return NextResponse.redirect(
-          `${origin}/${tenantSlug}/login?error=AccessDenied`
-        );
+        let isParentAdmin = false;
+        
+        if (profile.role === 'org_admin') {
+          const { data: tenantCheck } = await supabase
+            .from('tenants')
+            .select('parent_id')
+            .eq('id', school.id)
+            .single();
+            
+          if (tenantCheck && tenantCheck.parent_id === profile.tenant_id) {
+            isParentAdmin = true;
+          }
+        }
+
+        if (!isParentAdmin) {
+          await supabase.auth.signOut();
+          return NextResponse.redirect(
+            `${origin}/${tenantSlug}/login?error=AccessDenied`
+          );
+        }
       }
     }
   }

@@ -70,8 +70,18 @@ function SchoolAdminCard({
               className={inputCls}
             />
           </div>
+          <div>
+            <FieldLabel>Temporary Password</FieldLabel>
+            <input
+              type="text"
+              value={school.tempPassword || ''}
+              onChange={e => updateSchool(school.id, 'tempPassword', e.target.value)}
+              placeholder="Leave blank for email invite"
+              className={inputCls}
+            />
+          </div>
           <p className="sm:col-span-2 text-[11px] text-[hsl(var(--text-tertiary))] leading-relaxed">
-            Leave blank to skip — you can assign a school admin later from the directory.
+            Leave blank to skip — you can assign a school admin later from the directory. If you set a password, they won't need an invite link.
           </p>
         </div>
       )}
@@ -87,7 +97,7 @@ export function AdminStep({ data, updateField, updateSchool }: AdminStepProps) {
     <div className="space-y-5 animate-fade-in">
       <StepTitle icon={User} title="Admin Account" />
       <p className="text-xs text-[hsl(var(--text-tertiary))]">
-        This person will be the initial admin for {entityLabel}. A secure invitation email will be sent — no password is needed from you.
+        This person will be the initial admin for {entityLabel}. You can either set a temporary password or leave it blank to send an invitation email.
       </p>
 
       {/* Org / primary admin fields */}
@@ -109,6 +119,16 @@ export function AdminStep({ data, updateField, updateSchool }: AdminStepProps) {
             value={data.adminEmail}
             onChange={e => updateField('adminEmail', e.target.value)}
             placeholder={isOrg ? 'director@organization.com' : 'admin@school.com'}
+            className={inputCls}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <FieldLabel>Temporary Password (Optional)</FieldLabel>
+          <input
+            type="text"
+            value={data.tempPassword || ''}
+            onChange={e => updateField('tempPassword', e.target.value)}
+            placeholder="Leave blank to send an email invite"
             className={inputCls}
           />
         </div>
@@ -136,11 +156,10 @@ export function AdminStep({ data, updateField, updateSchool }: AdminStepProps) {
         </div>
       </div>
 
-      {/* Invite notice */}
       <div className="flex items-start gap-2.5 p-3 rounded-xl border border-[hsl(var(--info)/0.2)] bg-[hsl(var(--info)/0.05)]">
         <Info className="w-4 h-4 text-[hsl(var(--info))] mt-0.5 flex-shrink-0" />
         <p className="text-[11px] text-[hsl(var(--info))] leading-relaxed">
-          <strong>Invite-based access.</strong> A secure invitation link will be emailed to the address above. The admin clicks the link to set their password and activate their account. No credentials are shared manually.
+          <strong>Authentication flow:</strong> If you provide a temporary password, the account is created immediately and the admin can log in. If you leave it blank, an invitation link will be emailed to the address above.
         </p>
       </div>
 

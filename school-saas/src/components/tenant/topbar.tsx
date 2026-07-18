@@ -12,9 +12,11 @@ interface TenantTopbarProps {
   userName?: string;
   userRole?: string;
   userAvatar?: string;
+  tenantType?: 'organization' | 'school';
 }
 
 const roleLabels: Record<string, string> = {
+  org_admin: 'Org Admin',
   school_admin: 'School Admin',
   teacher: 'Teacher',
   student: 'Student',
@@ -39,6 +41,7 @@ export function TenantTopbar({
   userName = 'School Admin',
   userRole = 'school_admin',
   userAvatar,
+  tenantType = 'school',
 }: TenantTopbarProps) {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);

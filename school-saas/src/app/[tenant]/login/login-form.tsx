@@ -32,6 +32,7 @@ export function TenantLoginForm({
     ProfileNotFound: 'No account found for this email. Contact your school administrator.',
     SchoolNotFound: 'This school portal does not exist.',
     AccessDenied: 'Access denied. Your account does not belong to this school portal.',
+    InviteExpired: 'Your invitation link has expired. Please contact your administrator for a new one.',
   };
   const callbackError = searchParams.get('error');
   const callbackErrorMsg = callbackError ? (callbackErrorMap[callbackError] ?? 'An unexpected error occurred.') : null;
@@ -42,8 +43,7 @@ export function TenantLoginForm({
     setError(null);
     setSuccessMsg(null);
 
-    const isAdminSubdomain = typeof window !== 'undefined' && window.location.hostname.startsWith('admin.');
-    const nextPath = isAdminSubdomain ? '/' : `/${tenantSlug}`;
+    const nextPath = `/`;
 
     if (mode === 'password') {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -76,15 +76,22 @@ export function TenantLoginForm({
         return;
       }
 
-      if (isAdminSubdomain) {
-        if (profile.role !== 'super_admin') {
-          await supabase.auth.signOut();
-          setError('Access denied. Only system administrators can access this portal.');
-          setLoading(false);
-          return;
+      if (profile.role !== 'super_admin' && profile.tenant_id !== schoolId) {
+        // If they don't match exactly, check if they are an org_admin of the parent organization
+        let isParentAdmin = false;
+        if (profile.role === 'org_admin') {
+          const { data: tenantCheck } = await supabase
+            .from('tenants')
+            .select('parent_id')
+            .eq('id', schoolId)
+            .single();
+            
+          if (tenantCheck && tenantCheck.parent_id === profile.tenant_id) {
+            isParentAdmin = true;
+          }
         }
-      } else {
-        if (profile.role !== 'super_admin' && profile.tenant_id !== schoolId) {
+
+        if (!isParentAdmin) {
           await supabase.auth.signOut();
           setError('Access denied. Your account does not belong to this school portal.');
           setLoading(false);
@@ -118,8 +125,7 @@ export function TenantLoginForm({
     setGoogleLoading(true);
     setError(null);
     
-    const isAdminSubdomain = typeof window !== 'undefined' && window.location.hostname.startsWith('admin.');
-    const nextPath = isAdminSubdomain ? '/' : `/${tenantSlug}`;
+    const nextPath = `/`;
     const redirectTo = `${window.location.origin}/api/auth/callback?next=${nextPath}`;
     
     const { error: authError } = await supabase.auth.signInWithOAuth({

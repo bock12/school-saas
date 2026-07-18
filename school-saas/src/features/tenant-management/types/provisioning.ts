@@ -13,6 +13,7 @@ export interface SchoolEntry {
   // Optional per-school admin assigned during provisioning
   adminName?: string;
   adminEmail?: string;
+  tempPassword?: string;
 }
 
 export interface WizardData {
@@ -28,7 +29,7 @@ export interface WizardData {
   adminName: string;
   adminEmail: string;
   adminRole: AdminRole;
-  // adminPassword intentionally removed — use invite flow instead
+  tempPassword?: string;
 }
 
 export interface WizardState {

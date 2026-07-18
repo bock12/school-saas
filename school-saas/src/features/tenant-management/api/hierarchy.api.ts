@@ -175,12 +175,9 @@ export const hierarchyApi = {
 
   /** Delete a node completely */
   deleteNode: async (id: string): Promise<void> => {
-    const supabase = createClient();
-    const { error } = await supabase.from('tenants').delete().eq('id', id);
-    if (error) {
-      console.error('[hierarchyApi.deleteNode]', error.message);
-      throw new Error(error.message);
-    }
+    // We must use the server action to securely delete Auth Users before the tenant rows
+    const { deleteTenantCompletely } = await import('@/app/actions/tenant');
+    await deleteTenantCompletely(id);
   },
 
   /**
@@ -302,6 +299,85 @@ export const hierarchyApi = {
       .eq('id', orgId);
 
     return { orgId, schoolIds };
+  },
+
+  /**
+   * Adds a new school to an existing organization, enforcing subscription plan limits.
+   */
+  addSchoolToOrganization: async (
+    orgId: string,
+    opts: {
+      name: string;
+      slug: string;
+      schoolType: string;
+      schoolLevels?: string[];
+      schoolShifts?: string[];
+    }
+  ): Promise<{ id: string }> => {
+    const supabase = createClient();
+
+    // 1. Fetch organization details to get plan_id and region
+    const { data: org, error: orgErr } = await supabase
+      .from('tenants')
+      .select('plan_id, region, status')
+      .eq('id', orgId)
+      .single();
+
+    if (orgErr || !org) {
+      throw new Error('Organization not found');
+    }
+
+    // 2. Determine max schools based on the plan
+    let maxSchools = 1; // Default fallback
+    if (org.plan_id) {
+      const { data: plan } = await supabase
+        .from('subscription_plans')
+        .select('max_schools')
+        .eq('id', org.plan_id)
+        .single();
+      if (plan && plan.max_schools !== undefined) {
+        maxSchools = plan.max_schools;
+      }
+    }
+
+    // 3. Count existing schools
+    const { count, error: countErr } = await supabase
+      .from('tenants')
+      .select('id', { count: 'exact', head: true })
+      .eq('parent_id', orgId)
+      .eq('type', 'school');
+
+    if (countErr) {
+      throw new Error('Failed to verify current school count');
+    }
+
+    const currentCount = count || 0;
+    if (currentCount >= maxSchools) {
+      throw new Error(`Subscription limit reached. Your current plan only allows up to ${maxSchools} schools.`);
+    }
+
+    // 4. Insert the new school
+    const { data: newSchool, error: insertErr } = await supabase
+      .from('tenants')
+      .insert({
+        name: opts.name,
+        slug: opts.slug,
+        type: 'school',
+        parent_id: orgId,
+        status: org.status === 'trial' ? 'trial' : 'active',
+        region: org.region,
+        school_type: opts.schoolType,
+        school_levels: opts.schoolLevels ?? [],
+        school_shifts: opts.schoolShifts ?? [],
+      })
+      .select('id')
+      .single();
+
+    if (insertErr || !newSchool) {
+      throw new Error(insertErr?.message ?? 'Failed to add school');
+    }
+
+    return { id: newSchool.id };
   },
 
   /** Flat search/filter — for Tenant Directory page */
