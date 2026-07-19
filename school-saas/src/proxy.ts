@@ -36,6 +36,10 @@ export default async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL('/', request.url));
     }
 
+    if (user && user.user_metadata?.requires_password_change && pathname !== '/set-password') {
+      return NextResponse.redirect(new URL('/set-password', request.url));
+    }
+
     if (!pathname.startsWith('/super-admin')) {
       url.pathname = `/super-admin${pathname}`;
     }
@@ -55,6 +59,10 @@ export default async function proxy(request: NextRequest) {
   }
   if (user && pathname === '/login') {
     return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  if (user && user.user_metadata?.requires_password_change && pathname !== '/set-password') {
+    return NextResponse.redirect(new URL('/set-password', request.url));
   }
 
   // Rewrite internally to the dynamic [tenant] route folder

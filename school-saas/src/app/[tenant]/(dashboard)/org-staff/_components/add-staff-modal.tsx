@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef } from 'react';
 import {
   UserPlus, X, School, Building2, Mail, Lock, AlertCircle, CheckCircle2,
-  Loader2, ChevronDown, Upload, FileText, Users, Briefcase, Phone, Hash
+  Loader2, ChevronDown, Upload, FileText, Users, Briefcase, Phone, Hash, Camera
 } from 'lucide-react';
 import { addStaffMember } from '@/app/actions/tenant';
 import { cn } from '@/lib/utils';
@@ -50,9 +50,12 @@ export function AddStaffModal({ orgId, orgSlug, schools, onClose, onSuccess }: A
   const [office, setOffice] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [phone, setPhone] = useState('');
-  const [staffId, setStaffId] = useState('');
+  const [staffId, setStaffId] = useState(() => `STF-${Math.floor(10000 + Math.random() * 90000)}`);
   const [credMode, setCredMode] = useState<CredMode>('invite');
   const [tempPassword, setTempPassword] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const avatarFileRef = useRef<HTMLInputElement>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -68,6 +71,18 @@ export function AddStaffModal({ orgId, orgSlug, schools, onClose, onSuccess }: A
   const applyTemplate = (t: typeof ROLE_TEMPLATES[0]) => {
     setRole(t.role);
     setDepartment(t.dept);
+  };
+
+  const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string;
+      setAvatarPreview(dataUrl);
+      setAvatarUrl(dataUrl); // In production, upload to Supabase Storage and get the URL
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = () => {
@@ -89,9 +104,10 @@ export function AddStaffModal({ orgId, orgSlug, schools, onClose, onSuccess }: A
         department: department || undefined,
         office: office || undefined,
         jobTitle: jobTitle || undefined,
-        staffId: staffId || undefined,
+        staffId: staffId || `STF-${Math.floor(10000 + Math.random() * 90000)}`,
         phone: phone || undefined,
         tempPassword: credMode === 'password' ? tempPassword : undefined,
+        avatarUrl: avatarUrl || undefined,
       });
 
       if (!res.success) {
@@ -146,6 +162,34 @@ export function AddStaffModal({ orgId, orgSlug, schools, onClose, onSuccess }: A
                     {t.label}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Profile Picture */}
+            <div>
+              <label className={labelCls}><Camera className="w-3 h-3 inline mr-1" />Profile Picture</label>
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-xl overflow-hidden border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary))] flex items-center justify-center flex-shrink-0">
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <Camera className="w-6 h-6 text-[hsl(var(--text-tertiary))]" />
+                  )}
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  <input ref={avatarFileRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
+                  <button
+                    type="button"
+                    onClick={() => avatarFileRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-[hsl(var(--border))] text-xs text-[hsl(var(--text-secondary))] hover:border-[hsl(var(--accent)/0.4)] transition-all"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Upload Photo
+                  </button>
+                  {!avatarPreview && (
+                    <input type="url" value={avatarUrl} onChange={e => setAvatarUrl(e.target.value)}
+                      placeholder="Or paste image URL…" className={cn(inputCls, 'text-xs')} />
+                  )}
+                </div>
               </div>
             </div>
 
@@ -215,7 +259,16 @@ export function AddStaffModal({ orgId, orgSlug, schools, onClose, onSuccess }: A
               </div>
               <div>
                 <label className={labelCls}><Hash className="w-3 h-3 inline mr-1" />Staff ID</label>
-                <input type="text" value={staffId} onChange={e => setStaffId(e.target.value)} placeholder="e.g. STF-001" className={inputCls} />
+                <div className="flex gap-1">
+                  <input type="text" value={staffId} onChange={e => setStaffId(e.target.value)} placeholder="Auto-generated" className={cn(inputCls, 'flex-1')} />
+                  <button
+                    type="button"
+                    onClick={() => setStaffId(`STF-${Math.floor(10000 + Math.random() * 90000)}`)}
+                    className="px-2 rounded-lg border border-[hsl(var(--border))] text-[10px] text-[hsl(var(--text-tertiary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+                    title="Generate new ID"
+                  >↻</button>
+                </div>
+                <p className="text-[9px] text-[hsl(var(--text-tertiary))] mt-1">Auto-generated. Click ↻ to regenerate.</p>
               </div>
             </div>
 

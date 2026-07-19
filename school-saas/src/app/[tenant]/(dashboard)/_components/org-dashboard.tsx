@@ -15,6 +15,7 @@ import {
 import Link from 'next/link';
 import { StatCard } from '@/components/super-admin/stat-card';
 import { createClient } from '@/lib/supabase/server';
+import { AddSchoolButton } from '../schools/_components/add-school-button';
 
 interface OrgDashboardProps {
   tenant: string;
@@ -31,7 +32,10 @@ const recentActivity = [
 
 export async function OrgDashboard({ tenant, orgId, orgName }: OrgDashboardProps) {
   const supabase = await createClient();
-  const basePath = `/${tenant}`;
+  // Note: on subdomain-based routing (albert-academy.localhost),
+  // the URL path is always relative to "/". The proxy handles the /[tenant] rewrite.
+  // So links must be /schools, NOT /albert-academy/schools.
+  const basePath = '';
 
   // Fetch child schools
   const { data: schools, count: schoolCount } = await supabase
@@ -90,13 +94,7 @@ export async function OrgDashboard({ tenant, orgId, orgName }: OrgDashboardProps
             <BarChart3 className="w-4 h-4" />
             <span className="hidden sm:inline">Reports</span>
           </Link>
-          <Link
-            href={`${basePath}/schools`}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <School className="w-4 h-4" />
-            <span className="hidden sm:inline">Manage Schools</span>
-          </Link>
+          <AddSchoolButton orgId={orgId} tenantSlug={tenant} />
         </div>
       </div>
 

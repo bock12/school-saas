@@ -14,14 +14,14 @@ export default function CommunicationDashboard() {
   const tenant = params.tenant as string;
 
   const quickActions = [
-    { label: 'Send SMS', desc: 'Urgent announcements', href: `/${tenant}/communication/sms`, icon: Phone },
-    { label: 'Send Email', desc: 'HTML newsletters or reports', href: `/${tenant}/communication/email`, icon: Mail },
-    { label: 'Broadcast Announcement', desc: 'Target grade/class levels', href: `/${tenant}/communication/broadcasts`, icon: Megaphone, primary: true },
-    { label: 'Create Notice', desc: 'Post to bulletin notice board', href: `/${tenant}/communication/notice-board`, icon: ClipboardList },
-    { label: 'Schedule Message', desc: 'PTA/Invoices reminders queue', href: `/${tenant}/communication/scheduled`, icon: Clock },
-    { label: 'Send Emergency Alert', desc: 'High-priority closure notices', href: `/${tenant}/communication/emergency`, icon: AlertTriangle, danger: true },
-    { label: 'Create Template', desc: 'Placeholder-based library', href: `/${tenant}/communication/templates`, icon: FileText },
-    { label: 'View Delivery Reports', desc: 'Open rates & logs analytics', href: `/${tenant}/communication/delivery-reports`, icon: BarChart3 }
+    { label: 'Send SMS', desc: 'Urgent announcements', href: '/communication/sms', icon: Phone },
+    { label: 'Send Email', desc: 'HTML newsletters or reports', href: '/communication/email', icon: Mail },
+    { label: 'Broadcast Announcement', desc: 'Target grade/class levels', href: '/communication/broadcasts', icon: Megaphone, primary: true },
+    { label: 'Create Notice', desc: 'Post to bulletin notice board', href: '/communication/notice-board', icon: ClipboardList },
+    { label: 'Schedule Message', desc: 'PTA/Invoices reminders queue', href: '/communication/scheduled', icon: Clock },
+    { label: 'Send Emergency Alert', desc: 'High-priority closure notices', href: '/communication/emergency', icon: AlertTriangle, danger: true },
+    { label: 'Create Template', desc: 'Placeholder-based library', href: '/communication/templates', icon: FileText },
+    { label: 'View Delivery Reports', desc: 'Open rates & logs analytics', href: '/communication/delivery-reports', icon: BarChart3 }
   ];
 
   return (

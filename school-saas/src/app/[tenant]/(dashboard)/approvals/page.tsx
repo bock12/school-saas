@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ClipboardList, CheckCircle2, XCircle, Clock, UserPlus, GraduationCap, DollarSign,
   CalendarCheck, Edit2, FileText, ChevronRight, Play, AlertOctagon, HelpCircle, Save,
-  Search, Shield, Users, Layers, Brain, Zap, Link2, Download, History, Sparkles, Menu, Plus
+  Search, Shield, Users, Layers, Brain, Zap, Link2, Download, History, Sparkles, Menu, Plus, Loader2
 } from 'lucide-react';
+import { resolveApprovalRequest, createApprovalRequest, getApprovalRequests } from '@/app/actions/approvals';
 
 type WorkflowTab =
   | 'overview'
@@ -53,22 +54,58 @@ export default function ApprovalsPage() {
     { type: 'ICT Procurement Purchase', target: '5 Days', actual: '6.2 Days', status: 'SLA Exceeded' }
   ];
 
-  // Mock list of central pending requests
-  const pendingRequests = [
-    { id: 'REQ-1094', title: 'Student Admission — Priya Sharma (Grade 9)', type: 'admission', requester: 'Registrar (Admissions Office)', date: 'Today, 10:42 AM', due: 'Tomorrow, 10:42 AM', priority: 'High', stage: 'Stage 2: VP Review', details: 'New student admission file pending academics placement confirmation.' },
-    { id: 'REQ-1093', title: 'Gradebook Modification — David Okafor (Math Q2)', type: 'grade_change', requester: 'Mr. Kofi Owusu (Tutor)', date: 'Today, 09:15 AM', due: 'Tomorrow, 09:15 AM', priority: 'Medium', stage: 'Stage 1: HOD Moderation', details: 'Maths grade correction from 68 to 74 due to manual spreadsheet entry check.' },
-    { id: 'REQ-1092', title: 'Sick Leave request — Mrs. Janet Boateng (5 Days)', type: 'leave', requester: 'Mrs. Janet Boateng (Tutor)', date: 'Yesterday, 04:30 PM', due: 'Today, 04:30 PM', priority: 'Medium', stage: 'Stage 1: Vice Principal HR', details: 'Emergency medical consultation leave requested from Jul 10 to Jul 15.' },
-    { id: 'REQ-1091', title: 'Consolidated Sibling Discount (30% waiver)', type: 'fee_discount', requester: 'Finance Clerk', date: 'Yesterday, 11:20 AM', due: 'July 9, 11:20 AM', priority: 'Low', stage: 'Stage 1: Bursar Verification', details: 'Tuition fees waiver discount for 3 children enrolled under Johnson family.' },
-  ];
+  // Real data from DB — loaded lazily when the pending tab is active
+  const [dbRequests, setDbRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [newReqTitle, setNewReqTitle] = useState('');
+  const [newReqType, setNewReqType] = useState('admission');
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newReqSubmitting, setNewReqSubmitting] = useState(false);
 
-  const handleAction = (action: string, reqId: string) => {
+  // Pending requests: use DB data if available, otherwise empty list
+  const pendingRequests = dbRequests.filter(r => r.status === 'pending');
+
+  const loadRequests = useCallback(async () => {
+    setLoadingRequests(true);
+    const res = await getApprovalRequests(tenant, []);
+    if (res.data) setDbRequests(res.data);
+    setLoadingRequests(false);
+  }, [tenant]);
+
+  useEffect(() => {
+    if (activeTab === 'pending' || activeTab === 'my-requests' || activeTab === 'overview') {
+      loadRequests();
+    }
+  }, [activeTab, loadRequests]);
+
+  const handleSubmitNewRequest = async () => {
+    if (!newReqTitle.trim()) return;
+    setNewReqSubmitting(true);
+    await createApprovalRequest(tenant, {
+      title: newReqTitle.trim(),
+      type: newReqType as any,
+      priority: 'medium',
+    });
+    setNewReqTitle('');
+    setShowNewForm(false);
+    await loadRequests();
+    setNewReqSubmitting(false);
+    setSavedMessage('Request submitted successfully!');
+    setTimeout(() => setSavedMessage(null), 3000);
+  };
+
+  const handleAction = async (action: 'approved' | 'rejected', reqId: string) => {
     setSaving(true);
     setSavedMessage(null);
-    setTimeout(() => {
-      setSaving(false);
-      setSavedMessage(`Request ${reqId} has been successfully ${action}!`);
-      setTimeout(() => setSavedMessage(null), 3000);
-    }, 800);
+    const res = await resolveApprovalRequest(reqId, action);
+    setSaving(false);
+    if (res.success) {
+      setSavedMessage(`Request has been successfully ${action}!`);
+      loadRequests();
+    } else {
+      setSavedMessage(`Error: ${res.error}`);
+    }
+    setTimeout(() => setSavedMessage(null), 3000);
   };
 
   const menuItems = [
@@ -289,9 +326,9 @@ export default function ApprovalsPage() {
                   <div className="flex justify-between items-center flex-wrap gap-2 pt-2 border-t border-[hsl(var(--border))/0.4]">
                     <span className="text-[10px] text-[hsl(var(--text-tertiary))]">Requested by: <strong>{req.requester}</strong></span>
                     <div className="flex gap-2">
-                      <button onClick={() => handleAction('Approved', req.id)} className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all">Approve Request</button>
-                      <button onClick={() => handleAction('Rejected', req.id)} className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-400 hover:bg-rose-500 hover:text-white transition-all">Reject</button>
-                      <button onClick={() => handleAction('Returned for Correction', req.id)} className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--border))]">Return</button>
+                      <button onClick={() => handleAction('approved', req.id)} className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all">Approve Request</button>
+                      <button onClick={() => handleAction('rejected', req.id)} className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-400 hover:bg-rose-500 hover:text-white transition-all">Reject</button>
+                      <button onClick={() => handleAction('rejected', req.id)} className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--border))]">Return</button>
                     </div>
                   </div>
                 </div>
@@ -421,7 +458,7 @@ export default function ApprovalsPage() {
             </div>
 
             <div className="flex justify-end pt-4 border-t border-[hsl(var(--border))]">
-              <button onClick={() => handleAction('Saved', newWorkflowName)} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90 transition-opacity">
+              <button onClick={() => handleAction('approved', newWorkflowName)} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90 transition-opacity">
                 <Save className="w-4 h-4" /> Save Sequence blueprint
               </button>
             </div>

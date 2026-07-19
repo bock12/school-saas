@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { AddStaffModal } from './add-staff-modal';
 import { BulkImportModal } from './bulk-import-modal';
+import { IdCardModal } from './id-card-modal';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +59,7 @@ export function OrgStaffClient({ tenant, orgId, orgSlug, orgName, allStaff, scho
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [idCardStaff, setIdCardStaff] = useState<StaffRow | null>(null);
 
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'all',          label: 'All Staff',    icon: Users },
@@ -90,7 +92,7 @@ export function OrgStaffClient({ tenant, orgId, orgSlug, orgName, allStaff, scho
 
 
   return (
-    <div className="space-y-6 max-w-[1400px]">
+    <div className="space-y-6 max-w-[1600px]">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
@@ -266,6 +268,15 @@ export function OrgStaffClient({ tenant, orgId, orgSlug, orgName, allStaff, scho
                     <Clock className="w-3 h-3" />
                     {staff.last_login_at ? formatDate(staff.last_login_at) : 'Never'}
                   </div>
+
+                  {/* ID Card Button */}
+                  <button
+                    onClick={() => setIdCardStaff(staff)}
+                    title="Print ID Card"
+                    className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[hsl(var(--bg-tertiary))] transition-colors text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--accent))]"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  </button>
                 </div>
               );
             })}
@@ -290,6 +301,13 @@ export function OrgStaffClient({ tenant, orgId, orgSlug, orgName, allStaff, scho
           schools={schools}
           onClose={() => setShowBulkModal(false)}
           onSuccess={() => router.refresh()}
+        />
+      )}
+      {idCardStaff && (
+        <IdCardModal
+          staff={{ ...idCardStaff, avatar_url: (idCardStaff as any).avatar_url }}
+          orgName={orgName}
+          onClose={() => setIdCardStaff(null)}
         />
       )}
     </div>

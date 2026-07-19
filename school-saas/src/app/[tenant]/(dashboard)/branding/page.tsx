@@ -22,7 +22,7 @@ export default async function BrandingPage({
     .single();
 
   return (
-    <div className="space-y-6 max-w-[900px]">
+    <div className="space-y-6 max-w-[1600px]">
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Palette className="w-5 h-5 text-[hsl(var(--accent))]" />

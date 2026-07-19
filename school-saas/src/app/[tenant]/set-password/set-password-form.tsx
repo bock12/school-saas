@@ -42,7 +42,10 @@ export function SetPasswordForm({ tenantSlug, tenantName }: SetPasswordFormProps
     setLoading(true);
     setError(null);
 
-    const { error: updateError } = await supabase.auth.updateUser({ password });
+    const { error: updateError } = await supabase.auth.updateUser({
+      password,
+      data: { requires_password_change: null }
+    });
 
     if (updateError) {
       setError(updateError.message);

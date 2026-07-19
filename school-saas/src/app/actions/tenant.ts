@@ -30,7 +30,7 @@ export async function inviteTenantAdmin(
       email,
       password: tempPassword,
       email_confirm: true,
-      user_metadata: { full_name: name, role, tenant_id: tenantId },
+      user_metadata: { full_name: name, role, tenant_id: tenantId, requires_password_change: true },
     });
 
     if (authErr) {
@@ -198,9 +198,9 @@ export async function addSchoolToOrg(
 
     // Optionally create a school admin for the new school
     if (opts.adminEmail) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-      // next param points the callback to the new school's set-password page
-      const redirectTo = `${appUrl}/api/auth/callback?next=/${opts.slug}/set-password`;
+      const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN ?? 'localhost:3000';
+      const protocol = appDomain.includes('localhost') ? 'http' : 'https';
+      const redirectTo = `${protocol}://${opts.slug}.${appDomain}/api/auth/callback?next=/set-password`;
       await inviteTenantAdmin(
         opts.adminEmail,
         opts.adminName ?? 'School Admin',
@@ -245,8 +245,9 @@ export async function assignSchoolAdmin(
         .eq('id', opts.profileId);
       if (error) throw new Error(error.message);
     } else if (opts.email) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-      const redirectTo = `${appUrl}/api/auth/callback?next=/${schoolSlug}/set-password`;
+      const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN ?? 'localhost:3000';
+      const protocol = appDomain.includes('localhost') ? 'http' : 'https';
+      const redirectTo = `${protocol}://${schoolSlug}.${appDomain}/api/auth/callback?next=/set-password`;
       await inviteTenantAdmin(opts.email, opts.name ?? 'School Admin', schoolId, 'school_admin', opts.tempPassword, redirectTo);
     }
     return { success: true };
@@ -272,12 +273,14 @@ export async function addStaffMember(
     staffId?: string;
     phone?: string;
     tempPassword?: string;
+    avatarUrl?: string;
   }
 ) {
   if (!opts.email) return { success: false, error: 'Email is required.' };
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  const redirectTo = `${appUrl}/api/auth/callback?next=/${opts.tenantSlug}/set-password`;
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN ?? 'localhost:3000';
+  const protocol = appDomain.includes('localhost') ? 'http' : 'https';
+  const redirectTo = `${protocol}://${opts.tenantSlug}.${appDomain}/api/auth/callback?next=/set-password`;
 
   try {
     const result = await inviteTenantAdmin(
@@ -298,6 +301,7 @@ export async function addStaffMember(
         job_title: opts.jobTitle ?? null,
         staff_id: opts.staffId ?? null,
         phone: opts.phone ?? null,
+        avatar_url: opts.avatarUrl ?? null,
       }).eq('id', result.userId);
     }
 
