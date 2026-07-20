@@ -95,7 +95,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
     Communication: true,
   });
 
-  const basePath = '';
+  const basePath = '/admin';
 
   // Close mobile sidebar on navigation
   useEffect(() => {
@@ -123,9 +123,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
           items: [
             { label: 'Dashboard', href: `${basePath}/parents`, icon: LayoutDashboard, exact: true },
             { label: 'Parent Portal', href: `${basePath}/parents/portal`, icon: LayoutDashboard },
-            { label: 'Parents', href: `${basePath}/parents/parents`, icon: Users },
-            { label: 'Guardians', href: `${basePath}/parents/guardians`, icon: ShieldCheck },
-            { label: 'Sponsors', href: `${basePath}/parents/sponsors`, icon: DollarSign },
+            { label: 'Parents & Contacts', href: `${basePath}/parents/contacts`, icon: Users },
             { label: 'Emergency Contacts', href: `${basePath}/parents/emergency`, icon: Heart },
             { label: 'Family Groups', href: `${basePath}/parents/families`, icon: UsersRound },
             { label: 'Student Relationships', href: `${basePath}/parents/relationships`, icon: Layers },

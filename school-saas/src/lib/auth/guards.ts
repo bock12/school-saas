@@ -59,7 +59,7 @@ export async function requireTenantRole(tenantSlug: string, allowedRoles?: Tenan
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect(`/${tenantSlug}/login`);
+    redirect(`/login`);
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -70,7 +70,7 @@ export async function requireTenantRole(tenantSlug: string, allowedRoles?: Tenan
 
   if (profileError || !profile) {
     await supabase.auth.signOut();
-    redirect(`/${tenantSlug}/login`);
+    redirect(`/login`);
   }
 
   const { data: school } = await supabase
@@ -93,14 +93,14 @@ export async function requireTenantRole(tenantSlug: string, allowedRoles?: Tenan
 
   if (!school || (!isSuperAdmin && !isDirectMember && !isOrgAdminOfParent)) {
     await supabase.auth.signOut();
-    redirect(`/${tenantSlug}/login`);
+    redirect(`/login`);
   }
 
   // ── Role check ────────────────────────────────────────────────────────────
   // super_admin and org_admin bypass role checks — they can see everything
   const bypassRoleCheck = isSuperAdmin || profile.role === 'org_admin';
   if (allowedRoles && !bypassRoleCheck && !allowedRoles.includes(profile.role as TenantRole)) {
-    redirect(`/${tenantSlug}`);
+    redirect(`/`);
   }
 
   return { user, profile, school };
@@ -135,4 +135,18 @@ export async function requireOrgAdmin(tenantSlug: string) {
  */
 export async function requireTeacher(tenantSlug: string) {
   return requireTenantRole(tenantSlug, ['school_admin', 'teacher']);
+}
+
+/**
+ * Restricts access to students (and super admins/org admins due to bypass).
+ */
+export async function requireStudent(tenantSlug: string) {
+  return requireTenantRole(tenantSlug, ['student']);
+}
+
+/**
+ * Restricts access to parents (and super admins/org admins due to bypass).
+ */
+export async function requireParent(tenantSlug: string) {
+  return requireTenantRole(tenantSlug, ['parent']);
 }

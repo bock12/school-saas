@@ -312,6 +312,66 @@ export async function addStaffMember(
 }
 
 /**
+ * Updates an existing staff member's profile
+ */
+export async function updateStaffProfile(
+  userId: string,
+  opts: {
+    name?: string;
+    role?: string;
+    tenantId?: string;
+    department?: string;
+    office?: string;
+    jobTitle?: string;
+    staffId?: string;
+    phone?: string;
+    avatarUrl?: string;
+  }
+) {
+  if (!userId) return { success: false, error: 'User ID is required.' };
+
+  const supabaseAdmin = createAdminClient();
+  try {
+    const updateData: any = {};
+    if (opts.name !== undefined) updateData.full_name = opts.name;
+    if (opts.role !== undefined) updateData.role = opts.role;
+    if (opts.tenantId !== undefined) updateData.tenant_id = opts.tenantId;
+    if (opts.department !== undefined) updateData.department = opts.department;
+    if (opts.office !== undefined) updateData.office = opts.office;
+    if (opts.jobTitle !== undefined) updateData.job_title = opts.jobTitle;
+    if (opts.staffId !== undefined) updateData.staff_id = opts.staffId;
+    if (opts.phone !== undefined) updateData.phone = opts.phone;
+    if (opts.avatarUrl !== undefined) updateData.avatar_url = opts.avatarUrl;
+
+    const { error } = await supabaseAdmin
+      .from('profiles')
+      .update(updateData)
+      .eq('id', userId);
+
+    if (error) throw new Error(error.message);
+
+    // Sync auth metadata if role or name changed
+    if (opts.name !== undefined || opts.role !== undefined || opts.tenantId !== undefined) {
+      const { data: user } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (user?.user?.user_metadata) {
+        await supabaseAdmin.auth.admin.updateUserById(userId, {
+          user_metadata: {
+            ...user.user.user_metadata,
+            ...(opts.name && { full_name: opts.name }),
+            ...(opts.role && { role: opts.role }),
+            ...(opts.tenantId && { tenant_id: opts.tenantId }),
+          }
+        });
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to update staff member.' };
+  }
+}
+
+/**
  * Bulk-imports staff members from a CSV-parsed array.
  * Returns a per-row result array for error reporting.
  */

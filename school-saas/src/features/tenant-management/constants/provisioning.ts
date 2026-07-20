@@ -15,9 +15,9 @@ export const STEPS = [
 
 export const PLAN_OPTIONS: { value: SubscriptionPlan; label: string; price: string; desc: string; color: string }[] = [
   { value: 'trial',      label: 'Trial',        price: 'Free / 30 days', desc: 'Explore before committing',    color: 'border-yellow-500/40 bg-yellow-500/8' },
-  { value: 'starter',    label: 'Starter',      price: '$29/mo',         desc: 'Up to 100 students',           color: 'border-teal-500/40 bg-teal-500/8' },
-  { value: 'pro',        label: 'Professional', price: '$79/mo',         desc: 'Up to 500 students, 5 admins', color: 'border-blue-500/40 bg-blue-500/8' },
-  { value: 'enterprise', label: 'Enterprise',   price: '$199/mo',        desc: 'Unlimited, API access, SSO',   color: 'border-indigo-500/40 bg-indigo-500/8' },
+  { value: 'starter',    label: 'Starter',      price: 'SLE 29/mo',      desc: 'Up to 100 students',           color: 'border-teal-500/40 bg-teal-500/8' },
+  { value: 'pro',        label: 'Professional', price: 'SLE 79/mo',      desc: 'Up to 500 students, 5 admins', color: 'border-blue-500/40 bg-blue-500/8' },
+  { value: 'enterprise', label: 'Enterprise',   price: 'SLE 199/mo',     desc: 'Unlimited, API access, SSO',   color: 'border-indigo-500/40 bg-indigo-500/8' },
 ];
 
 export const MODULES = [

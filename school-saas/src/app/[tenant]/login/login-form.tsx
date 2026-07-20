@@ -99,11 +99,19 @@ export function TenantLoginForm({
         }
       }
 
-      // Success
+      // Success - Redirect based on role
+      let rolePath = '/admin';
+      if (profile.role === 'teacher') rolePath = '/teacher';
+      if (profile.role === 'student') rolePath = '/student';
+      if (profile.role === 'parent') rolePath = '/parent';
+      
+      const nextPath = rolePath;
       router.push(nextPath);
       router.refresh();
     } else {
       // Magic Link Login
+      // For magic links, we just send them to the root path, and let `page.tsx` redirect them
+      const nextPath = '/';
       const redirectTo = `${window.location.origin}/api/auth/callback?next=${nextPath}`;
       const { error: authError } = await supabase.auth.signInWithOtp({
         email,
@@ -125,7 +133,7 @@ export function TenantLoginForm({
     setGoogleLoading(true);
     setError(null);
     
-    const nextPath = `/`;
+    const nextPath = `/${tenantSlug}`;
     const redirectTo = `${window.location.origin}/api/auth/callback?next=${nextPath}`;
     
     const { error: authError } = await supabase.auth.signInWithOAuth({

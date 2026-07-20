@@ -3,10 +3,19 @@
 import { useState } from 'react';
 import { Check, Plus, Edit2, Trash2, Tag, Percent, X } from 'lucide-react';
 
+const INTEGRATIONS_LIST = [
+  { id: 'google_workspace', name: 'Google Workspace (SSO)', icon: '🔵' },
+  { id: 'microsoft_azure', name: 'Microsoft Azure AD (SSO)', icon: '🟦' },
+  { id: 'stripe', name: 'Stripe Payments', icon: '💳' },
+  { id: 'zoom', name: 'Zoom Virtual Class', icon: '🟣' },
+  { id: 'canvas', name: 'Canvas LMS Sync', icon: '🟠' },
+  { id: 'sms_gateway', name: 'SMS Gateway', icon: '📱' },
+];
+
 const plans = [
-  { id: '1', name: 'Starter', price_monthly: 29, price_yearly: 290, max_students: 100, max_teachers: 10, storage: 2, features: ['Basic Reports', 'Email Support', '1 Admin'], active_schools: 12, color: 'hsl(var(--text-secondary))' },
-  { id: '2', name: 'Professional', price_monthly: 79, price_yearly: 790, max_students: 500, max_teachers: 50, storage: 10, features: ['Advanced Reports', 'Priority Support', '5 Admins', 'SMS Notifications', 'Custom Branding'], active_schools: 28, color: 'hsl(var(--accent))' },
-  { id: '3', name: 'Enterprise', price_monthly: 199, price_yearly: 1990, max_students: 5000, max_teachers: 500, storage: 100, features: ['All Features', 'Dedicated Support', 'Unlimited Admins', 'API Access', 'Custom Domain', 'SLA Guarantee'], active_schools: 16, color: 'hsl(38, 92%, 50%)' },
+  { id: '1', name: 'Starter', price_monthly: 29, price_yearly: 290, max_students: 100, max_teachers: 10, storage: 2, features: ['Basic Reports', 'Email Support', '1 Admin'], integrations: ['stripe'], active_schools: 12, color: 'hsl(var(--text-secondary))' },
+  { id: '2', name: 'Professional', price_monthly: 79, price_yearly: 790, max_students: 500, max_teachers: 50, storage: 10, features: ['Advanced Reports', 'Priority Support', '5 Admins', 'SMS Notifications', 'Custom Branding'], integrations: ['stripe', 'sms_gateway', 'zoom'], active_schools: 28, color: 'hsl(var(--accent))' },
+  { id: '3', name: 'Enterprise', price_monthly: 199, price_yearly: 1990, max_students: 5000, max_teachers: 500, storage: 100, features: ['All Features', 'Dedicated Support', 'Unlimited Admins', 'API Access', 'Custom Domain', 'SLA Guarantee'], integrations: ['google_workspace', 'microsoft_azure', 'stripe', 'zoom', 'canvas', 'sms_gateway'], active_schools: 16, color: 'hsl(38, 92%, 50%)' },
 ];
 
 const coupons = [
@@ -68,6 +77,17 @@ export default function PlansPage() {
               </ul>
 
               <div className="pt-3 border-t border-[hsl(var(--border))]">
+                <p className="text-xs font-semibold text-[hsl(var(--text-primary))] mb-2">Included Integrations</p>
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  {plan.integrations.map(intId => {
+                    const integration = INTEGRATIONS_LIST.find(i => i.id === intId);
+                    return integration ? (
+                      <span key={intId} className="px-2 py-0.5 rounded text-[10px] bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] border border-[hsl(var(--border))] whitespace-nowrap">
+                        {integration.icon} {integration.name}
+                      </span>
+                    ) : null;
+                  })}
+                </div>
                 <p className="text-xs text-[hsl(var(--text-tertiary))]"><span className="font-medium text-[hsl(var(--text-secondary))]">{plan.active_schools}</span> active schools</p>
               </div>
             </div>
@@ -128,6 +148,17 @@ export default function PlansPage() {
                 <div><label className="block text-xs font-medium text-[hsl(var(--text-secondary))] mb-1">Max Students</label><input type="number" placeholder="1000" className="w-full h-9 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" /></div>
                 <div><label className="block text-xs font-medium text-[hsl(var(--text-secondary))] mb-1">Max Teachers</label><input type="number" placeholder="100" className="w-full h-9 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" /></div>
                 <div><label className="block text-xs font-medium text-[hsl(var(--text-secondary))] mb-1">Storage GB</label><input type="number" placeholder="20" className="w-full h-9 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors" /></div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[hsl(var(--text-secondary))] mb-1">Enable Integrations</label>
+                <div className="h-28 overflow-y-auto rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary))] p-2 space-y-1">
+                  {INTEGRATIONS_LIST.map(int => (
+                    <label key={int.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[hsl(var(--bg-elevated))] cursor-pointer transition-colors">
+                      <input type="checkbox" className="w-3.5 h-3.5 rounded border-[hsl(var(--border))] text-[hsl(var(--accent))]" />
+                      <span className="text-xs text-[hsl(var(--text-primary))]">{int.icon} {int.name}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-5">

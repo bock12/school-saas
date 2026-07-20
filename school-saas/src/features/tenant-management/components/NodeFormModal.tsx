@@ -52,10 +52,10 @@ function getValidChildTypes(parentType?: HierarchyType): HierarchyType[] {
 // Helpers
 // ---------------------------------------------------------------------------
 const PLAN_OPTIONS: { value: SubscriptionPlan; label: string; price: string; desc: string }[] = [
-  { value: 'starter',    label: 'Starter',      price: '$29/mo',  desc: 'Up to 100 students' },
-  { value: 'pro',        label: 'Professional', price: '$79/mo',  desc: 'Up to 500 students' },
-  { value: 'enterprise', label: 'Enterprise',   price: '$199/mo', desc: 'Unlimited students' },
-  { value: 'trial',      label: 'Trial',        price: 'Free',    desc: '30-day trial' },
+  { value: 'trial',      label: 'Trial',        price: 'Free',    desc: 'Explore before committing' },
+  { value: 'starter',    label: 'Starter',      price: 'SLE 29/mo',  desc: 'Up to 100 students' },
+  { value: 'pro',        label: 'Professional', price: 'SLE 79/mo',  desc: 'Up to 500 students' },
+  { value: 'enterprise', label: 'Enterprise',   price: 'SLE 199/mo', desc: 'Unlimited students' },
 ];
 
 const SCHOOL_LEVELS = [

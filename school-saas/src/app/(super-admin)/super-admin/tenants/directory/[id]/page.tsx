@@ -10,6 +10,7 @@ import {
   Users, GraduationCap, HardDrive, ArrowLeft, Mail, Phone, MapPin, Globe,
   Calendar, CreditCard, Pause, Trash2, RefreshCw, Loader2, AlertCircle, Play, X, Plus
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { getImpersonationLink } from '../actions';
 import { NodeFormModal, NodeFormData } from '@/features/tenant-management/components/NodeFormModal';
@@ -523,6 +524,37 @@ function TenantDetailContent() {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Integrations Management */}
+      <div className="glass-card">
+        <div className="px-5 py-4 border-b border-[hsl(var(--border))] flex items-center justify-between">
+          <h2 className="text-base font-semibold text-[hsl(var(--text-primary))]">Managed Integrations</h2>
+          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] font-bold uppercase tracking-wider">Super Admin Only</span>
+        </div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[
+            { name: 'Google Workspace', status: 'connected', icon: 'G' },
+            { name: 'Stripe Billing', status: 'disconnected', icon: '$' },
+            { name: 'Zoom Meetings', status: 'disconnected', icon: 'Z' },
+          ].map(int => (
+            <div key={int.name} className="flex items-center justify-between p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary))]">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[hsl(var(--bg-elevated))] flex items-center justify-center font-bold text-[hsl(var(--text-secondary))] shadow-sm border border-[hsl(var(--border))]">{int.icon}</div>
+                <div>
+                  <p className="text-sm font-semibold text-[hsl(var(--text-primary))]">{int.name}</p>
+                  <p className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase mt-0.5">{int.status}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => alert('Integration toggle logic coming soon.')}
+                className={cn('px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                  int.status === 'connected' ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20')}>
+                {int.status === 'connected' ? 'Disconnect' : 'Connect'}
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 

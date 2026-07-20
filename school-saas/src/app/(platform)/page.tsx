@@ -192,7 +192,7 @@ export default function HomePage() {
               )}
               <h3 className="text-base sm:text-lg font-bold text-[hsl(var(--text-primary))]">{plan.name}</h3>
               <div className="mt-3 mb-3">
-                <span className="text-2xl sm:text-3xl font-bold text-[hsl(var(--text-primary))]">${plan.price}</span>
+                <span className="text-2xl sm:text-3xl font-bold text-[hsl(var(--text-primary))]">SLE {plan.price}</span>
                 <span className="text-sm text-[hsl(var(--text-tertiary))]">/mo</span>
               </div>
               <p className="text-xs text-[hsl(var(--text-tertiary))] mb-4">Up to {plan.students} students</p>

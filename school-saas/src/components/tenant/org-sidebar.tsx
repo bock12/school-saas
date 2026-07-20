@@ -49,7 +49,7 @@ interface NavSection {
 export function OrgSidebar({ tenantSlug, tenantName, primaryColor }: OrgSidebarProps) {
   const pathname = usePathname();
   const { isCollapsed, toggleCollapsed, isMobileOpen, closeMobile } = useSidebar();
-  const basePath = '';
+  const basePath = '/admin';
 
   useEffect(() => {
     closeMobile();

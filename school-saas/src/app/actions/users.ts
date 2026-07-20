@@ -69,3 +69,13 @@ export async function sendPasswordReset(email: string, tenantSlug: string) {
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
+
+export async function resetUserPasswordManually(userId: string, newPassword: string) {
+  const supabaseAdmin = createAdminClient();
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    password: newPassword
+  });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
