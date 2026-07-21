@@ -3,9 +3,10 @@
 import { CreditCard, CheckCircle2, AlertTriangle, ArrowUpRight, Plus, RefreshCw } from 'lucide-react';
 
 const mockSubscriptions = [
-  { id: 'sub1', tenant: 'Greenwood Academy', plan: 'Professional', mrr: 79, billing: 'Monthly', status: 'active', next_billing: '2026-08-15' },
-  { id: 'sub2', tenant: 'Sunrise International', plan: 'Enterprise', mrr: 199, billing: 'Annual', status: 'active', next_billing: '2027-02-15' },
-  { id: 'sub3', tenant: 'Oakwood Learning', plan: 'Professional', mrr: 79, billing: 'Monthly', status: 'past_due', next_billing: '2026-07-28' },
+  { id: 'sub1', tenant: 'Greenwood Academy', plan: 'Professional', mrr: 'SLE 1,500', billing: 'Monthly', paymentMethod: 'Orange Money (SL)', status: 'active', next_billing: '2026-08-15' },
+  { id: 'sub2', tenant: 'Sunrise International', plan: 'Enterprise', mrr: 'SLE 4,500', billing: 'Annual', paymentMethod: 'Monime Payment Gateway', status: 'active', next_billing: '2027-02-15' },
+  { id: 'sub3', tenant: 'Oakwood Learning', plan: 'Professional', mrr: 'SLE 1,500', billing: 'Monthly', paymentMethod: 'Africell Money (SL)', status: 'past_due', next_billing: '2026-07-28' },
+  { id: 'sub4', tenant: 'Albert Academy Senior School', plan: 'Enterprise', mrr: 'SLE 4,500', billing: 'Annual', paymentMethod: 'Monime (Direct Transfer)', status: 'active', next_billing: '2027-06-01' },
 ];
 
 export default function SubscriptionsPage() {
@@ -50,7 +51,7 @@ export default function SubscriptionsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[hsl(var(--border))]">
-              {['Tenant', 'Plan', 'MRR', 'Billing Cycle', 'Next Billing', 'Status', ''].map(h => (
+              {['Tenant', 'Plan', 'MRR / Fee', 'Billing Cycle', 'Payment Method', 'Next Billing', 'Status', ''].map(h => (
                 <th key={h} className="text-left font-bold text-[hsl(var(--text-tertiary))] text-xs uppercase tracking-wider px-5 py-3">{h}</th>
               ))}
             </tr>
@@ -60,8 +61,9 @@ export default function SubscriptionsPage() {
               <tr key={sub.id} className="border-b border-[hsl(var(--border)/0.5)] table-row-hover transition-colors">
                 <td className="px-5 py-4 font-bold text-[hsl(var(--text-primary))]">{sub.tenant}</td>
                 <td className="px-5 py-4 text-[hsl(var(--text-secondary))]">{sub.plan}</td>
-                <td className="px-5 py-4 font-bold text-[hsl(var(--text-primary))]">${sub.mrr}</td>
+                <td className="px-5 py-4 font-bold text-[hsl(var(--text-primary))]">{sub.mrr}</td>
                 <td className="px-5 py-4 text-[hsl(var(--text-secondary))]">{sub.billing}</td>
+                <td className="px-5 py-4 font-semibold text-[hsl(var(--accent))]">{sub.paymentMethod}</td>
                 <td className="px-5 py-4 text-[hsl(var(--text-tertiary))]">{new Date(sub.next_billing).toLocaleDateString()}</td>
                 <td className="px-5 py-4">
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border uppercase ${

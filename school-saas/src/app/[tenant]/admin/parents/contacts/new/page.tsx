@@ -1,8 +1,8 @@
 import { requireOrgAdmin } from '@/lib/auth/guards';
 import { createClient } from '@/lib/supabase/server';
-import { ParentsDashboardClient } from './parents-dashboard-client';
+import { NewContactClient } from './new-contact-client';
 
-export default async function ParentsDashboardPage({
+export default async function NewContactPage({
   params,
 }: {
   params: Promise<{ tenant: string }>;
@@ -12,10 +12,10 @@ export default async function ParentsDashboardPage({
 
   const supabase = await createClient();
 
-  const { count } = await supabase
-    .from('parents')
-    .select('*', { count: 'exact', head: true })
+  const { data: students } = await supabase
+    .from('students')
+    .select('id, first_name, last_name, admission_number')
     .eq('tenant_id', org.id);
 
-  return <ParentsDashboardClient totalParents={count || 0} />;
+  return <NewContactClient tenant={tenant} students={students || []} />;
 }

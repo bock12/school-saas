@@ -15,7 +15,7 @@ const student = {
   date_of_birth: '2010-03-15', blood_group: 'O+', address: '456 Elm Street, Springfield',
   class: 'Grade 10', section: 'A', stream: 'Science Stream', house: 'Blue House', status: 'active',
   guardian_name: 'Mrs. Patricia Johnson', guardian_phone: '+1 555-0101', guardian_email: 'patricia@gmail.com', guardian_relationship: 'Mother',
-  is_active: true, admitted_at: '2025-09-01',
+  is_active: true, admitted_at: '2025-09-01', avatar_url: null,
   attendance_rate: 94, current_gpa: 3.7, total_fees_due: 2400, fees_paid: 1800, balance: 600,
   enrollment_history: [
     { year: '2025-2026', grade: 'Grade 9', stream: 'General Stream', status: 'Completed' },
@@ -136,8 +136,12 @@ export default function StudentDetailPage() {
       {/* Hero Header */}
       <div className="glass-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/20 border border-[hsl(var(--border))] flex items-center justify-center text-pink-400 text-2xl font-bold flex-shrink-0">
-            {student.first_name[0]}{student.last_name[0]}
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/20 border border-[hsl(var(--border))] flex items-center justify-center text-pink-400 text-2xl font-bold flex-shrink-0 overflow-hidden">
+            {student.avatar_url ? (
+              <img src={student.avatar_url} alt={`${student.first_name} ${student.last_name}`} className="w-full h-full object-cover" />
+            ) : (
+              `${student.first_name[0]}${student.last_name[0]}`
+            )}
           </div>
           <div>
             <div className="flex items-center gap-3 flex-wrap">

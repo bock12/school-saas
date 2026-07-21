@@ -52,13 +52,12 @@ export default async function proxy(request: NextRequest) {
   }
 
   // ── 5. Tenant school subdomains (greenwood.yoursaas.com) ───────
-  // Enforce edge protection: Only allow /login if unauthenticated
-  // (Update this condition if you add public pages like /enrollment)
-  if (!user && pathname !== '/login') {
+  // Enforce edge protection: Only allow /login, /apply routes, or / if unauthenticated
+  if (!user && pathname !== '/login' && !pathname.startsWith('/apply') && pathname !== '/') {
     return NextResponse.redirect(new URL('/login', request.url));
   }
   if (user && pathname === '/login') {
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
   if (user && user.user_metadata?.requires_password_change && pathname !== '/set-password') {
@@ -66,7 +65,8 @@ export default async function proxy(request: NextRequest) {
   }
 
   // Rewrite internally to the dynamic [tenant] route folder
-  url.pathname = `/${subdomain}${pathname}`;
+  const cleanPathname = pathname === '/' ? '' : pathname;
+  url.pathname = `/${subdomain}${cleanPathname}`;
   const rewriteResponse = NextResponse.rewrite(url);
   rewriteResponse.headers.set('x-tenant-slug', subdomain);
 

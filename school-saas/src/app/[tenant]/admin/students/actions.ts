@@ -32,6 +32,7 @@ export async function addStudent(formData: FormData) {
       gender: (formData.get('gender') as string) || null,
       guardian_name: (formData.get('guardian_name') as string) || null,
       guardian_phone: (formData.get('guardian_phone') as string) || null,
+      avatar_url: (formData.get('avatar_url') as string) || null,
       is_active: true,
       admitted_at: new Date().toISOString(),
     })

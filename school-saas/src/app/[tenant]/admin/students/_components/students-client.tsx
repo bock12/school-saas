@@ -7,7 +7,7 @@ import { SearchInput } from '@/components/shared/search-input';
 import { Modal, ModalCancelButton, ModalSubmitButton } from '@/components/shared/modal';
 import {
   Users, Plus, Eye, Edit2, Download, Filter, Mail, Phone, User,
-  ChevronLeft, ChevronRight, MoreHorizontal, Trash2, BookOpen, Loader2,
+  ChevronLeft, ChevronRight, MoreHorizontal, Trash2, BookOpen, Loader2, Camera,
 } from 'lucide-react';
 import Link from 'next/link';
 import { addStudent } from '../actions';
@@ -25,6 +25,7 @@ export interface Student {
   guardian_phone: string | null;
   is_active: boolean;
   admitted_at: string;
+  avatar_url: string | null;
 }
 
 export interface ClassOption {
@@ -59,6 +60,18 @@ export function StudentsClient({
   // Form state
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatarUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const availableSections =
     classOptions.find((c) => c.id === selectedClassId)?.sections || [];
@@ -77,6 +90,7 @@ export function StudentsClient({
     setShowAddModal(false);
     setFormError(null);
     setSelectedClassId('');
+    setAvatarUrl(null);
   }
 
   function handleSubmit(formData: FormData) {
@@ -162,8 +176,12 @@ export function StudentsClient({
                   <tr key={student.id} className="border-b border-[hsl(var(--border)/0.5)] table-row-hover transition-colors">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${student.gender === 'female' ? 'bg-pink-500/15 text-pink-400' : 'bg-blue-500/15 text-blue-400'}`}>
-                          {student.first_name[0]}{student.last_name[0]}
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 overflow-hidden ${student.gender === 'female' ? 'bg-pink-500/15 text-pink-400' : 'bg-blue-500/15 text-blue-400'}`}>
+                          {student.avatar_url ? (
+                            <img src={student.avatar_url} alt={`${student.first_name} ${student.last_name}`} className="w-full h-full object-cover" />
+                          ) : (
+                            `${student.first_name[0]}${student.last_name[0]}`
+                          )}
                         </div>
                         <div>
                           <p className="text-sm font-medium text-[hsl(var(--text-primary))] whitespace-nowrap">{student.first_name} {student.last_name}</p>
@@ -252,6 +270,30 @@ export function StudentsClient({
               {formError}
             </div>
           )}
+          
+          <div className="flex flex-col sm:flex-row items-center gap-4 p-4 rounded-xl bg-[hsl(var(--bg-tertiary)/0.5)] border border-[hsl(var(--border))]">
+            <div className="relative w-20 h-20 rounded-full bg-[hsl(var(--bg-tertiary))] border border-dashed border-[hsl(var(--border))] flex flex-col items-center justify-center overflow-hidden group">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <>
+                  <Camera className="w-5 h-5 text-[hsl(var(--text-tertiary))] group-hover:scale-110 transition-transform" />
+                  <span className="text-[8px] text-[hsl(var(--text-tertiary))] mt-1 font-semibold uppercase tracking-wider">Photo</span>
+                </>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoUpload}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+            </div>
+            <div className="text-center sm:text-left">
+              <p className="text-sm font-semibold text-[hsl(var(--text-primary))]">Profile Picture</p>
+              <p className="text-[11px] text-[hsl(var(--text-tertiary))] mt-0.5">Optional. Max 2MB.</p>
+            </div>
+          </div>
+          <input type="hidden" name="avatar_url" value={avatarUrl || ''} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><label className={labelClass}>First Name *</label><input name="first_name" type="text" required placeholder="e.g., Amara" className={inputClass} /></div>
             <div><label className={labelClass}>Last Name *</label><input name="last_name" type="text" required placeholder="e.g., Johnson" className={inputClass} /></div>

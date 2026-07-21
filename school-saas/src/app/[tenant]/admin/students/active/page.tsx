@@ -56,9 +56,14 @@ export default function ActiveStudentsPage() {
               {filtered.map(student => (
                 <tr key={student.id} className="border-b border-[hsl(var(--border)/0.5)] table-row-hover transition-colors">
                   <td className="px-5 py-3.5">
-                    <div>
-                      <p className="text-sm font-semibold text-[hsl(var(--text-primary))]">{student.first_name} {student.last_name}</p>
-                      <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1"><Mail className="w-3 h-3 flex-shrink-0" />{student.email}</p>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-blue-500/15 text-blue-400`}>
+                        {student.first_name[0]}{student.last_name[0]}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[hsl(var(--text-primary))] whitespace-nowrap">{student.first_name} {student.last_name}</p>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1 whitespace-nowrap"><Mail className="w-3 h-3 flex-shrink-0" />{student.email}</p>
+                      </div>
                     </div>
                   </td>
                   <td className="px-5 py-3.5">
