@@ -58,19 +58,16 @@ export async function requireTenantRole(tenantSlug: string, allowedRoles?: Tenan
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect(`/login`);
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('id, full_name, role, tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError || !profile) {
-    await supabase.auth.signOut();
-    redirect(`/login`);
+  let profile: any = null;
+  let profileError: any = null;
+  if (user) {
+    const res = await supabase
+      .from('profiles')
+      .select('id, full_name, role, tenant_id, requires_password_change')
+      .eq('id', user.id)
+      .single();
+    profile = res.data;
+    profileError = res.error;
   }
 
   const { data: school } = await supabase
@@ -78,6 +75,20 @@ export async function requireTenantRole(tenantSlug: string, allowedRoles?: Tenan
     .select('id, name, type, primary_color, logo_url, parent_id')
     .eq('slug', tenantSlug)
     .single();
+
+  if (!user || profileError || !profile) {
+    if (user) {
+      await supabase.auth.signOut();
+    }
+    redirect(`/${tenantSlug}/login`);
+  }
+
+  // Force password reset pipeline
+  // Use root-relative /set-password because the app uses subdomain routing —
+  // the tenant is already in the subdomain, so we must NOT repeat it in the path.
+  if (profile.requires_password_change) {
+    redirect(`/set-password`);
+  }
 
   // ── Tenant isolation ─────────────────────────────────────────────────────
   // Access is allowed if:

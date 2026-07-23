@@ -42,9 +42,8 @@ export function SetPasswordForm({ tenantSlug, tenantName }: SetPasswordFormProps
     setLoading(true);
     setError(null);
 
-    const { error: updateError } = await supabase.auth.updateUser({
-      password,
-      data: { requires_password_change: null }
+    const { error: updateError, data: authData } = await supabase.auth.updateUser({
+      password
     });
 
     if (updateError) {
@@ -53,9 +52,14 @@ export function SetPasswordForm({ tenantSlug, tenantName }: SetPasswordFormProps
       return;
     }
 
+    if (authData.user) {
+      await supabase.from('profiles').update({ requires_password_change: false }).eq('id', authData.user.id);
+    }
+
     setSuccess(true);
     setTimeout(() => {
-      router.replace('/');
+      // Root-relative redirect — subdomain routing provides tenant context
+      router.replace('/dashboard');
     }, 2000);
   };
 

@@ -645,12 +645,26 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
                   <span className="text-[11px] text-[hsl(var(--text-secondary))] font-sans">
                     Use these credentials to log into the main SchoolSaaS Portal.
                   </span>
-                  <a
-                    href={`/login`}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 transition-all shadow-lg flex items-center gap-1.5"
-                  >
-                    Go to Portal Login Page ➔
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`/${tenantSlug}/student`}
+                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold hover:bg-indigo-600/30 transition-all"
+                    >
+                      Enter Student Workspace 🎓
+                    </a>
+                    <a
+                      href={`/${tenantSlug}/parent`}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold hover:bg-emerald-600/30 transition-all"
+                    >
+                      Enter Parent Workspace 👨‍👩‍👧
+                    </a>
+                    <a
+                      href={`/${tenantSlug}/login`}
+                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 transition-all shadow-lg"
+                    >
+                      Login Page ➔
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
