@@ -43,6 +43,7 @@ export async function createApplicant(formData: FormData) {
       parent_relation: formData.get('parent_relation') as string,
       avatar_url: (formData.get('avatar_url') as string) || null,
       stage: 'Application',
+      status: 'active',
     })
     .select('id')
     .single();
@@ -61,7 +62,8 @@ export async function progressApplicantStage(
   applicantId: string,
   fromStage: string,
   toStage: string,
-  comment: string
+  comment: string,
+  scores?: { interviewScore?: number | null; assessmentScore?: number | null; assessmentDetails?: any }
 ) {
   const supabase = await createClient();
 
@@ -91,9 +93,20 @@ export async function progressApplicantStage(
     }
   } else {
     // 1. Update applicant stage manually for non-allocation stages
+    const updatePayload: Record<string, any> = { stage: toStage, status: 'active' };
+    if (scores?.interviewScore !== undefined && scores?.interviewScore !== null) {
+      updatePayload.interview_score = scores.interviewScore;
+    }
+    if (scores?.assessmentScore !== undefined && scores?.assessmentScore !== null) {
+      updatePayload.assessment_score = scores.assessmentScore;
+    }
+    if (scores?.assessmentDetails !== undefined && scores?.assessmentDetails !== null) {
+      updatePayload.assessment_details = scores.assessmentDetails;
+    }
+
     const { error: updateError } = await supabase
       .from('applicants')
-      .update({ stage: toStage })
+      .update(updatePayload)
       .eq('id', applicantId)
       .eq('tenant_id', tenantData.id);
 
@@ -122,3 +135,328 @@ export async function progressApplicantStage(
   revalidatePath(`/${tenantSlug}/admin/students/admissions`);
   return { success: true };
 }
+
+export async function scheduleApplicantInterview(
+  tenantSlug: string,
+  applicantId: string,
+  interviewDate: string,
+  interviewLocation: string,
+  notes: string
+) {
+  const supabase = await createClient();
+
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('slug', tenantSlug)
+    .single();
+
+  if (!tenantData) {
+    return { success: false, error: 'Tenant not found.' };
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // 1. Update applicant's interview_date and interview_location
+  const { error: updateError } = await supabase
+    .from('applicants')
+    .update({
+      interview_date: interviewDate,
+      interview_location: interviewLocation,
+    })
+    .eq('id', applicantId)
+    .eq('tenant_id', tenantData.id);
+
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  // 2. Log in admission_history
+  const formattedDate = new Date(interviewDate).toLocaleString();
+  await supabase.from('admission_history').insert({
+    tenant_id: tenantData.id,
+    applicant_id: applicantId,
+    from_stage: 'Interview',
+    to_stage: 'Interview',
+    comment: `Interview scheduled for ${formattedDate} at ${interviewLocation || 'Main Campus'}. ${notes ? `Note: ${notes}` : ''}`,
+    created_by: user?.id || null,
+  });
+
+  revalidatePath(`/${tenantSlug}/admin/students/admissions`);
+  return { success: true };
+}
+
+export async function scheduleApplicantAssessment(
+  tenantSlug: string,
+  applicantId: string,
+  assessmentDate: string,
+  assessmentLocation: string,
+  notes: string
+) {
+  const supabase = await createClient();
+
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('slug', tenantSlug)
+    .single();
+
+  if (!tenantData) {
+    return { success: false, error: 'Tenant not found.' };
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // 1. Update applicant's assessment_date and assessment_location
+  const { error: updateError } = await supabase
+    .from('applicants')
+    .update({
+      assessment_date: assessmentDate,
+      assessment_location: assessmentLocation,
+    })
+    .eq('id', applicantId)
+    .eq('tenant_id', tenantData.id);
+
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  // 2. Log in admission_history
+  const formattedDate = new Date(assessmentDate).toLocaleString();
+  await supabase.from('admission_history').insert({
+    tenant_id: tenantData.id,
+    applicant_id: applicantId,
+    from_stage: 'Assessment',
+    to_stage: 'Assessment',
+    comment: `Entrance assessment scheduled for ${formattedDate} at ${assessmentLocation || 'Computer Lab, Main Campus'}. ${notes ? `Note: ${notes}` : ''}`,
+    created_by: user?.id || null,
+  });
+
+  revalidatePath(`/${tenantSlug}/admin/students/admissions`);
+  return { success: true };
+}
+
+export async function rejectApplicant(
+  tenantSlug: string,
+  applicantId: string,
+  rejectionReason: string
+) {
+  const supabase = await createClient();
+
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('slug', tenantSlug)
+    .single();
+
+  if (!tenantData) {
+    return { success: false, error: 'Tenant not found.' };
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // 1. Update applicant status and rejection_reason
+  const { error: updateError } = await supabase
+    .from('applicants')
+    .update({
+      status: 'rejected',
+      rejection_reason: rejectionReason,
+    })
+    .eq('id', applicantId)
+    .eq('tenant_id', tenantData.id);
+
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  // 2. Log in history
+  await supabase.from('admission_history').insert({
+    tenant_id: tenantData.id,
+    applicant_id: applicantId,
+    from_stage: 'Application',
+    to_stage: 'Rejected',
+    comment: `Rejected by Admin: ${rejectionReason}`,
+    created_by: user?.id || null,
+  });
+
+  revalidatePath(`/${tenantSlug}/admin/students/admissions`);
+  return { success: true };
+}
+
+export async function toggleApplicantDocsVerified(
+  tenantSlug: string,
+  applicantId: string,
+  verified: boolean
+) {
+  const supabase = await createClient();
+
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('slug', tenantSlug)
+    .single();
+
+  if (!tenantData) {
+    return { success: false, error: 'Tenant not found.' };
+  }
+
+  const { error } = await supabase
+    .from('applicants')
+    .update({ docs_verified: verified })
+    .eq('id', applicantId)
+    .eq('tenant_id', tenantData.id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/students/admissions`);
+  return { success: true };
+}
+
+export async function toggleApplicantFeeCleared(
+  tenantSlug: string,
+  applicantId: string,
+  cleared: boolean,
+  receiptNumber?: string,
+  paymentMethod?: string
+) {
+  const supabase = await createClient();
+
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('slug', tenantSlug)
+    .single();
+
+  if (!tenantData) {
+    return { success: false, error: 'Tenant not found.' };
+  }
+
+  const updatePayload: Record<string, any> = { payment_cleared: cleared };
+  if (receiptNumber) updatePayload.receipt_number = receiptNumber;
+  if (paymentMethod) updatePayload.payment_method = paymentMethod;
+
+  const { error } = await supabase
+    .from('applicants')
+    .update(updatePayload)
+    .eq('id', applicantId)
+    .eq('tenant_id', tenantData.id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/students/admissions`);
+  return { success: true };
+}
+
+export async function updateTenantBursarySettings(
+  tenantSlug: string,
+  settings: Record<string, any>
+) {
+  const supabase = await createClient();
+
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('slug', tenantSlug)
+    .single();
+
+  if (!tenantData) {
+    return { success: false, error: 'Tenant not found.' };
+  }
+
+  const { error } = await supabase
+    .from('tenants')
+    .update({ bursary_settings: settings })
+    .eq('id', tenantData.id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/students/admissions`);
+  revalidatePath(`/${tenantSlug}/apply/status`);
+  return { success: true };
+}
+
+export async function allocateAndMatriculateApplicant(
+  tenantSlug: string,
+  applicantId: string,
+  classArm: string,
+  studentIdNumber: string,
+  studentPasswordTemp?: string,
+  parentPasswordTemp?: string
+) {
+  const supabase = await createClient();
+
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('slug', tenantSlug)
+    .single();
+
+  if (!tenantData) {
+    return { success: false, error: 'Tenant not found.' };
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data: applicant } = await supabase
+    .from('applicants')
+    .select('*')
+    .eq('id', applicantId)
+    .single();
+
+  if (!applicant) {
+    return { success: false, error: 'Applicant record not found.' };
+  }
+
+  const matNumber = studentIdNumber || `STU-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+  const stuPass = studentPasswordTemp || 'Welcome2026!';
+  const parPass = parentPasswordTemp || 'Parent2026!';
+  const parentUser = applicant.parent_phone || applicant.parent_email || applicant.phone || 'parent@school.edu.sl';
+
+  const { error: updateError } = await supabase
+    .from('applicants')
+    .update({
+      stage: 'Allocation',
+      status: 'enrolled',
+      class_arm: classArm,
+      student_id_number: matNumber,
+      student_username: matNumber,
+      student_password_temp: stuPass,
+      parent_username: parentUser,
+      parent_password_temp: parPass,
+      account_provisioned: true,
+    })
+    .eq('id', applicantId)
+    .eq('tenant_id', tenantData.id);
+
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  await supabase.from('admission_history').insert({
+    tenant_id: tenantData.id,
+    applicant_id: applicantId,
+    from_stage: applicant.stage,
+    to_stage: 'Allocation',
+    comment: `Class Arm Allocated: ${classArm}. Student Matriculation No: ${matNumber}. Student & Parent Portal credentials provisioned. Welcome SMS dispatched to ${parentUser}.`,
+    created_by: user?.id || null,
+  });
+
+  revalidatePath(`/${tenantSlug}/admin/students/admissions`);
+  revalidatePath(`/${tenantSlug}/apply/status`);
+  return {
+    success: true,
+    classArm,
+    matriculationNo: matNumber,
+    studentUsername: matNumber,
+    studentPassword: stuPass,
+    parentUsername: parentUser,
+    parentPassword: parPass
+  };
+}
+

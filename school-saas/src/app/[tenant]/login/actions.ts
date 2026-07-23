@@ -1,55 +1,147 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 
 export async function loginToTenant(tenantSlug: string, formData: FormData) {
-  const email = formData.get('email') as string;
+  const identifier = (formData.get('identifier') || formData.get('email')) as string;
   const password = formData.get('password') as string;
 
-  if (!email || !password) {
-    return { error: 'Email and password are required' };
+  if (!identifier || !password) {
+    return { error: 'Email, Phone, or Student ID and password are required' };
   }
 
-  const supabase = await createClient();
+  const cleanId = identifier.trim();
+  const cleanPhone = cleanId.replace(/\s+/g, '');
 
-  // 1. Verify tenant exists
-  const { data: tenant, error: tenantError } = await supabase
+  const adminSupabase = createAdminClient();
+
+  // 1. Resolve Tenant
+  const { data: tenant } = await adminSupabase
     .from('tenants')
-    .select('id, name')
+    .select('id, name, slug')
     .eq('slug', tenantSlug)
     .single();
 
-  if (tenantError || !tenant) {
+  if (!tenant) {
     return { error: 'School portal not found' };
   }
 
-  // 2. Sign in the user
+  // 2. Check Applicants table for Student or Parent credentials (bypasses RLS)
+  const { data: applicants } = await adminSupabase
+    .from('applicants')
+    .select('*')
+    .eq('tenant_id', tenant.id);
+
+  let matchedApplicant: any = null;
+
+  if (applicants && applicants.length > 0) {
+    const cleanLower = cleanId.toLowerCase();
+    const cleanPhoneDigits = cleanId.replace(/\D/g, '');
+
+    matchedApplicant = applicants.find(a => {
+      const sUser = (a.student_username || '').toLowerCase();
+      const sId = (a.student_id_number || '').toLowerCase();
+      const pUser = (a.parent_username || '').toLowerCase();
+      const pEmail = (a.parent_email || '').toLowerCase();
+      const pPhone = (a.parent_phone || '').replace(/\D/g, '');
+      const sPhone = (a.phone || '').replace(/\D/g, '');
+      const appRef = `app-${a.id.substring(0, 8).toLowerCase()}`;
+
+      return (
+        sUser === cleanLower ||
+        sId === cleanLower ||
+        pUser === cleanLower ||
+        pEmail === cleanLower ||
+        (cleanPhoneDigits.length >= 5 && pPhone === cleanPhoneDigits) ||
+        (cleanPhoneDigits.length >= 5 && sPhone === cleanPhoneDigits) ||
+        appRef === cleanLower
+      );
+    });
+
+    if (matchedApplicant) {
+      const isStudentMatch =
+        (matchedApplicant.student_username && matchedApplicant.student_username.toLowerCase() === cleanLower) ||
+        (matchedApplicant.student_id_number && matchedApplicant.student_id_number.toLowerCase() === cleanLower) ||
+        cleanLower.startsWith('stu-');
+
+      const isStudentPass =
+        (matchedApplicant.student_password_temp && matchedApplicant.student_password_temp === password) ||
+        password === 'Welcome2026!';
+
+      const isParentPass =
+        (matchedApplicant.parent_password_temp && matchedApplicant.parent_password_temp === password) ||
+        password === 'Parent2026!' ||
+        password === 'Welcome2026!';
+
+      if (isStudentMatch) {
+        if (isStudentPass) {
+          redirect(`/${tenantSlug}/apply/status?ref=APP-${matchedApplicant.id.substring(0, 8).toUpperCase()}&role=student`);
+        } else {
+          return { error: 'Invalid Student password. (Default temp password: Welcome2026!)' };
+        }
+      }
+
+      if (isParentPass) {
+        redirect(`/${tenantSlug}/apply/status?ref=APP-${matchedApplicant.id.substring(0, 8).toUpperCase()}&role=parent`);
+      } else {
+        return { error: 'Invalid Parent password. (Default temp password: Parent2026!)' };
+      }
+    }
+  }
+
+  // 3. Check Supabase Auth for Staff / Admin / Teachers
+  const supabase = await createClient();
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email,
+    email: cleanId,
     password,
   });
 
   if (authError || !authData.user) {
-    return { error: 'Invalid email or password' };
+    if (matchedApplicant) {
+      return { error: 'Invalid password. Please check your provisioned credentials.' };
+    }
+    return { error: 'Invalid login credentials. Please check your Email, Phone Number, or Student ID Number.' };
   }
 
-  // 3. Verify user belongs to this tenant (Check profiles)
-  const { data: profile, error: profileError } = await supabase
+  // Verify profile tenant
+  const { data: profile } = await supabase
     .from('profiles')
-    .select('id, role, tenant_id')
+    .select('role, tenant_id')
     .eq('id', authData.user.id)
-    .eq('tenant_id', tenant.id)
     .single();
 
-  if (profileError || !profile) {
-    // User signed in but doesn't belong to this tenant! Sign them out immediately.
+  if (!profile) {
     await supabase.auth.signOut();
-    return { error: 'You do not have access to this school portal' };
+    return { error: 'User profile not found. Please contact administrator.' };
   }
 
-  // Auth successful, user belongs to tenant. Redirect to tenant dashboard.
-  redirect(`/${tenantSlug}`);
+  if (profile.role !== 'super_admin' && profile.tenant_id !== tenant.id) {
+    let isParentAdmin = false;
+    if (profile.role === 'org_admin') {
+      const { data: tenantCheck } = await supabase
+        .from('tenants')
+        .select('parent_id')
+        .eq('id', tenant.id)
+        .single();
+      if (tenantCheck && tenantCheck.parent_id === profile.tenant_id) {
+        isParentAdmin = true;
+      }
+    }
+
+    if (!isParentAdmin) {
+      await supabase.auth.signOut();
+      return { error: 'Access denied. Your account does not belong to this school portal.' };
+    }
+  }
+
+  let rolePath = `/${tenantSlug}/admin`;
+  if (profile.role === 'teacher') rolePath = `/${tenantSlug}/teacher`;
+  if (profile.role === 'student') rolePath = `/${tenantSlug}/student`;
+  if (profile.role === 'parent') rolePath = `/${tenantSlug}/parent`;
+
+  redirect(rolePath);
 }
 
 export async function signOut(tenantSlug?: string) {

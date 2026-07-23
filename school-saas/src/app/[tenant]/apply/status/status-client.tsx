@@ -1,8 +1,58 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, CheckCircle2, Clock, AlertCircle, Calendar, GraduationCap, User, FileText, ArrowRight } from 'lucide-react';
-import { lookupApplicationStatus } from '../actions';
+import { Search, CheckCircle2, Clock, AlertCircle, Calendar, GraduationCap, User, FileText, ArrowRight, RefreshCw, X, Upload, Award, FileCheck, Printer, ShieldCheck, DollarSign } from 'lucide-react';
+import { lookupApplicationStatus, resubmitApplication, acceptAdmissionOffer, uploadPaymentReceipt } from '../actions';
+
+function compressFileToBase64(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 1200;
+      const MAX_HEIGHT = 1200;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, width, height);
+
+      const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      resolve(compressedDataUrl);
+    };
+
+    img.onerror = () => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    };
+
+    img.src = url;
+  });
+}
 
 const STAGES = [
   { key: 'Application', label: 'Application Submitted', desc: 'Initial details received and queued for review.' },
@@ -20,6 +70,30 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
 
+  // Resubmission state
+  const [showResubmitModal, setShowResubmitModal] = useState(false);
+  const [parentNotesInput, setParentNotesInput] = useState('');
+  const [isSubmittingResubmit, setIsSubmittingResubmit] = useState(false);
+  const [resubmitDocs, setResubmitDocs] = useState<Array<{ type: string; name: string; url: string }>>([
+    { type: 'Birth Certificate', name: '', url: '' },
+    { type: 'Academic Transcript / Report Card', name: '', url: '' },
+    { type: 'Medical & Immunization Records', name: '', url: '' },
+  ]);
+
+  // Acceptance Modal state
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [signatureInput, setSignatureInput] = useState('');
+  const [termsAgreed, setTermsAgreed] = useState(false);
+  const [medicalAgreed, setMedicalAgreed] = useState(true);
+  const [mediaAgreed, setMediaAgreed] = useState(true);
+  const [isAccepting, setIsAccepting] = useState(false);
+  // Enrollment Upload Receipt state
+  const [receiptFileInput, setReceiptFileInput] = useState<string>('');
+  const [receiptMethod, setReceiptMethod] = useState('Mobile Money');
+  const [paymentPhoneInput, setPaymentPhoneInput] = useState('');
+  const [transactionIdInput, setTransactionIdInput] = useState('');
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -35,6 +109,42 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
       setResult(res);
     } else {
       setError(res.error || 'No matching application found.');
+    }
+  };
+
+  const handleDocFileUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const dataUrl = await compressFileToBase64(file);
+      setResubmitDocs((prev) => {
+        const updated = [...prev];
+        updated[index] = {
+          ...updated[index],
+          name: file.name,
+          url: dataUrl,
+        };
+        return updated;
+      });
+    }
+  };
+
+  const handleConfirmResubmit = async () => {
+    if (!result) return;
+    setIsSubmittingResubmit(true);
+    const activeDocs = resubmitDocs.filter((d) => d.url && d.name);
+    const res = await resubmitApplication(result.applicant.id, activeDocs, parentNotesInput.trim());
+    setIsSubmittingResubmit(false);
+
+    if (res.success) {
+      alert('Application resubmitted successfully! The school admissions team has been notified.');
+      setShowResubmitModal(false);
+      // Refresh status lookup
+      const refreshed = await lookupApplicationStatus(tenantSlug, query.trim());
+      if (refreshed.success) {
+        setResult(refreshed);
+      }
+    } else {
+      alert(res.error || 'Failed to resubmit application');
     }
   };
 
@@ -84,6 +194,468 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
       {/* Result Display */}
       {result && (
         <div className="space-y-8 animate-fade-in">
+          {/* Rejection Alert Banner */}
+          {result.applicant.status === 'rejected' && (
+            <div className="p-6 rounded-2xl bg-rose-500/10 border-2 border-rose-500/30 text-rose-500 space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2 font-bold text-lg">
+                  <AlertCircle className="w-6 h-6 shrink-0" />
+                  <span>Application Decision: Revision / Correction Requested</span>
+                </div>
+                <button
+                  onClick={() => setShowResubmitModal(true)}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 transition-colors flex items-center gap-2 shadow-md shadow-rose-600/20"
+                >
+                  <RefreshCw className="w-4 h-4" /> Provide Requirements &amp; Resubmit
+                </button>
+              </div>
+
+              <p className="text-sm text-rose-400 font-medium bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
+                Reason / Admin Note: <strong>{result.applicant.rejectionReason || 'Application requires revision or document update.'}</strong>
+              </p>
+
+              <p className="text-xs text-[hsl(var(--text-secondary))]">
+                Click the <strong>"Provide Requirements &amp; Resubmit"</strong> button above to upload clear documents or provide missing information directly to the admissions team.
+              </p>
+            </div>
+          )}
+
+          {/* Scheduled Interview Banner */}
+          {result.applicant.stage === 'Interview' && result.applicant.interviewDate && (
+            <div className="p-6 rounded-2xl bg-purple-500/10 border-2 border-purple-500/30 text-purple-400 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5 font-bold text-lg text-purple-300">
+                  <Calendar className="w-6 h-6 shrink-0 text-purple-400" />
+                  <span>Scheduled Student &amp; Parent Interview</span>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  📩 Email Notification Dispatched
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-purple-950/30 border border-purple-500/20 text-xs">
+                <div>
+                  <span className="text-[10px] text-purple-400 uppercase font-semibold block mb-0.5">Date &amp; Time</span>
+                  <p className="font-bold text-sm text-purple-200">
+                    {new Date(result.applicant.interviewDate).toLocaleString([], { dateStyle: 'full', timeStyle: 'short' })}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-purple-400 uppercase font-semibold block mb-0.5">Venue / Meeting Location</span>
+                  <p className="font-bold text-sm text-purple-200">
+                    {result.applicant.interviewLocation || 'Main Campus - Admissions Office'}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-purple-300/80">
+                Please ensure the applicant is accompanied by a parent/guardian and arrives 15 minutes prior to the scheduled time. An email notification has been dispatched to <strong>{result.applicant.parentName}</strong>.
+              </p>
+            </div>
+          )}
+
+          {/* Scheduled Assessment Exam Banner */}
+          {result.applicant.stage === 'Assessment' && result.applicant.assessmentDate && (
+            <div className="p-6 rounded-2xl bg-pink-500/10 border-2 border-pink-500/30 text-pink-400 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5 font-bold text-lg text-pink-300">
+                  <FileText className="w-6 h-6 shrink-0 text-pink-400" />
+                  <span>Scheduled Entrance Assessment Exam</span>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                  📩 Exam Confirmation Email Dispatched
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-pink-950/30 border border-pink-500/20 text-xs">
+                <div>
+                  <span className="text-[10px] text-pink-400 uppercase font-semibold block mb-0.5">Exam Date &amp; Time</span>
+                  <p className="font-bold text-sm text-pink-200">
+                    {new Date(result.applicant.assessmentDate).toLocaleString([], { dateStyle: 'full', timeStyle: 'short' })}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-pink-400 uppercase font-semibold block mb-0.5">Exam Center / Portal Venue</span>
+                  <p className="font-bold text-sm text-pink-200">
+                    {result.applicant.assessmentLocation || 'Computer Lab 2 - Main Science Complex'}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-pink-300/80">
+                Candidate must present reference code <strong>{result.applicant.referenceCode}</strong> and bring HB pencils and writing material. Entrance exam instructions have been emailed to <strong>{result.applicant.parentName}</strong>.
+              </p>
+            </div>
+          )}
+
+          {/* Official Admission Offer Letter Banner */}
+          {result.applicant.stage === 'Acceptance' && (
+            <div className="p-6 sm:p-8 rounded-2xl bg-emerald-500/10 border-2 border-emerald-500/30 text-emerald-400 space-y-4 animate-fade-in shadow-xl">
+              <div className="flex items-center justify-between flex-wrap gap-3 border-b border-emerald-500/20 pb-4">
+                <div className="flex items-center gap-3 font-bold text-xl text-emerald-300">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400">
+                    <Award className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3>Official Provisional Offer of Admission</h3>
+                    <p className="text-xs text-emerald-400/80 font-normal">Congratulations! Your application has been approved.</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {result.applicant.offerAccepted ? '✓ Offer Accepted' : '🎉 Offer Issued'}
+                </span>
+              </div>
+
+              {result.applicant.offerAccepted ? (
+                <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/30 space-y-2">
+                  <p className="text-xs font-bold text-emerald-300 flex items-center gap-2">
+                    <FileCheck className="w-4 h-4 text-emerald-400" /> Formal Offer Acceptance Confirmed
+                  </p>
+                  <p className="text-xs text-emerald-200/90">
+                    Admission offer accepted on <strong>{new Date(result.applicant.acceptedAt || Date.now()).toLocaleDateString()}</strong>.
+                  </p>
+                  <p className="text-[11px] text-emerald-300/80 italic font-mono">
+                    Signed by: &quot;{result.applicant.parentSignature || result.applicant.parentName}&quot;
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3 text-xs leading-relaxed text-emerald-200">
+                    <p>
+                      Dear <strong>{result.applicant.parentName}</strong>,
+                    </p>
+                    <p>
+                      We are pleased to inform you that <strong>{result.applicant.name}</strong> has been offered provisional admission into <strong>{result.applicant.targetGrade}</strong> at our institution for the upcoming academic session.
+                    </p>
+                    <p>
+                      Please review the offer details below and confirm acceptance before the enrollment deadline to reserve your candidate&apos;s placement.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/20 text-xs">
+                    <div>
+                      <span className="text-[10px] text-emerald-400 uppercase font-semibold block">Target Placement</span>
+                      <p className="font-bold text-emerald-200">{result.applicant.targetGrade}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-emerald-400 uppercase font-semibold block">Reference Code</span>
+                      <p className="font-bold text-emerald-200">{result.applicant.referenceCode}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-emerald-400 uppercase font-semibold block">Acceptance Deadline</span>
+                      <p className="font-bold text-emerald-200">August 15, 2026</p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-4 py-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] font-semibold text-xs hover:bg-[hsl(var(--border))] transition-colors flex items-center gap-1.5"
+                    >
+                      <Printer className="w-4 h-4 text-[hsl(var(--accent))]" /> Print / Save Letter (PDF)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAcceptModal(true);
+                        setSignatureInput(result.applicant?.parentName || '');
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-500 transition-colors shadow-lg flex items-center gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Formally Accept Offer &amp; Sign
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Enrollment Stage: Tuition Fee Settlement & Receipt Upload Banner */}
+          {result.applicant.stage === 'Enrollment' && (
+            <div className="p-6 sm:p-8 rounded-2xl bg-cyan-500/10 border-2 border-cyan-500/30 text-cyan-300 space-y-4 animate-fade-in shadow-xl">
+              <div className="flex items-center justify-between flex-wrap gap-3 border-b border-cyan-500/20 pb-4">
+                <div className="flex items-center gap-3 font-bold text-xl text-cyan-200">
+                  <div className="p-2 rounded-xl bg-cyan-500/20 border border-cyan-500/30 text-cyan-400">
+                    <DollarSign className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3>Enrollment &amp; Financial Fee Settlement</h3>
+                    <p className="text-xs text-cyan-400/80 font-normal">Bursary Clearance Milestone</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-200 border border-cyan-500/30">
+                  {result.applicant.paymentCleared ? '✓ Financial Fee Cleared' : 'Payment Required'}
+                </span>
+              </div>
+
+              {result.applicant.paymentCleared ? (
+                <div className="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/30 space-y-2">
+                  <p className="text-xs font-bold text-emerald-400 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> Bursary Financial Clearance Approved
+                  </p>
+                  <p className="text-xs text-cyan-200/90">
+                    Receipt Ref: <strong>{result.applicant.receiptNumber || 'REC-2026-9812'}</strong> | Method: <strong>{result.applicant.paymentMethod || 'Bank Transfer'}</strong>
+                  </p>
+                  <p className="text-[11px] text-cyan-300/80 italic">
+                    Candidate is fully cleared for Final Class Section Allocation.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4 text-xs">
+                  {(() => {
+                    const bs = (result as any).bursarySettings || {};
+                    const curr = bs.currency || 'SLE';
+                    const defaultFeeItems = [
+                      { name: 'Tuition & Academic Fee', amount: bs.tuitionFee ?? 4500 },
+                      { name: 'Registration & Portal Processing', amount: bs.registrationFee ?? 500 },
+                      { name: 'Learning Resources & Tech Kit', amount: bs.techKitFee ?? 800 },
+                    ];
+                    const feeItems = bs.feeItems && bs.feeItems.length > 0 ? bs.feeItems : defaultFeeItems;
+                    const totalPayable = feeItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+
+                    const bName = bs.bankName || 'Sierra Leone Commercial Bank (SLCB)';
+                    const bAccName = bs.accountName || 'Albert Academy Admissions Account';
+                    const bAccNo = bs.accountNumber || '0030010928371';
+                    const mProv = bs.mobileProviders || 'Orange Money / Africell Afrimoney';
+                    const mCode = bs.merchantCode || '88912';
+                    const mAccName = bs.mobileAccountName || 'Albert Academy Bursary';
+                    const mUssd = bs.ussdCode || `*144*3*${mCode}*${totalPayable}#`;
+                    const cBranch = bs.cashBranch || 'SLCB Freetown Main Branch (Cash Desk 3)';
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Invoice */}
+                        <div className="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/20 space-y-2">
+                          <h4 className="font-bold text-cyan-200 uppercase tracking-wider text-[11px]">Itemized Fee Invoice</h4>
+                          <div className="space-y-1">
+                            {feeItems.map((item: any, idx: number) => (
+                              <div key={idx} className="flex justify-between">
+                                <span>{item.name}:</span>
+                                <span className="font-bold">{curr} {(Number(item.amount) || 0).toLocaleString()}</span>
+                              </div>
+                            ))}
+                            <div className="pt-2 border-t border-cyan-500/20 flex justify-between font-bold text-sm text-cyan-200">
+                              <span>Total Payable:</span><span>{curr} {totalPayable.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Dynamic Deposit Details Card */}
+                        <div className="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/20 space-y-2">
+                          <h4 className="font-bold text-cyan-200 uppercase tracking-wider text-[11px]">
+                            {receiptMethod === 'Mobile Money' ? '📱 Mobile Money Merchant Details' : receiptMethod === 'Cash Deposit' ? '🏢 Bank Cash Desk Details' : '🏛️ Bank Transfer Details'}
+                          </h4>
+
+                          {receiptMethod === 'Mobile Money' ? (
+                            <div className="space-y-1 text-[11px]">
+                              <p><strong>Providers:</strong> {mProv}</p>
+                              <p><strong>Merchant ID / Code:</strong> <span className="font-mono text-cyan-200 font-bold bg-cyan-500/20 px-1.5 py-0.5 rounded">{mCode}</span></p>
+                              <p><strong>Account Name:</strong> {mAccName}</p>
+                              <p><strong>USSD Quick Dial:</strong> <span className="font-mono text-emerald-400 font-bold">{mUssd}</span></p>
+                              <p><strong>Payment Ref:</strong> <span className="font-mono text-cyan-200 font-bold">{result.applicant.referenceCode}</span></p>
+                            </div>
+                          ) : receiptMethod === 'Cash Deposit' ? (
+                            <div className="space-y-1 text-[11px]">
+                              <p><strong>Bank:</strong> {bName}</p>
+                              <p><strong>Branch / Location:</strong> {cBranch}</p>
+                              <p><strong>Account Name:</strong> {bAccName}</p>
+                              <p><strong>Account No:</strong> {bAccNo}</p>
+                              <p><strong>Payment Ref:</strong> <span className="font-mono text-cyan-200 font-bold">{result.applicant.referenceCode}</span></p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1 text-[11px]">
+                              <p><strong>Bank:</strong> {bName}</p>
+                              <p><strong>Account Name:</strong> {bAccName}</p>
+                              <p><strong>Account No:</strong> {bAccNo}</p>
+                              <p><strong>Payment Ref:</strong> <span className="font-mono text-cyan-200 font-bold">{result.applicant.referenceCode}</span></p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Upload Receipt Form */}
+                  <div className="p-4 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] space-y-3">
+                    <h4 className="font-bold text-[hsl(var(--text-primary))] text-xs uppercase tracking-wider flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-cyan-400" /> Upload Payment Receipt / Proof of Payment
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] text-[hsl(var(--text-secondary))] font-semibold mb-1">Payment Method</label>
+                        <select
+                          value={receiptMethod}
+                          onChange={(e) => setReceiptMethod(e.target.value)}
+                          className="w-full h-9 px-2.5 rounded-lg bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))]"
+                        >
+                          <option value="Mobile Money">Mobile Money Transfer (Orange / Africell)</option>
+                          <option value="Bank Transfer">Bank Transfer / Teller</option>
+                          <option value="Cash Deposit">Bank Cash Deposit</option>
+                          <option value="Cash (In-Person Cash Desk)">School Accounts Desk (In-Person Cash)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-[hsl(var(--text-secondary))] font-semibold mb-1">
+                          {receiptMethod === 'Mobile Money' ? 'Sender Phone Number *' : 'Depositor Phone Number'}
+                        </label>
+                        <input
+                          type="tel"
+                          value={paymentPhoneInput}
+                          onChange={(e) => setPaymentPhoneInput(e.target.value)}
+                          placeholder="e.g. +232 76 123456"
+                          className="w-full h-9 px-2.5 rounded-lg bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs font-mono font-bold text-[hsl(var(--text-primary))]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-[hsl(var(--text-secondary))] font-semibold mb-1">
+                          {receiptMethod === 'Mobile Money' ? 'Transaction ID / TxID *' : 'Teller / Receipt Reference No.'}
+                        </label>
+                        <input
+                          type="text"
+                          value={transactionIdInput}
+                          onChange={(e) => setTransactionIdInput(e.target.value)}
+                          placeholder="e.g. MP260722.0912.A89102"
+                          className="w-full h-9 px-2.5 rounded-lg bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs font-mono font-bold text-[hsl(var(--text-primary))]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-[hsl(var(--text-secondary))] font-semibold mb-1">Receipt Image / Slip Upload</label>
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const compressed = await compressFileToBase64(file);
+                              setReceiptFileInput(compressed);
+                            }
+                          }}
+                          className="w-full text-xs text-[hsl(var(--text-secondary))] file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-500/20 file:text-cyan-300"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      {result.applicant.paymentReceiptUrl ? (
+                        <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Proof of Payment Uploaded &amp; Under Review
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-[hsl(var(--text-tertiary))]">
+                          Attach receipt image or bank slip scan.
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!receiptFileInput && !transactionIdInput && !result.applicant.paymentReceiptUrl) {
+                            alert('Please provide transaction ID or select a receipt file to upload.');
+                            return;
+                          }
+                          setIsUploadingReceipt(true);
+                          const urlToSave = receiptFileInput || result.applicant.paymentReceiptUrl || '';
+                          const res = await uploadPaymentReceipt(result.applicant.id, urlToSave, receiptMethod, paymentPhoneInput, transactionIdInput);
+                          setIsUploadingReceipt(false);
+                          if (res.success) {
+                            setResult((prev: any) => prev ? {
+                              ...prev,
+                              applicant: {
+                                ...prev.applicant,
+                                paymentReceiptUrl: urlToSave,
+                                paymentMethod: receiptMethod,
+                                paymentPhone: paymentPhoneInput,
+                                transactionId: transactionIdInput
+                              }
+                            } : null);
+                            alert('Payment proof details uploaded successfully! Sent to Bursary for clearance.');
+                          } else {
+                            alert(res.error || 'Failed to upload receipt');
+                          }
+                        }}
+                        disabled={isUploadingReceipt}
+                        className="px-4 py-2 rounded-lg bg-cyan-600 text-white font-bold text-xs hover:bg-cyan-500 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                      >
+                        {isUploadingReceipt ? 'Uploading...' : 'Submit Payment Proof'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Stage 7 Allocation: Final Class Arm & Portal Credentials Certificate */}
+          {(result.applicant.stage === 'Allocation' || result.applicant.classArm) && (
+            <div className="p-6 sm:p-8 rounded-2xl bg-indigo-500/10 border-2 border-indigo-500/30 text-indigo-300 space-y-5 animate-fade-in shadow-2xl">
+              <div className="flex items-center justify-between flex-wrap gap-3 border-b border-indigo-500/20 pb-4">
+                <div className="flex items-center gap-3 font-bold text-xl text-indigo-200">
+                  <div className="p-2.5 rounded-xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-400">
+                    <GraduationCap className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3>Final Matriculation &amp; Class Arm Allocation</h3>
+                    <p className="text-xs text-indigo-400 font-normal">Congratulations! Student Enrolled &amp; Portal Credentials Active</p>
+                  </div>
+                </div>
+                <span className="px-3.5 py-1 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  <CheckCircle2 className="w-4 h-4" /> Enrolled Student
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/30 space-y-1">
+                  <span className="text-[10px] text-indigo-400 font-semibold uppercase block">Assigned Class Arm</span>
+                  <p className="font-extrabold text-indigo-100 text-base">{result.applicant.classArm || `${result.applicant.targetGrade} Gold`}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/30 space-y-1">
+                  <span className="text-[10px] text-indigo-400 font-semibold uppercase block">Matriculation / Student ID</span>
+                  <p className="font-extrabold text-indigo-100 font-mono text-sm">{result.applicant.studentIdNumber || `STU-2026-0891`}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/30 space-y-1">
+                  <span className="text-[10px] text-indigo-400 font-semibold uppercase block">Account Status</span>
+                  <p className="font-extrabold text-emerald-400 text-sm">✓ Portal Accounts Provisioned</p>
+                </div>
+              </div>
+
+              {/* Portal Login Credentials Box */}
+              <div className="p-5 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] space-y-3">
+                <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-xs uppercase tracking-wider flex items-center gap-2">
+                  🔐 Student &amp; Parent Portal Login Credentials
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
+                  <div className="p-3.5 rounded-lg bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] space-y-1">
+                    <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-sans font-bold uppercase block">Student Login Account</span>
+                    <p>Username / ID: <strong className="text-indigo-300">{result.applicant.studentUsername || result.applicant.studentIdNumber || 'STU-2026-0891'}</strong></p>
+                    <p>Default Password: <strong className="text-[hsl(var(--text-primary))]">{result.applicant.studentPasswordTemp || 'Welcome2026!'}</strong></p>
+                  </div>
+                  <div className="p-3.5 rounded-lg bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] space-y-1">
+                    <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-sans font-bold uppercase block">Parent Login Account</span>
+                    <p>Username / Mobile: <strong className="text-indigo-300">{result.applicant.parentUsername || result.applicant.parentPhone || '+232 76 123456'}</strong></p>
+                    <p>Default Password: <strong className="text-[hsl(var(--text-primary))]">{result.applicant.parentPasswordTemp || 'Parent2026!'}</strong></p>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-[11px] text-[hsl(var(--text-secondary))] font-sans">
+                    Use these credentials to log into the main SchoolSaaS Portal.
+                  </span>
+                  <a
+                    href={`/login`}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 transition-all shadow-lg flex items-center gap-1.5"
+                  >
+                    Go to Portal Login Page ➔
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Summary Banner */}
           <div className="glass-card p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-2">
@@ -122,7 +694,6 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
               {STAGES.map((stage, idx) => {
                 const isCompleted = idx < currentStageIndex;
                 const isCurrent = idx === currentStageIndex;
-                const isPending = idx > currentStageIndex;
 
                 return (
                   <div key={stage.key} className="relative flex items-start gap-4 pl-6 group">
@@ -132,7 +703,9 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
                         isCompleted
                           ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
                           : isCurrent
-                          ? 'bg-[hsl(var(--accent))] text-white shadow-lg shadow-[hsl(var(--accent)/0.3)] ring-4 ring-[hsl(var(--accent)/0.15)] animate-pulse'
+                          ? result.applicant.status === 'rejected'
+                            ? 'bg-rose-500 text-white shadow-lg ring-4 ring-rose-500/20'
+                            : 'bg-[hsl(var(--accent))] text-white shadow-lg shadow-[hsl(var(--accent)/0.3)] ring-4 ring-[hsl(var(--accent)/0.15)] animate-pulse'
                           : 'bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-tertiary))] border border-[hsl(var(--border))]'
                       }`}
                     >
@@ -158,7 +731,12 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
                         >
                           {stage.label}
                         </h5>
-                        {isCurrent && (
+                        {isCurrent && result.applicant.status === 'rejected' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-extrabold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                            Correction Needed
+                          </span>
+                        )}
+                        {isCurrent && result.applicant.status !== 'rejected' && (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-extrabold bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.2)]">
                             In Progress
                           </span>
@@ -174,6 +752,258 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resubmission / Document Upload Modal */}
+      {showResubmitModal && result && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="glass-card max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 sm:p-8 space-y-6">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-[hsl(var(--text-primary))]">Provide Requirements &amp; Resubmit</h3>
+                <p className="text-xs text-[hsl(var(--text-secondary))] mt-0.5">
+                  Update documents for <strong>{result.applicant.name}</strong> ({result.applicant.referenceCode}).
+                </p>
+              </div>
+              <button
+                onClick={() => setShowResubmitModal(false)}
+                className="p-2 rounded-lg text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Admin Note Box */}
+            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4" /> Requested Revision from School:
+              </p>
+              <p className="text-rose-400 font-medium">
+                {result.applicant.rejectionReason || 'Please upload the requested missing or updated documents.'}
+              </p>
+            </div>
+
+            {/* Document Upload Options */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-[hsl(var(--accent))] uppercase tracking-wider">
+                Upload Required / Corrected Documents
+              </h4>
+
+              <div className="space-y-3">
+                {resubmitDocs.map((doc, idx) => (
+                  <div key={doc.type} className="p-3.5 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-bold text-[hsl(var(--text-primary))]">{doc.type}</p>
+                      <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5 truncate max-w-[200px]">
+                        {doc.name ? doc.name : 'No file selected yet'}
+                      </p>
+                    </div>
+
+                    <div className="relative">
+                      <button
+                        type="button"
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                          doc.name
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : 'bg-[hsl(var(--bg-primary))] border-[hsl(var(--border))] text-[hsl(var(--text-primary))] hover:border-[hsl(var(--accent))]'
+                        }`}
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {doc.name ? 'Change File' : 'Upload'}
+                      </button>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={(e) => handleDocFileUpload(idx, e)}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Parent Notes */}
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-[hsl(var(--text-secondary))]">
+                Optional Message for Admissions Board
+              </label>
+              <textarea
+                value={parentNotesInput}
+                onChange={(e) => setParentNotesInput(e.target.value)}
+                placeholder="e.g. Attached clear scan of Birth Certificate as requested..."
+                className="w-full min-h-[80px] p-2.5 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+              />
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[hsl(var(--border))]">
+              <button
+                onClick={() => setShowResubmitModal(false)}
+                disabled={isSubmittingResubmit}
+                className="px-4 py-2 rounded-lg border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmResubmit}
+                disabled={isSubmittingResubmit}
+                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-bold text-xs hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSubmittingResubmit ? 'Resubmitting...' : 'Confirm & Send to Admin'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Electronic Offer Acceptance Modal */}
+      {showAcceptModal && result && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="glass-card max-w-xl w-full p-6 sm:p-8 space-y-5 border border-[hsl(var(--border))] max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+              <h3 className="text-lg font-bold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                <Award className="w-5 h-5 text-emerald-400" /> Formal Admission Offer Acceptance
+              </h3>
+              <button onClick={() => setShowAcceptModal(false)} className="p-1 text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Candidate summary */}
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 space-y-1">
+              <p>
+                Candidate: <strong>{result.applicant.name}</strong> ({result.applicant.targetGrade})
+              </p>
+              <p>
+                Reference Code: <strong>{result.applicant.referenceCode}</strong>
+              </p>
+            </div>
+
+            {/* Financial Commitment Preview Table */}
+            <div className="p-4 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] space-y-2">
+              <h4 className="text-xs font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5 uppercase tracking-wider">
+                <DollarSign className="w-4 h-4 text-emerald-400" /> Financial Fee Commitment Preview
+              </h4>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center justify-between text-[hsl(var(--text-secondary))]">
+                  <span>Tuition &amp; Academic Fee:</span>
+                  <span className="font-mono font-bold text-[hsl(var(--text-primary))]">SLE 4,500</span>
+                </div>
+                <div className="flex items-center justify-between text-[hsl(var(--text-secondary))]">
+                  <span>Registration &amp; Portal Processing:</span>
+                  <span className="font-mono font-bold text-[hsl(var(--text-primary))]">SLE 500</span>
+                </div>
+                <div className="flex items-center justify-between text-[hsl(var(--text-secondary))]">
+                  <span>Learning Resources &amp; Tech Kit:</span>
+                  <span className="font-mono font-bold text-[hsl(var(--text-primary))]">SLE 800</span>
+                </div>
+                <div className="pt-2 border-t border-[hsl(var(--border))] flex items-center justify-between text-sm font-bold text-emerald-400">
+                  <span>Total Due Upon Enrollment:</span>
+                  <span className="font-mono">SLE 5,800</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Policy Consent Checklist */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5 uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" /> Institution Policy Consents
+              </h4>
+
+              <div className="space-y-2.5 text-xs text-[hsl(var(--text-secondary))]">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={termsAgreed}
+                    onChange={(e) => setTermsAgreed(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-[hsl(var(--border))] text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>
+                    <strong>Code of Conduct:</strong> I agree to the institution&apos;s academic standards and student behavior policy.
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={medicalAgreed}
+                    onChange={(e) => setMedicalAgreed(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-[hsl(var(--border))] text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>
+                    <strong>Emergency Health Consent:</strong> I authorize first-aid treatment in emergency medical situations.
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={mediaAgreed}
+                    onChange={(e) => setMediaAgreed(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-[hsl(var(--border))] text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>
+                    <strong>Media Release:</strong> Consent for candidate photo inclusion in school annual yearbooks &amp; newsletters.
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Digital Signature */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-[hsl(var(--text-secondary))]">
+                Parent / Guardian Electronic Signature *
+              </label>
+              <input
+                type="text"
+                value={signatureInput}
+                onChange={(e) => setSignatureInput(e.target.value)}
+                placeholder="Type full legal name as digital signature..."
+                className="w-full h-10 px-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs font-mono font-bold text-[hsl(var(--text-primary))] focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[hsl(var(--border))]">
+              <button
+                type="button"
+                onClick={() => setShowAcceptModal(false)}
+                disabled={isAccepting}
+                className="px-4 py-2 rounded-lg border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--text-secondary))]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!signatureInput.trim() || !termsAgreed) return;
+                  setIsAccepting(true);
+                  const res = await acceptAdmissionOffer(result.applicant.id, signatureInput.trim());
+                  setIsAccepting(false);
+                  if (res.success) {
+                    setShowAcceptModal(false);
+                    setResult((prev: any) => prev ? {
+                      ...prev,
+                      applicant: {
+                        ...prev.applicant,
+                        offerAccepted: true,
+                        acceptedAt: new Date().toISOString(),
+                        parentSignature: signatureInput.trim(),
+                      }
+                    } : null);
+                    alert(`Admission offer for ${result.applicant.name} has been formally accepted!`);
+                  } else {
+                    alert(res.error || 'Failed to submit acceptance');
+                  }
+                }}
+                disabled={isAccepting || !signatureInput.trim() || !termsAgreed}
+                className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                {isAccepting ? 'Submitting...' : 'Confirm Digital Acceptance'}
+              </button>
             </div>
           </div>
         </div>

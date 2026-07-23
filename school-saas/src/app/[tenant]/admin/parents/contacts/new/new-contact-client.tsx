@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Building2, User, Phone, Mail, MapPin, Search } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { createParent } from '../actions';
+import { createParent } from '../../actions';
 
 export function NewContactClient({ tenant, students }: { tenant: string, students: any[] }) {
   const router = useRouter();

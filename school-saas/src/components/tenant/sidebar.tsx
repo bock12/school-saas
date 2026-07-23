@@ -272,7 +272,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
     {
       label: 'Finance & HR',
       items: [
-        { label: 'Finance', href: `${basePath}/finance`, icon: DollarSign },
+        { label: 'Bursary & Finance', href: `${basePath}/bursary`, icon: DollarSign },
         { label: 'Human Resources', href: `${basePath}/hr`, icon: UserCog },
       ],
     },

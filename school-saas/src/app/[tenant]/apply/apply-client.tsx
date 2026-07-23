@@ -4,6 +4,56 @@ import { useState } from 'react';
 import { Camera, CheckCircle2 } from 'lucide-react';
 import { submitPublicApplication } from './actions';
 
+function compressFileToBase64(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 1200;
+      const MAX_HEIGHT = 1200;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, width, height);
+
+      const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      resolve(compressedDataUrl);
+    };
+
+    img.onerror = () => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    };
+
+    img.src = url;
+  });
+}
+
 export function ApplyClient({ tenantSlug, schoolName }: { tenantSlug: string, schoolName: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -27,14 +77,33 @@ export function ApplyClient({ tenantSlug, schoolName }: { tenantSlug: string, sc
     photo: ''
   });
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [documents, setDocuments] = useState<Array<{ type: string; name: string; url: string }>>([
+    { type: 'Birth Certificate', name: '', url: '' },
+    { type: 'Academic Transcript / Report Card', name: '', url: '' },
+    { type: 'Medical & Immunization Records', name: '', url: '' },
+  ]);
+
+  const handleDocumentFileUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, photo: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      const dataUrl = await compressFileToBase64(file);
+      setDocuments(prev => {
+        const updated = [...prev];
+        updated[index] = {
+          ...updated[index],
+          name: file.name,
+          url: dataUrl,
+        };
+        return updated;
+      });
+    }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const dataUrl = await compressFileToBase64(file);
+      setFormData(prev => ({ ...prev, photo: dataUrl }));
     }
   };
 
@@ -64,6 +133,9 @@ export function ApplyClient({ tenantSlug, schoolName }: { tenantSlug: string, sc
     formDataObj.append('parent_email', formData.parentEmail);
     formDataObj.append('parent_relation', formData.parentRelation);
     
+    const activeDocs = documents.filter(d => d.url && d.name);
+    formDataObj.append('documents', JSON.stringify(activeDocs));
+
     if (formData.photo) {
       formDataObj.append('avatar_url', ''); 
     }
@@ -360,6 +432,49 @@ export function ApplyClient({ tenantSlug, schoolName }: { tenantSlug: string, sc
                 className="w-full h-11 px-4 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
               />
             </div>
+          </div>
+        </div>
+
+        {/* Required Documents Upload */}
+        <div className="space-y-4 pt-4 border-t border-[hsl(var(--border))]">
+          <h3 className="text-sm font-bold text-[hsl(var(--accent))] uppercase tracking-wider flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-[hsl(var(--accent)/0.1)] flex items-center justify-center text-xs">5</span> 
+            Required Supporting Documents
+          </h3>
+          <p className="text-xs text-[hsl(var(--text-secondary))]">
+            Upload clear copies of the student's documents (PDF, PNG, JPG - Max 5MB per file).
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {documents.map((doc, idx) => (
+              <div key={doc.type} className="p-4 rounded-xl bg-[hsl(var(--bg-tertiary)/0.5)] border border-[hsl(var(--border))] space-y-3">
+                <div>
+                  <h4 className="text-xs font-bold text-[hsl(var(--text-primary))]">{doc.type}</h4>
+                  <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">
+                    {doc.name ? doc.name : 'No file selected'}
+                  </p>
+                </div>
+                
+                <div className="relative">
+                  <button
+                    type="button"
+                    className={`w-full py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${
+                      doc.name
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : 'bg-[hsl(var(--bg-tertiary))] border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--border))]'
+                    }`}
+                  >
+                    {doc.name ? 'Change Document' : 'Choose File'}
+                  </button>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => handleDocumentFileUpload(idx, e)}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

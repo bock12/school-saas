@@ -4,6 +4,7 @@ import { Shield, Mail, Lock, ArrowRight, Loader2, AlertCircle, Sparkles, CheckCi
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, Suspense } from 'react';
+import { loginToTenant } from './actions';
 
 export function TenantLoginForm({
   tenantSlug,
@@ -15,7 +16,7 @@ export function TenantLoginForm({
   schoolId: string;
 }) {
   const [mode, setMode] = useState<'password' | 'magic_link'>('password');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -43,78 +44,22 @@ export function TenantLoginForm({
     setError(null);
     setSuccessMsg(null);
 
-    const nextPath = `/`;
-
     if (mode === 'password') {
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const formData = new FormData();
+      formData.append('identifier', identifier);
+      formData.append('password', password);
 
-      if (authError) {
-        setError(authError.message);
+      const res = await loginToTenant(tenantSlug, formData);
+      if (res?.error) {
+        setError(res.error);
         setLoading(false);
-        return;
       }
-
-      if (!authData.user) {
-        setError('Authentication failed. Please try again.');
-        setLoading(false);
-        return;
-      }
-
-      // Fetch user profile to verify tenant access immediately (prevents flicker)
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role, tenant_id')
-        .eq('id', authData.user.id)
-        .single();
-
-      if (profileError || !profile) {
-        setError('User profile not found. Contact your administrator.');
-        setLoading(false);
-        return;
-      }
-
-      if (profile.role !== 'super_admin' && profile.tenant_id !== schoolId) {
-        // If they don't match exactly, check if they are an org_admin of the parent organization
-        let isParentAdmin = false;
-        if (profile.role === 'org_admin') {
-          const { data: tenantCheck } = await supabase
-            .from('tenants')
-            .select('parent_id')
-            .eq('id', schoolId)
-            .single();
-            
-          if (tenantCheck && tenantCheck.parent_id === profile.tenant_id) {
-            isParentAdmin = true;
-          }
-        }
-
-        if (!isParentAdmin) {
-          await supabase.auth.signOut();
-          setError('Access denied. Your account does not belong to this school portal.');
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Success - Redirect based on role
-      let rolePath = '/admin';
-      if (profile.role === 'teacher') rolePath = '/teacher';
-      if (profile.role === 'student') rolePath = '/student';
-      if (profile.role === 'parent') rolePath = '/parent';
-      
-      const nextPath = rolePath;
-      router.push(nextPath);
-      router.refresh();
     } else {
       // Magic Link Login
-      // For magic links, we just send them to the root path, and let `page.tsx` redirect them
       const nextPath = '/';
       const redirectTo = `${window.location.origin}/api/auth/callback?next=${nextPath}`;
       const { error: authError } = await supabase.auth.signInWithOtp({
-        email,
+        email: identifier,
         options: {
           emailRedirectTo: redirectTo,
         },
@@ -207,7 +152,7 @@ export function TenantLoginForm({
             <div className="flex-grow border-t border-[hsl(var(--border))]"></div>
           </div>
 
-          {/* Mode Toggle */}
+          {/* Mode Toggle (Password / Magic Link) */}
           <div className="flex p-1 bg-[hsl(var(--bg-tertiary))] rounded-lg">
             <button
               type="button"
@@ -235,23 +180,25 @@ export function TenantLoginForm({
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-[hsl(var(--text-secondary))] mb-1.5">Email Address</label>
+              <label className="block text-xs font-semibold text-[hsl(var(--text-secondary))] mb-1.5">
+                Email, Phone Number, or Student ID
+              </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-tertiary))]" />
                 <input
-                  type="email"
+                  type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@school.edu"
-                  className="w-full h-10 pl-10 pr-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="e.g. STU-2026-1760, +232 76 123456, or admin@school.edu.sl"
+                  className="w-full h-10 pl-10 pr-3 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-medium text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                 />
               </div>
             </div>
 
             {mode === 'password' && (
               <div>
-                <label className="block text-xs font-medium text-[hsl(var(--text-secondary))] mb-1.5">Password</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--text-secondary))] mb-1.5">Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-tertiary))]" />
                   <input

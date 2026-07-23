@@ -52,20 +52,30 @@ export default async function proxy(request: NextRequest) {
   }
 
   // ── 5. Tenant school subdomains (greenwood.yoursaas.com) ───────
+  // Normalize pathname: if pathname already begins with /${subdomain}, strip it to prevent URL duplication
+  let cleanPathname = pathname;
+  if (subdomain && cleanPathname.startsWith(`/${subdomain}`)) {
+    cleanPathname = cleanPathname.substring(subdomain.length + 1);
+  }
+  if (cleanPathname === '/' || !cleanPathname) {
+    cleanPathname = '';
+  }
+
+  const checkPath = cleanPathname || '/';
+
   // Enforce edge protection: Only allow /login, /apply routes, or / if unauthenticated
-  if (!user && pathname !== '/login' && !pathname.startsWith('/apply') && pathname !== '/') {
+  if (!user && checkPath !== '/login' && !checkPath.startsWith('/apply') && checkPath !== '/') {
     return NextResponse.redirect(new URL('/login', request.url));
   }
-  if (user && pathname === '/login') {
+  if (user && checkPath === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  if (user && user.user_metadata?.requires_password_change && pathname !== '/set-password') {
+  if (user && user.user_metadata?.requires_password_change && checkPath !== '/set-password') {
     return NextResponse.redirect(new URL('/set-password', request.url));
   }
 
   // Rewrite internally to the dynamic [tenant] route folder
-  const cleanPathname = pathname === '/' ? '' : pathname;
   url.pathname = `/${subdomain}${cleanPathname}`;
   const rewriteResponse = NextResponse.rewrite(url);
   rewriteResponse.headers.set('x-tenant-slug', subdomain);
