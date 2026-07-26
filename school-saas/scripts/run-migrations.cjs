@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Client } = require('pg');
-require('dotenv').config({ path: '.env.local' });
+try { require('dotenv').config({ path: '.env.local' }); } catch (e) {}
 
 async function runMigrations() {
   console.log('Connecting to database...');

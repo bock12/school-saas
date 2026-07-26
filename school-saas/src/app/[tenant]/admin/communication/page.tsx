@@ -14,14 +14,15 @@ export default function CommunicationDashboard() {
   const tenant = params.tenant as string;
 
   const quickActions = [
-    { label: 'Send SMS', desc: 'Urgent announcements', href: '/admin/communication/sms', icon: Phone },
-    { label: 'Send Email', desc: 'HTML newsletters or reports', href: '/admin/communication/email', icon: Mail },
-    { label: 'Broadcast Announcement', desc: 'Target grade/class levels', href: '/admin/communication/broadcasts', icon: Megaphone, primary: true },
-    { label: 'Create Notice', desc: 'Post to bulletin notice board', href: '/admin/communication/notice-board', icon: ClipboardList },
-    { label: 'Schedule Message', desc: 'PTA/Invoices reminders queue', href: '/admin/communication/scheduled', icon: Clock },
-    { label: 'Send Emergency Alert', desc: 'High-priority closure notices', href: '/admin/communication/emergency', icon: AlertTriangle, danger: true },
-    { label: 'Create Template', desc: 'Placeholder-based library', href: '/admin/communication/templates', icon: FileText },
-    { label: 'View Delivery Reports', desc: 'Open rates & logs analytics', href: '/admin/communication/delivery-reports', icon: BarChart3 }
+    { label: '💬 Direct Messaging & Chat', desc: 'Real-time DMs and group chats with staff, parents & students', href: `/${tenant}/admin/communication/internal`, icon: MessageSquare, primary: true },
+    { label: 'Send SMS', desc: 'Urgent announcements', href: `/${tenant}/admin/communication/sms`, icon: Phone },
+    { label: 'Send Email', desc: 'HTML newsletters or reports', href: `/${tenant}/admin/communication/email`, icon: Mail },
+    { label: 'Broadcast Announcement', desc: 'Target grade/class levels', href: `/${tenant}/admin/communication/broadcasts`, icon: Megaphone },
+    { label: 'Create Notice', desc: 'Post to bulletin notice board', href: `/${tenant}/admin/communication/notice-board`, icon: ClipboardList },
+    { label: 'Schedule Message', desc: 'PTA/Invoices reminders queue', href: `/${tenant}/admin/communication/scheduled`, icon: Clock },
+    { label: 'Send Emergency Alert', desc: 'High-priority closure notices', href: `/${tenant}/admin/communication/emergency`, icon: AlertTriangle, danger: true },
+    { label: 'Create Template', desc: 'Placeholder-based library', href: `/${tenant}/admin/communication/templates`, icon: FileText },
+    { label: 'View Delivery Reports', desc: 'Open rates & logs analytics', href: `/${tenant}/admin/communication/delivery-reports`, icon: BarChart3 }
   ];
 
   return (

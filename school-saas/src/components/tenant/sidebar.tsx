@@ -282,7 +282,7 @@ export function TenantSidebar({ tenantSlug, tenantName, primaryColor }: TenantSi
           icon: MessageSquare,
           items: [
             { label: 'Dashboard', href: `${basePath}/communication`, icon: LayoutDashboard, exact: true },
-            { label: 'Internal Messages', href: `${basePath}/communication/internal`, icon: MessageSquare },
+            { label: '💬 Direct Messaging', href: `${basePath}/communication/internal`, icon: MessageSquare },
             { label: 'SMS', href: `${basePath}/communication/sms`, icon: Phone },
             { label: 'Email', href: `${basePath}/communication/email`, icon: Mail },
             { label: 'Push Notifications', href: `${basePath}/communication/push`, icon: Bell },

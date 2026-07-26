@@ -20,6 +20,7 @@ import {
   CreditCard,
   Globe,
   Bell,
+  MessageSquare,
   ClipboardList,
   TrendingUp,
 } from 'lucide-react';
@@ -68,6 +69,7 @@ export function OrgSidebar({ tenantSlug, tenantName, primaryColor }: OrgSidebarP
       items: [
         { label: 'Schools Directory', href: `${basePath}/schools`, icon: School },
         { label: 'Org Staff', href: `${basePath}/org-staff`, icon: Users },
+        { label: '💬 Direct Messaging', href: `${basePath}/communication/internal`, icon: MessageSquare },
         { label: 'Reports', href: `${basePath}/reports`, icon: TrendingUp },
         { label: 'Announcements', href: `${basePath}/communication`, icon: Bell },
         { label: 'Approvals', href: `${basePath}/approvals`, icon: ClipboardList, badge: '3' },
