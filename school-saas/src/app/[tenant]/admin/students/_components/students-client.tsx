@@ -7,10 +7,11 @@ import { SearchInput } from '@/components/shared/search-input';
 import { Modal, ModalCancelButton, ModalSubmitButton } from '@/components/shared/modal';
 import {
   Users, Plus, Eye, Edit2, Download, Filter, Mail, Phone, User,
-  ChevronLeft, ChevronRight, MoreHorizontal, Trash2, BookOpen, Loader2, Camera,
+  ChevronLeft, ChevronRight, MoreHorizontal, Trash2, BookOpen, Loader2, Camera, CreditCard,
 } from 'lucide-react';
 import Link from 'next/link';
 import { addStudent } from '../actions';
+import { StudentIdCardModal } from './student-id-card-modal';
 
 export interface Student {
   id: string;
@@ -55,6 +56,7 @@ export function StudentsClient({
   const [classFilter, setClassFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [idCardStudent, setIdCardStudent] = useState<Student | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Form state
@@ -219,6 +221,10 @@ export function StudentsClient({
                           <div className="absolute right-0 top-8 w-44 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] shadow-lg z-10 animate-fade-in-scale overflow-hidden p-1">
                             <Link href={`/admin/students/${student.id}`} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"><Eye className="w-4 h-4" />View Profile</Link>
                             <button className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"><Edit2 className="w-4 h-4" />Edit</button>
+                            <button
+                              onClick={() => { setIdCardStudent(student); setActiveMenu(null); }}
+                              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-amber-500 hover:bg-amber-500/10 transition-all"
+                            ><CreditCard className="w-4 h-4" />Print ID Card</button>
                             <button className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger)/0.1)] transition-all"><Trash2 className="w-4 h-4" />Remove</button>
                           </div>
                         )}
@@ -241,6 +247,15 @@ export function StudentsClient({
           </div>
         </div>
       </div>
+
+      {/* Student ID Card Modal */}
+      {idCardStudent && (
+        <StudentIdCardModal
+          student={idCardStudent}
+          orgName={tenant}
+          onClose={() => setIdCardStudent(null)}
+        />
+      )}
 
       {/* Add Student Modal */}
       <Modal

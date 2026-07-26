@@ -58,6 +58,7 @@ export async function submitPublicApplication(formData: FormData) {
       documents: parsedDocs,
       stage: 'Application',
       status: 'active',
+      source: 'online',
     })
     .select('id, first_name, last_name')
     .single();

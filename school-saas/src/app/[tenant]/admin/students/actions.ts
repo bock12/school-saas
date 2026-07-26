@@ -22,6 +22,7 @@ export async function addStudent(formData: FormData) {
   const tenantId = tenantData.id;
 
   // 2. Insert the student
+  const admissionNumber = `ADM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   const { data: student, error: studentError } = await supabase
     .from('students')
     .insert({
@@ -33,6 +34,7 @@ export async function addStudent(formData: FormData) {
       guardian_name: (formData.get('guardian_name') as string) || null,
       guardian_phone: (formData.get('guardian_phone') as string) || null,
       avatar_url: (formData.get('avatar_url') as string) || null,
+      admission_number: admissionNumber,
       is_active: true,
       admitted_at: new Date().toISOString(),
     })
@@ -63,6 +65,7 @@ export async function addStudent(formData: FormData) {
     }
   }
 
-  revalidatePath(`/admin/students`);
+  revalidatePath(`/${tenant}/admin/students`);
+  revalidatePath(`/${tenant}/admin/students/admissions`);
   return { success: true };
 }

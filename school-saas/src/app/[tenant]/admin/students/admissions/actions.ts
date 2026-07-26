@@ -44,6 +44,7 @@ export async function createApplicant(formData: FormData) {
       avatar_url: (formData.get('avatar_url') as string) || null,
       stage: 'Application',
       status: 'active',
+      source: 'admin',
     })
     .select('id')
     .single();
@@ -418,6 +419,16 @@ export async function allocateAndMatriculateApplicant(
   const parPass = parentPasswordTemp || 'Parent2026!';
   const parentUser = applicant.parent_phone || applicant.parent_email || applicant.phone || 'parent@school.edu.sl';
 
+  // 1. Call RPC to enroll applicant into students table & parents table
+  const { error: rpcError } = await supabase.rpc('enroll_applicant', {
+    p_applicant_id: applicantId,
+    p_admin_id: user?.id || null
+  });
+
+  if (rpcError) {
+    console.warn('Note on RPC enroll_applicant during allocation:', rpcError.message);
+  }
+
   const { error: updateError } = await supabase
     .from('applicants')
     .update({
@@ -448,6 +459,8 @@ export async function allocateAndMatriculateApplicant(
   });
 
   revalidatePath(`/${tenantSlug}/admin/students/admissions`);
+  revalidatePath(`/${tenantSlug}/admin/students/applications`);
+  revalidatePath(`/${tenantSlug}/admin/students`);
   revalidatePath(`/${tenantSlug}/apply/status`);
   return {
     success: true,
