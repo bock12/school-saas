@@ -14,11 +14,13 @@ export default async function OrgStaffPage({
   const supabase = await createClient();
   const orgId = profile.role === 'org_admin' ? (profile.tenant_id ?? org.id) : org.id;
 
-  // All staff across the org and its schools
+  // All staff across the org and its schools (excluding students and parents)
   const { data: orgProfiles } = await supabase
     .from('profiles')
     .select('id, full_name, email, role, is_active, created_at, last_login_at, department, job_title, staff_id, phone')
     .eq('tenant_id', orgId)
+    .not('role', 'eq', 'student')
+    .not('role', 'eq', 'parent')
     .order('created_at', { ascending: false });
 
   // Child schools + their staff
@@ -34,12 +36,14 @@ export default async function OrgStaffPage({
     .from('profiles')
     .select('id, full_name, email, role, is_active, created_at, last_login_at, tenant_id, department, job_title, staff_id, phone')
     .in('tenant_id', schoolIds.length > 0 ? schoolIds : ['none'])
+    .not('role', 'eq', 'student')
+    .not('role', 'eq', 'parent')
     .order('created_at', { ascending: false });
 
   const schoolById = Object.fromEntries((schools ?? []).map((s) => [s.id, s]));
 
-  // Combine all staff with school info
-  const allStaff = [
+  // Combine all staff with school info (filtered strictly for non-student, non-parent staff)
+  const rawStaff = [
     ...(orgProfiles ?? []).map(p => ({ ...p, schoolName: org.name, schoolSlug: tenant, isOrgLevel: true })),
     ...(schoolProfiles ?? []).map(p => ({
       ...p,
@@ -48,6 +52,8 @@ export default async function OrgStaffPage({
       isOrgLevel: false,
     })),
   ];
+
+  const allStaff = rawStaff.filter(p => p.role !== 'student' && p.role !== 'parent');
 
   return (
     <OrgStaffClient

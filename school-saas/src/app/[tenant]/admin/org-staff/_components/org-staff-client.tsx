@@ -71,7 +71,7 @@ export function OrgStaffClient({ tenant, orgId, orgSlug, orgName, allStaff, scho
   ];
 
   const filtered = useMemo(() => {
-    let list = allStaff;
+    let list = allStaff.filter(s => s.role !== 'student' && s.role !== 'parent');
     if (tab === 'org')          list = list.filter(s => s.role === 'org_admin' || s.role === 'super_admin');
     if (tab === 'school_admin') list = list.filter(s => s.role === 'school_admin');
     if (tab === 'teaching')     list = list.filter(s => ['teacher','coordinator','department_head','counselor','librarian'].includes(s.role ?? ''));
