@@ -34,10 +34,12 @@ export function TeacherSidebar({ tenantSlug, tenantName, primaryColor }: { tenan
       </div>
       <div className="p-3 space-y-1 mt-4">
         {navItems.map(item => {
+          const isPathMode = pathname.startsWith(`/${tenantSlug}`);
+          const targetHref = isPathMode ? `/${tenantSlug}${item.href}` : item.href;
           const isActive = item.exact ? pathname.endsWith(item.href) : pathname.includes(item.href);
           const Icon = item.icon;
           return (
-            <Link key={item.label} href={`/${tenantSlug}${item.href}`} className={cn(
+            <Link key={item.label} href={targetHref} className={cn(
               "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors group",
               isActive ? "bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]" : "text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))]"
             )}>
