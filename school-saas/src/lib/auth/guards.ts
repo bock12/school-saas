@@ -80,7 +80,7 @@ export async function requireTenantRole(tenantSlug: string, allowedRoles?: Tenan
     if (user) {
       await supabase.auth.signOut();
     }
-    redirect(`/${tenantSlug}/login`);
+    redirect(`/login`);
   }
 
   // Force password reset pipeline

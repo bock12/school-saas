@@ -52,15 +52,14 @@ export default async function proxy(request: NextRequest) {
   }
 
   // ── 5. Tenant school subdomains (greenwood.yoursaas.com) ───────
-  // Normalize pathname: if pathname already begins with /${subdomain}, strip it to prevent URL duplication
-  let cleanPathname = pathname;
-  if (subdomain && cleanPathname.startsWith(`/${subdomain}`)) {
-    cleanPathname = cleanPathname.substring(subdomain.length + 1);
-  }
-  if (cleanPathname === '/' || !cleanPathname) {
-    cleanPathname = '';
+  // If subdomain is present AND pathname begins with /${subdomain}, redirect to clean path to prevent URL duplication in browser
+  if (subdomain && pathname.startsWith(`/${subdomain}`)) {
+    const cleanUrl = request.nextUrl.clone();
+    cleanUrl.pathname = pathname.substring(subdomain.length + 1) || '/';
+    return NextResponse.redirect(cleanUrl);
   }
 
+  let cleanPathname = pathname === '/' ? '' : pathname;
   const checkPath = cleanPathname || '/';
 
   // Enforce edge protection: Only allow /login, /apply routes, or / if unauthenticated
