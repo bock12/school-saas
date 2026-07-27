@@ -144,12 +144,32 @@ export async function lookupApplicationStatus(tenantSlug: string, query: string)
     .eq('applicant_id', match.id)
     .order('created_at', { ascending: true });
 
+  // Look up matching student in students table if enrolled
+  let liveStudentNumber = match.student_username || match.student_id_number;
+  let liveParentUser = match.parent_email || match.parent_username || match.parent_phone;
+
+  const { data: matchedStudent } = await supabaseAdmin
+    .from('students')
+    .select('admission_number, guardian_email, guardian_phone')
+    .eq('tenant_id', tenantData.id)
+    .or(`guardian_email.eq.${match.parent_email || 'none'},phone.eq.${match.phone || 'none'}`)
+    .maybeSingle();
+
+  if (matchedStudent) {
+    if (matchedStudent.admission_number) {
+      liveStudentNumber = matchedStudent.admission_number;
+    }
+    if (matchedStudent.guardian_email) {
+      liveParentUser = matchedStudent.guardian_email;
+    }
+  }
+
   // Check password reset status in profiles
   let isStudentPasswordChanged = Boolean(match.student_password_changed);
   let isParentPasswordChanged = Boolean(match.parent_password_changed);
 
-  const stuUser = match.student_username || match.student_id_number;
-  const parUser = match.parent_username || match.parent_email || match.parent_phone;
+  const stuUser = liveStudentNumber;
+  const parUser = liveParentUser;
 
   if (stuUser) {
     const { data: stuProf } = await supabaseAdmin
@@ -216,10 +236,10 @@ export async function lookupApplicationStatus(tenantSlug: string, query: string)
       transactionId: match.transaction_id || null,
       classArm: match.class_arm || null,
       studentIdNumber: match.student_id_number || null,
-      studentUsername: match.student_username || match.student_id_number || `STU-${match.id.substring(0, 8).toUpperCase()}`,
+      studentUsername: liveStudentNumber || match.student_username || match.student_id_number || `STU-${match.id.substring(0, 8).toUpperCase()}`,
       studentPasswordTemp: isStudentPasswordChanged ? null : (match.student_password_temp || `Welcome${new Date(match.created_at || new Date()).getFullYear()}!`),
       studentPasswordChanged: isStudentPasswordChanged,
-      parentUsername: match.parent_username || match.parent_email || match.parent_phone || match.parent_name,
+      parentUsername: liveParentUser || match.parent_username || match.parent_email || match.parent_phone || match.parent_name,
       parentPasswordTemp: isParentPasswordChanged ? null : (match.parent_password_temp || `Parent${new Date(match.created_at || new Date()).getFullYear()}!`),
       parentPasswordChanged: isParentPasswordChanged,
       accountProvisioned: match.account_provisioned || false,
