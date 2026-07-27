@@ -223,10 +223,23 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
     }
   }
 
-  // 4. Staff / Admin / Teacher login via Supabase Auth email
+  // 4. Staff / Admin / Teacher login via Supabase Auth email (or staff_id / phone resolution)
+  let emailToSignIn = cleanId;
+  if (!cleanId.includes('@')) {
+    const { data: staffProf } = await adminSupabase
+      .from('profiles')
+      .select('email')
+      .or(`staff_id.ilike.${cleanId},phone.ilike.${cleanId}`)
+      .maybeSingle();
+
+    if (staffProf?.email) {
+      emailToSignIn = staffProf.email;
+    }
+  }
+
   const supabase = await createClient();
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: cleanId,
+    email: emailToSignIn,
     password,
   });
 
