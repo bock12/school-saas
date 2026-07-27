@@ -148,8 +148,10 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
     }
   };
 
+  const isFullyEnrolled = result?.applicant?.status === 'enrolled' || (result?.applicant?.stage === 'Allocation' && result?.applicant?.classArm);
+
   const currentStageIndex = result
-    ? STAGES.findIndex((s) => s.key === result.applicant.stage)
+    ? (isFullyEnrolled ? STAGES.length : STAGES.findIndex((s) => s.key === result.applicant.stage))
     : -1;
 
   return (
@@ -693,7 +695,7 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
             <div className="p-4 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-center min-w-[200px]">
               <span className="text-xs text-[hsl(var(--text-tertiary))] uppercase font-semibold">Current Stage</span>
               <p className="text-lg font-extrabold text-[hsl(var(--accent))] mt-1">
-                {result.applicant.stage}
+                {isFullyEnrolled ? '🎉 Completed & Enrolled' : result.applicant.stage}
               </p>
             </div>
           </div>
