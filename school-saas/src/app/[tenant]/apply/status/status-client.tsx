@@ -633,13 +633,27 @@ export function StatusClient({ tenantSlug, schoolName }: { tenantSlug: string; s
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
                   <div className="p-3.5 rounded-lg bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] space-y-1">
                     <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-sans font-bold uppercase block">Student Login Account</span>
-                    <p>Username / ID: <strong className="text-indigo-300">{result.applicant.studentUsername || result.applicant.studentIdNumber || 'STU-2026-0891'}</strong></p>
-                    <p>Default Password: <strong className="text-[hsl(var(--text-primary))]">{result.applicant.studentPasswordTemp || 'Welcome2026!'}</strong></p>
+                    <p>Username / ID: <strong className="text-indigo-300">{result.applicant.studentUsername || result.applicant.studentIdNumber || result.applicant.referenceCode}</strong></p>
+                    <p>Password: {result.applicant.studentPasswordChanged ? (
+                      <span className="text-emerald-400 font-extrabold font-sans">•••••••• [Custom Password Set &amp; Secured ✓]</span>
+                    ) : (
+                      <>
+                        <strong className="text-[hsl(var(--text-primary))]">{result.applicant.studentPasswordTemp || 'Welcome2026!'}</strong>{' '}
+                        <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-sans">(Temporary)</span>
+                      </>
+                    )}</p>
                   </div>
                   <div className="p-3.5 rounded-lg bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] space-y-1">
                     <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-sans font-bold uppercase block">Parent Login Account</span>
-                    <p>Username / Mobile: <strong className="text-indigo-300">{result.applicant.parentUsername || result.applicant.parentPhone || '+232 76 123456'}</strong></p>
-                    <p>Default Password: <strong className="text-[hsl(var(--text-primary))]">{result.applicant.parentPasswordTemp || 'Parent2026!'}</strong></p>
+                    <p>Username / Contact: <strong className="text-indigo-300">{result.applicant.parentUsername || result.applicant.parentPhone || result.applicant.parentEmail || result.applicant.parentName}</strong></p>
+                    <p>Password: {result.applicant.parentPasswordChanged ? (
+                      <span className="text-emerald-400 font-extrabold font-sans">•••••••• [Custom Password Set &amp; Secured ✓]</span>
+                    ) : (
+                      <>
+                        <strong className="text-[hsl(var(--text-primary))]">{result.applicant.parentPasswordTemp || 'Parent2026!'}</strong>{' '}
+                        <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-sans">(Temporary)</span>
+                      </>
+                    )}</p>
                   </div>
                 </div>
 

@@ -54,6 +54,11 @@ export function SetPasswordForm({ tenantSlug, tenantName }: SetPasswordFormProps
 
     if (authData.user) {
       await supabase.from('profiles').update({ requires_password_change: false }).eq('id', authData.user.id);
+      const userIdent = authData.user.email || authData.user.phone || '';
+      if (userIdent) {
+        await supabase.from('applicants').update({ student_password_changed: true }).or(`student_username.eq.${userIdent},student_id_number.eq.${userIdent},email.eq.${userIdent}`);
+        await supabase.from('applicants').update({ parent_password_changed: true }).or(`parent_username.eq.${userIdent},parent_email.eq.${userIdent},parent_phone.eq.${userIdent}`);
+      }
     }
 
     setSuccess(true);

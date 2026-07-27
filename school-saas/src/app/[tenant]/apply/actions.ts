@@ -111,9 +111,10 @@ export async function lookupApplicationStatus(tenantSlug: string, query: string)
   let rawIdPrefix = cleanQuery.toUpperCase().replace(/^APP-/, '').toLowerCase();
 
   // Fetch applicants matching tenant_id
+  // Fetch applicants matching tenant_id
   const { data: applicants, error } = await supabaseAdmin
     .from('applicants')
-    .select('id, first_name, last_name, target_grade, stage, created_at, docs_verified, interview_score, assessment_score, parent_name, status, rejection_reason, documents, interview_date, interview_location, assessment_date, assessment_location, assessment_details, offer_accepted, accepted_at, parent_signature, offer_expiration_date, fee_breakdown, policy_agreements, payment_cleared, receipt_number, payment_method, payment_receipt_url, payment_phone, transaction_id')
+    .select('id, first_name, last_name, target_grade, stage, created_at, docs_verified, interview_score, assessment_score, parent_name, parent_email, parent_phone, phone, email, status, rejection_reason, documents, interview_date, interview_location, assessment_date, assessment_location, assessment_details, offer_accepted, accepted_at, parent_signature, offer_expiration_date, fee_breakdown, policy_agreements, payment_cleared, receipt_number, payment_method, payment_receipt_url, payment_phone, transaction_id, class_arm, student_id_number, student_username, student_password_temp, parent_username, parent_password_temp, account_provisioned, student_password_changed, parent_password_changed')
     .eq('tenant_id', tenantData.id);
 
   if (error || !applicants || applicants.length === 0) {
@@ -142,6 +143,37 @@ export async function lookupApplicationStatus(tenantSlug: string, query: string)
     .select('to_stage, created_at, comment')
     .eq('applicant_id', match.id)
     .order('created_at', { ascending: true });
+
+  // Check password reset status in profiles
+  let isStudentPasswordChanged = Boolean(match.student_password_changed);
+  let isParentPasswordChanged = Boolean(match.parent_password_changed);
+
+  const stuUser = match.student_username || match.student_id_number;
+  const parUser = match.parent_username || match.parent_email || match.parent_phone;
+
+  if (stuUser) {
+    const { data: stuProf } = await supabaseAdmin
+      .from('profiles')
+      .select('requires_password_change')
+      .eq('tenant_id', tenantData.id)
+      .or(`id.eq.${stuUser},email.ilike.${stuUser}`)
+      .maybeSingle();
+    if (stuProf && stuProf.requires_password_change === false) {
+      isStudentPasswordChanged = true;
+    }
+  }
+
+  if (parUser) {
+    const { data: parProf } = await supabaseAdmin
+      .from('profiles')
+      .select('requires_password_change')
+      .eq('tenant_id', tenantData.id)
+      .or(`email.ilike.${parUser},phone.ilike.${parUser}`)
+      .maybeSingle();
+    if (parProf && parProf.requires_password_change === false) {
+      isParentPasswordChanged = true;
+    }
+  }
 
   return {
     success: true,
@@ -182,6 +214,15 @@ export async function lookupApplicationStatus(tenantSlug: string, query: string)
       paymentReceiptUrl: match.payment_receipt_url || null,
       paymentPhone: match.payment_phone || null,
       transactionId: match.transaction_id || null,
+      classArm: match.class_arm || null,
+      studentIdNumber: match.student_id_number || null,
+      studentUsername: match.student_username || match.student_id_number || `STU-${match.id.substring(0, 8).toUpperCase()}`,
+      studentPasswordTemp: isStudentPasswordChanged ? null : (match.student_password_temp || `Welcome${new Date(match.created_at || new Date()).getFullYear()}!`),
+      studentPasswordChanged: isStudentPasswordChanged,
+      parentUsername: match.parent_username || match.parent_email || match.parent_phone || match.parent_name,
+      parentPasswordTemp: isParentPasswordChanged ? null : (match.parent_password_temp || `Parent${new Date(match.created_at || new Date()).getFullYear()}!`),
+      parentPasswordChanged: isParentPasswordChanged,
+      accountProvisioned: match.account_provisioned || false,
     },
     history: history || [],
     bursarySettings: tenantData.bursary_settings || null,
