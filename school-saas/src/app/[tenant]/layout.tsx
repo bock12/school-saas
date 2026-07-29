@@ -24,9 +24,10 @@ export default async function TenantLayout({
     .eq('slug', tenant)
     .single();
 
-  // If the school slug doesn't exist at all, redirect to the platform homepage
+  // If the school slug doesn't exist at all, redirect to the main platform homepage
   if (error || !school) {
-    redirect('/');
+    const rootUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    redirect(rootUrl);
   }
 
   // ── Handle suspended schools ──────────────────────────────────

@@ -28,7 +28,7 @@ export default async function TenantLoginPage({
       .single();
 
     if (profile && school && profile.tenant_id === school.id) {
-      redirect(`/${tenant}`);
+      redirect('/dashboard');
     }
   }
 

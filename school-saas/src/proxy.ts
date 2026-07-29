@@ -22,6 +22,14 @@ export default async function proxy(request: NextRequest) {
     subdomain = hostname.replace(`.${ROOT_DOMAIN}`, '').replace(ROOT_DOMAIN, '');
   }
 
+  // Normalize subdomains with underscores to dashes (e.g. "albert_academy" → "albert-academy")
+  if (subdomain && subdomain.includes('_')) {
+    const normalizedSubdomain = subdomain.replace(/_/g, '-');
+    const protocol = url.protocol || 'http:';
+    const redirectUrl = new URL(`${protocol}//${normalizedSubdomain}.${ROOT_DOMAIN}${pathname}${url.search}`);
+    return NextResponse.redirect(redirectUrl);
+  }
+
   // ── 3. Root domain / www — let Next.js handle the (platform) routes ──
   if (!subdomain || subdomain === 'www') {
     return response;

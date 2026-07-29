@@ -224,16 +224,31 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   }
 
   // 4. Staff / Admin / Teacher login via Supabase Auth email (or staff_id / phone resolution)
-  let emailToSignIn = cleanId;
-  if (!cleanId.includes('@')) {
-    const { data: staffProf } = await adminSupabase
-      .from('profiles')
-      .select('email')
-      .or(`staff_id.ilike.${cleanId},phone.ilike.${cleanId}`)
-      .maybeSingle();
+  let emailToSignIn = cleanId.toLowerCase();
+  let matchedStaffProfile: any = null;
 
-    if (staffProf?.email) {
-      emailToSignIn = staffProf.email;
+  let staffOrQuery = `email.ilike.${cleanLower}`;
+  if (cleanId) {
+    staffOrQuery += `,staff_id.ilike.${cleanId}`;
+  }
+  if (inputPhoneNorm.length >= 6) {
+    staffOrQuery += `,phone.ilike.%${inputPhoneNorm}%`;
+  }
+
+  const { data: staffProfiles } = await adminSupabase
+    .from('profiles')
+    .select('id, email, role, tenant_id, full_name')
+    .or(staffOrQuery)
+    .limit(5);
+
+  if (staffProfiles && staffProfiles.length > 0) {
+    matchedStaffProfile =
+      staffProfiles.find(p => p.tenant_id === tenant.id) ||
+      staffProfiles.find(p => p.tenant_id === tenant.parent_id) ||
+      staffProfiles[0];
+
+    if (matchedStaffProfile?.email) {
+      emailToSignIn = matchedStaffProfile.email.toLowerCase();
     }
   }
 
@@ -244,10 +259,13 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   });
 
   if (authError || !authData.user) {
-    return { error: 'Invalid login credentials. Please check your Email, Phone Number, or Student ID Number.' };
+    if (matchedStaffProfile) {
+      return { error: 'Invalid password. If you received an invite email, please check your inbox or set your password.' };
+    }
+    return { error: 'Invalid login credentials. Please check your Email, Phone Number, or Staff/Student ID.' };
   }
 
-  // Verify profile belongs to this tenant
+  // Verify profile belongs to this tenant or organization
   const { data: profile } = await supabase
     .from('profiles')
     .select('role, tenant_id')
@@ -260,13 +278,36 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   }
 
   if (profile.role !== 'super_admin' && profile.tenant_id !== tenant.id) {
-    let isOrgAdmin = false;
+    let isOrgAdminAccess = false;
+    let targetTenantSlug: string | null = null;
+
     if (profile.role === 'org_admin' && tenant.parent_id === profile.tenant_id) {
-      isOrgAdmin = true;
+      isOrgAdminAccess = true;
     }
-    if (!isOrgAdmin) {
+
+    if (!isOrgAdminAccess && profile.tenant_id) {
+      const { data: userTenant } = await adminSupabase
+        .from('tenants')
+        .select('slug, parent_id')
+        .eq('id', profile.tenant_id)
+        .single();
+
+      if (userTenant && userTenant.parent_id === tenant.id) {
+        targetTenantSlug = userTenant.slug;
+      }
+    }
+
+    if (!isOrgAdminAccess && !targetTenantSlug) {
       await supabase.auth.signOut();
       return { error: 'Access denied. Your account does not belong to this school portal.' };
+    }
+
+    if (targetTenantSlug) {
+      let rolePath = `/${targetTenantSlug}/admin`;
+      if (profile.role === 'teacher') rolePath = `/${targetTenantSlug}/teacher`;
+      if (profile.role === 'student') rolePath = `/${targetTenantSlug}/student`;
+      if (profile.role === 'parent') rolePath = `/${targetTenantSlug}/parent`;
+      redirect(rolePath);
     }
   }
 
