@@ -9,7 +9,8 @@ import {
   Calendar, Layers, MessageSquare, Landmark, HelpCircle, Save, Sparkles, UserCheck,
   Award, ClipboardList, Send, Lightbulb, UserX, Heart, BookOpenCheck, Brain, PlusCircle,
   DollarSign, ShieldCheck, Briefcase, Eye, Shield, UsersRound, Scale, Phone, Trash2, BookMarked, CheckSquare, Trophy,
-  Smile, Sun, Star, Book, Bell, ArrowRight, LayoutGrid, Sliders, FileCheck, Upload
+  Smile, Sun, Star, Book, Bell, ArrowRight, LayoutGrid, Sliders, FileCheck, Upload,
+  Video, PhoneCall, CheckCheck, Pin, MoreVertical, Paperclip, Bus, Navigation, FolderDown, TrendingUp, QrCode
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -17,16 +18,26 @@ type StudentTab =
   | 'dashboard'
   | 'attendance'
   | 'profile'
+  | 'id-card'
+  | 'portfolio'
   | 'academics'
+  | 'analytics'
   | 'timetable'
   | 'calendar'
+  | 'messages'
+  | 'notifications'
   | 'assignments'
   | 'lms'
+  | 'library'
   | 'activities'
   | 'welfare'
+  | 'hostel'
+  | 'transport'
+  | 'documents'
   | 'finance'
   | 'ai-copilot'
   | 'productivity'
+  | 'support'
   | 'settings';
 
 export default function StudentPortalPage() {
@@ -36,11 +47,14 @@ export default function StudentPortalPage() {
 
   const tabParam = (searchParams.get('tab') as StudentTab) || 'dashboard';
 
+  // Prevent SSR Hydration Mismatch by ensuring client-only mounting
+  const [mounted, setMounted] = useState(false);
   // Mode: 'simple' for younger students vs 'advanced' for secondary school students
   const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('advanced');
-  const [activeTab, setActiveTab] = useState<StudentTab>(tabParam);
+  const [activeTab, setActiveTab] = useState<StudentTab>('dashboard');
 
   useEffect(() => {
+    setMounted(true);
     if (tabParam) {
       setActiveTab(tabParam);
     }
@@ -103,6 +117,1166 @@ export default function StudentPortalPage() {
   // Academic Calendar State
   const [calendarCategory, setCalendarCategory] = useState<'all' | 'holidays' | 'exams' | 'deadlines' | 'events' | 'pta' | 'sports'>('all');
   const [calendarViewMode, setCalendarViewMode] = useState<'agenda' | 'month'>('agenda');
+
+  // Fee Information & Online Payment Portal State
+  const [showPayNowModal, setShowPayNowModal] = useState(false);
+  const [payAmountInput, setPayAmountInput] = useState('45000');
+  const [selectedPayMethod, setSelectedPayMethod] = useState<'card' | 'momo' | 'bank'>('card');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentSuccessToast, setPaymentSuccessToast] = useState<string | null>(null);
+
+  // Admin-Grade Internal Messaging Module Interactive State
+  const [chatFilter, setChatFilter] = useState<'all' | 'unread' | 'groups' | 'starred'>('all');
+  const [chatSearch, setChatSearch] = useState('');
+  const [userStatusMessage, setUserStatusMessage] = useState('Available 👋');
+  const [activeChatChannelId, setActiveChatChannelId] = useState('c1');
+  const [chatInputText, setChatInputText] = useState('');
+  const [replyingToMsg, setReplyingToMsg] = useState<any | null>(null);
+  const [showCallModal, setShowCallModal] = useState<{ type: 'voice' | 'video'; name: string } | null>(null);
+  const [showNewDmModal, setShowNewDmModal] = useState(false);
+  const [newDmRecipient, setNewDmRecipient] = useState('Mr. Kwame Darko (Math Teacher)');
+  const [chatToast, setChatToast] = useState<string | null>(null);
+
+  // Library & Resource Hub Interactive State
+  const [librarySubTab, setLibrarySubTab] = useState<'dashboard' | 'search' | 'borrowed' | 'reservations' | 'history' | 'fines'>('dashboard');
+  const [librarySearchQuery, setLibrarySearchQuery] = useState('');
+  const [libraryCategoryFilter, setLibraryCategoryFilter] = useState('all');
+  const [libraryToast, setLibraryToast] = useState<string | null>(null);
+
+  const [borrowedBooksData, setBorrowedBooksData] = useState<any[]>([
+    {
+      id: 'b1',
+      title: 'Fundamentals of Physics 11th Edition',
+      author: 'David Halliday & Robert Resnick',
+      category: 'Physics',
+      callNo: 'PHYS-204',
+      coverBg: 'from-blue-600 to-indigo-700',
+      borrowedDate: 'July 15, 2026',
+      dueDate: 'August 02, 2026',
+      daysLeft: 4,
+      status: 'active',
+      fine: 0
+    },
+    {
+      id: 'b2',
+      title: 'Organic Chemistry: Structure & Mechanism',
+      author: 'Robert T. Morrison & Robert N. Boyd',
+      category: 'Chemistry',
+      callNo: 'CHEM-108',
+      coverBg: 'from-emerald-600 to-teal-700',
+      borrowedDate: 'July 01, 2026',
+      dueDate: 'July 22, 2026',
+      daysLeft: -7,
+      status: 'overdue',
+      fine: 500
+    }
+  ]);
+
+  const [reservedBooksData, setReservedBooksData] = useState<any[]>([
+    {
+      id: 'r1',
+      title: 'Introduction to Algorithms 3rd Edition',
+      author: 'Thomas H. Cormen & Charles E. Leiserson',
+      category: 'Computer Science',
+      callNo: 'CS-401',
+      coverBg: 'from-purple-600 to-pink-700',
+      reservedDate: 'July 28, 2026',
+      pickupDeadline: 'July 31, 2026',
+      status: 'Ready for Pickup at Front Desk',
+      deskLocation: 'Shelf A-4 • Main Reserve Counter'
+    }
+  ]);
+
+  const [readingHistoryData, setReadingHistoryData] = useState<any[]>([
+    {
+      id: 'h1',
+      title: 'Macbeth (Folger Shakespeare Library)',
+      author: 'William Shakespeare',
+      category: 'Literature',
+      returnedDate: 'June 18, 2026',
+      rating: 5,
+      reviewNote: 'Masterpiece analysis for Term 1 Literature essay.'
+    },
+    {
+      id: 'h2',
+      title: 'Advanced Engineering Mathematics 10th Ed',
+      author: 'Erwin Kreyszig',
+      category: 'Mathematics',
+      returnedDate: 'May 30, 2026',
+      rating: 4,
+      reviewNote: 'Used for linear algebra and vector calculus study.'
+    }
+  ]);
+
+  const [libraryCatalogData, setLibraryCatalogData] = useState<any[]>([
+    {
+      id: 'cat1',
+      title: 'Pure Mathematics 5th Edition',
+      author: 'S.T. Tan & L. Bostock',
+      category: 'Mathematics',
+      callNo: 'MATH-502',
+      isbn: '978-0748755097',
+      totalCopies: 5,
+      availableCopies: 4,
+      status: 'Available',
+      coverBg: 'from-amber-600 to-orange-700',
+      description: 'Comprehensive senior secondary calculus, vectors, complex numbers, and coordinate geometry.'
+    },
+    {
+      id: 'cat2',
+      title: 'Hamlet (Arden Shakespeare Series)',
+      author: 'William Shakespeare',
+      category: 'Literature',
+      callNo: 'LIT-301',
+      isbn: '978-1904271338',
+      totalCopies: 10,
+      availableCopies: 8,
+      status: 'Available',
+      coverBg: 'from-rose-600 to-red-700',
+      description: 'Definitive edition with critical annotations, stage history, and textual notes.'
+    },
+    {
+      id: 'cat3',
+      title: 'Things Fall Apart',
+      author: 'Chinua Achebe',
+      category: 'Fiction',
+      callNo: 'FIC-102',
+      isbn: '978-0385474542',
+      totalCopies: 6,
+      availableCopies: 6,
+      status: 'Available',
+      coverBg: 'from-emerald-700 to-green-800',
+      description: 'African literary masterpiece detailing Okonkwo\'s life and Umuofia tribal society.'
+    },
+    {
+      id: 'cat4',
+      title: 'Principles of Biochemistry 7th Edition',
+      author: 'Albert L. Lehninger & David L. Nelson',
+      category: 'Chemistry',
+      callNo: 'CHEM-304',
+      isbn: '978-1464126116',
+      totalCopies: 3,
+      availableCopies: 3,
+      status: 'Available',
+      coverBg: 'from-cyan-600 to-blue-700',
+      description: 'Enzyme kinetics, metabolic pathways, molecular genetics, and cellular energetic structures.'
+    },
+    {
+      id: 'cat5',
+      title: 'Concise Inorganic Chemistry 5th Ed',
+      author: 'J.D. Lee',
+      category: 'Chemistry',
+      callNo: 'CHEM-205',
+      isbn: '978-0632052936',
+      totalCopies: 4,
+      availableCopies: 2,
+      status: 'Available',
+      coverBg: 'from-violet-600 to-indigo-800',
+      description: 'Periodic table trends, transition metal complexes, and chemical bonding mechanisms.'
+    }
+  ]);
+
+  // Discipline & Behavior Transparency Module Interactive State
+  const [disciplineSubTab, setDisciplineSubTab] = useState<'overview' | 'commendations' | 'warnings' | 'records' | 'merits' | 'demerits' | 'health'>('overview');
+
+  const [commendationsData, setCommendationsData] = useState<any[]>([
+    {
+      id: 'com1',
+      title: 'Science Fair Peer Tutoring Excellence Citation',
+      issuedBy: 'Dr. Stella Gbandi & Science Department',
+      date: 'July 20, 2026',
+      pointsAwarded: '+25 Merits',
+      badge: 'Academic Leadership',
+      description: 'Awarded for exceptional volunteer tutoring during the Inter-School STEM Science Exhibition prep sessions.'
+    },
+    {
+      id: 'com2',
+      title: 'Punctuality & Assembly Decorum Honor Roll',
+      issuedBy: 'Vice Principal (Student Welfare)',
+      date: 'June 14, 2026',
+      pointsAwarded: '+15 Merits',
+      badge: 'Model Conduct',
+      description: 'Achieved 100% morning assembly punctuality and exemplary uniform presentation throughout Term 1.'
+    },
+    {
+      id: 'com3',
+      title: 'Inter-House Sports Team Captaincy Leadership',
+      issuedBy: 'Sports Director & House Master',
+      date: 'May 08, 2026',
+      pointsAwarded: '+20 Merits',
+      badge: 'Sportsmanship & Ethics',
+      description: 'Demonstrated outstanding team leadership, sportsmanship, and fair play in the Senior Athletics Relay Championship.'
+    }
+  ]);
+
+  const [warningsData, setWarningsData] = useState<any[]>([
+    {
+      id: 'warn1',
+      title: 'Morning Assembly Late Arrival Advisory',
+      issuedBy: 'Discipline Master (Mr. Isaac Mensah)',
+      date: 'July 05, 2026',
+      deduction: '-5 Demerits',
+      status: 'Acknowledged',
+      description: 'Arrived 8 minutes past the 07:45 AM assembly bell line. Counseling provided.'
+    },
+    {
+      id: 'warn2',
+      title: 'Lab Attire Inspection Notice',
+      issuedBy: 'Chemistry Lab Supervisor',
+      date: 'June 02, 2026',
+      deduction: '-5 Demerits',
+      status: 'Resolved',
+      description: 'Forgot lab safety goggles during organic chemistry titration practical. Corrective compliance verified.'
+    }
+  ]);
+
+  const [disciplineRecordsData, setDisciplineRecordsData] = useState<any[]>([
+    {
+      id: 'rec1',
+      incident: 'Unexcused Assembly Delay',
+      category: 'Punctuality Infraction',
+      date: 'July 05, 2026',
+      reportedBy: 'Duty Master (Mr. Isaac Mensah)',
+      actionTaken: 'Verbal Advisory & Corrective Goal Setting',
+      status: 'Resolved & Closed',
+      severity: 'Minor',
+      demerits: 5
+    },
+    {
+      id: 'rec2',
+      incident: 'Lab Safety Gear Non-Compliance',
+      category: 'Safety Violation',
+      date: 'June 02, 2026',
+      reportedBy: 'Mrs. Beatrice Mensah',
+      actionTaken: 'Lab Safety Guidelines Orientation Review',
+      status: 'Resolved & Closed',
+      severity: 'Minor',
+      demerits: 5
+    }
+  ]);
+
+  const [meritsData, setMeritsData] = useState<any[]>([
+    { id: 'm1', date: 'July 20, 2026', title: 'STEM Peer Tutoring', points: '+25', category: 'Academic Excellence' },
+    { id: 'm2', date: 'June 14, 2026', title: 'Punctuality Honor Roll', points: '+15', category: 'Punctuality' },
+    { id: 'm3', date: 'May 08, 2026', title: 'Inter-House Sportsmanship', points: '+20', category: 'Sportsmanship' },
+    { id: 'm4', date: 'April 22, 2026', title: 'Library Book Revival Volunteer', points: '+15', category: 'Community Service' },
+    { id: 'm5', date: 'March 10, 2026', title: 'Math Olympiad Representative', points: '+10', category: 'Academic Excellence' }
+  ]);
+
+  const [demeritsData, setDemeritsData] = useState<any[]>([
+    { id: 'd1', date: 'July 05, 2026', title: 'Morning Assembly Late Arrival', points: '-5', category: 'Punctuality' },
+    { id: 'd2', date: 'June 02, 2026', title: 'Lab Attire Non-Compliance', points: '-5', category: 'Safety Rules' }
+  ]);
+
+  // Clubs & Extracurricular Activities Interactive State
+  const [clubsSubTab, setClubsSubTab] = useState<'my_clubs' | 'browse' | 'schedules' | 'events' | 'participation' | 'achievements'>('my_clubs');
+  const [clubsToast, setClubsToast] = useState<string | null>(null);
+
+  const [clubsData, setClubsData] = useState<any[]>([
+    {
+      id: 'club1',
+      name: 'Robotics & AI Innovation Club',
+      category: 'STEM & Technology',
+      schedule: 'Tuesdays & Thursdays 03:30 PM - 05:00 PM',
+      room: 'Computer Lab A',
+      patron: 'Prof. Emmanuel Thorpe',
+      members: 28,
+      joined: true,
+      role: 'Project Team Lead',
+      attendanceRate: '95%',
+      sessionsAttended: '19 / 20 Sessions',
+      coverBg: 'from-blue-600 to-indigo-700',
+      description: 'Hands-on robotics hardware assembly, Arduino microcontrollers, Python AI algorithms, and competitive STEM challenge builds.'
+    },
+    {
+      id: 'club2',
+      name: 'School Chess & Strategy Club',
+      category: 'Mind Sports',
+      schedule: 'Wednesdays 03:30 PM - 04:45 PM',
+      room: 'Library Hall B',
+      patron: 'Mr. Kwame Darko',
+      members: 34,
+      joined: true,
+      role: 'Club President',
+      attendanceRate: '100%',
+      sessionsAttended: '14 / 14 Sessions',
+      coverBg: 'from-emerald-600 to-teal-700',
+      description: 'Strategic tactical analysis, grandmaster opening studies, blitz tournaments, and inter-school chess championship representation.'
+    },
+    {
+      id: 'club3',
+      name: 'Senior Secondary Basketball Squad',
+      category: 'Athletics & Sports',
+      schedule: 'Mondays & Fridays 04:00 PM - 05:30 PM',
+      room: 'Main Sports Gymnasium',
+      patron: 'Coach David Miller',
+      members: 18,
+      joined: true,
+      role: 'Forward / Team Captain',
+      attendanceRate: '90%',
+      sessionsAttended: '18 / 20 Sessions',
+      coverBg: 'from-amber-600 to-orange-700',
+      description: 'Competitive varsity basketball training, tactical playbooks, physical conditioning, and regional tournament matches.'
+    },
+    {
+      id: 'club4',
+      name: 'Debate & Public Speaking Society',
+      category: 'Literary & Advocacy',
+      schedule: 'Thursdays 03:30 PM - 05:00 PM',
+      room: 'Auditorium Hall 2',
+      patron: 'Dr. Stella Gbandi',
+      members: 42,
+      joined: false,
+      role: 'Member',
+      attendanceRate: '-',
+      sessionsAttended: '-',
+      coverBg: 'from-purple-600 to-pink-700',
+      description: 'Parliamentary debate techniques, public speaking confidence, argumentative research, and Model UN simulations.'
+    },
+    {
+      id: 'club5',
+      name: 'Green Earth Environmental Club',
+      category: 'Community & Eco-Service',
+      schedule: 'Saturdays 09:00 AM - 11:00 AM',
+      room: 'School Eco-Garden',
+      patron: 'Mrs. Beatrice Mensah',
+      members: 25,
+      joined: false,
+      role: 'Member',
+      attendanceRate: '-',
+      sessionsAttended: '-',
+      coverBg: 'from-emerald-700 to-green-800',
+      description: 'Campus recycling initiatives, organic gardening, climate action campaigns, and community tree planting drives.'
+    },
+    {
+      id: 'club6',
+      name: 'Drama & Performing Arts Guild',
+      category: 'Creative Arts',
+      schedule: 'Fridays 03:30 PM - 05:30 PM',
+      room: 'Drama Studio',
+      patron: 'Mrs. Janet Osei',
+      members: 30,
+      joined: false,
+      role: 'Member',
+      attendanceRate: '-',
+      sessionsAttended: '-',
+      coverBg: 'from-rose-600 to-red-700',
+      description: 'Stage acting technique, scriptwriting, set production, and annual theatrical drama presentations.'
+    }
+  ]);
+
+  const [clubEventsData, setClubEventsData] = useState<any[]>([
+    {
+      id: 'ev1',
+      title: 'Annual National Secondary Robotics Hackathon 2026',
+      club: 'Robotics & AI Innovation Club',
+      date: 'August 12, 2026 • 09:00 AM',
+      venue: 'Tech Innovation Hub Auditorium',
+      seatNo: 'Seat #14',
+      registered: true,
+      badge: 'Hackathon Contest'
+    },
+    {
+      id: 'ev2',
+      title: 'Inter-School Championship Chess Tournament',
+      club: 'School Chess & Strategy Club',
+      date: 'August 20, 2026 • 10:00 AM',
+      venue: 'Central City Gymnasium',
+      seatNo: 'Board #03',
+      registered: true,
+      badge: 'Championship Match'
+    },
+    {
+      id: 'ev3',
+      title: 'State Schools Athletics & Basketball Finals',
+      club: 'Senior Secondary Basketball Squad',
+      date: 'September 05, 2026 • 02:00 PM',
+      venue: 'Metropolitan Stadium',
+      seatNo: 'Open',
+      registered: false,
+      badge: 'Varsity Tournament'
+    },
+    {
+      id: 'ev4',
+      title: 'Inter-House Environmental Tree Planting Drive',
+      club: 'Green Earth Environmental Club',
+      date: 'August 25, 2026 • 08:30 AM',
+      venue: 'School Sports Grounds',
+      seatNo: 'Open',
+      registered: false,
+      badge: 'Community Service'
+    }
+  ]);
+
+  const [achievementsData, setAchievementsData] = useState<any[]>([
+    {
+      id: 'ach1',
+      title: '1st Place Gold Medal — Regional Physics Olympiad 2026',
+      club: 'Robotics & STEM',
+      category: 'Academic Honor',
+      awardedDate: 'June 2026',
+      issuedBy: 'National Science Foundation',
+      icon: '🥇',
+      color: 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+    },
+    {
+      id: 'ach2',
+      title: 'Grand Champions Trophy — Inter-School Chess League',
+      club: 'Chess & Strategy Club',
+      category: 'Mind Sports Trophy',
+      awardedDate: 'May 2026',
+      issuedBy: 'State Chess Association',
+      icon: '🏆',
+      color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+    },
+    {
+      id: 'ach3',
+      title: 'Best Outstanding Delegate Award — Model UN Conference',
+      club: 'Debate Society',
+      category: 'Leadership Citation',
+      awardedDate: 'April 2026',
+      issuedBy: 'Secondary Schools UN Assembly',
+      icon: '🥇',
+      color: 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+    },
+    {
+      id: 'ach4',
+      title: 'Silver Medalist — Senior Secondary Relay Championship',
+      club: 'Basketball Squad',
+      category: 'Athletic Medal',
+      awardedDate: 'March 2026',
+      issuedBy: 'School Sports Federation',
+      icon: '🥈',
+      color: 'border-purple-500/30 bg-purple-500/10 text-purple-300'
+    }
+  ]);
+
+  // Hostel & Boarding Accommodation Module State (Optional Module for Boarding Schools)
+  const [isHostelModuleEnabled, setIsHostelModuleEnabled] = useState(true);
+  const [hostelToast, setHostelToast] = useState<string | null>(null);
+
+  const [hostelData, setHostelData] = useState({
+    hostelName: 'St. Augustine Senior Boarding House (East Wing)',
+    roomNumber: 'Room 204 — 2nd Floor',
+    bedNumber: 'Bed B-02 (Lower Bunk)',
+    wardenName: 'Mr. Benedict Osei (Senior House Master)',
+    wardenContact: '+234-803-444-5566 • benedict.osei@school.edu',
+    dormitoryType: 'Senior Secondary Quad Dorm (4 Beds)',
+    roommates: ['David Chen (Room Lead)', 'Amina Yusuf (Bed A-02)', 'Kelechi Okafor (Bed B-01)'],
+    curfewTime: '09:30 PM (Lights Out & Nightly Lockout)',
+    inspectionNotices: [
+      {
+        id: 'insp1',
+        title: 'Weekly Dormitory Room Neatness Inspection',
+        date: 'July 26, 2026',
+        score: '96 / 100 (Grade A • Pass)',
+        inspector: 'Senior Warden (Mr. Benedict Osei)',
+        remarks: 'Bed properly dressed with hospital corners, study desks neat, wardrobes organized.'
+      },
+      {
+        id: 'insp2',
+        title: 'Curfew & Evening Roll Call Attendance Inspection',
+        date: 'July 19, 2026',
+        score: '100 / 100 (Full Compliance)',
+        inspector: 'Duty House Prefect',
+        remarks: 'All 4 room occupants present and accounted for during 09:30 PM roll call.'
+      },
+      {
+        id: 'insp3',
+        title: 'Fire Safety & High-Wattage Electrical Audit',
+        date: 'June 30, 2026',
+        score: 'Passed (No Infractions)',
+        inspector: 'School Safety Officer',
+        remarks: 'No unauthorized electrical cooking appliances or high-wattage heaters detected.'
+      }
+    ]
+  });
+
+  // Transport & School Bus Module Interactive State
+  const [isTransportModuleEnabled, setIsTransportModuleEnabled] = useState(true);
+  const [transportToast, setTransportToast] = useState<string | null>(null);
+
+  const [transportData, setTransportData] = useState({
+    busNumber: 'School Bus #07 (Toyota Coaster)',
+    plateNumber: 'AG-842-APP',
+    capacity: '32 Passengers (Air Conditioned)',
+    driverName: 'Uncle Samuel Lawson',
+    driverRole: 'Senior Transport Officer',
+    driverPhone: '+234-802-999-8877',
+    driverLicense: 'Commercial Heavy Duty Class A (15 Yrs Exp)',
+    busAttendant: 'Mrs. Grace Mensah (Route Safety Attendant)',
+    routeName: 'Route B — Lekki Phase 1 / VGC Express Corridor',
+    myStop: 'Stop #4 - Victoria Garden City Gate 2 Main Entrance',
+    morningPickupTime: '07:15 AM (Departure 07:18 AM)',
+    afternoonDropoffTime: '03:45 PM (Arrival 03:50 PM)',
+    gpsStatus: 'Active Live GPS • Signal 100%',
+    liveEta: '6 mins (1.8 km away)',
+    currentSpeed: '42 km/h',
+    routeStops: [
+      { id: 's1', name: 'Central Bus Depot (Departure)', time: '06:45 AM', status: 'Passed', icon: '🚌' },
+      { id: 's2', name: 'Admiralty Way Junction (Stop #2)', time: '07:00 AM', status: 'Passed', icon: '📍' },
+      { id: 's3', name: 'Ikota Villa Estate Gate (Stop #3)', time: '07:10 AM', status: 'Passed', icon: '📍' },
+      { id: 's4', name: 'Victoria Garden City Gate 2 (My Scheduled Stop)', time: '07:15 AM', status: 'Target Stop', icon: '📍' },
+      { id: 's5', name: 'Main Campus Bus Bay (Final Destination)', time: '07:35 AM', status: 'Upcoming', icon: '🏫' }
+    ]
+  });
+
+  // Documents & Downloads Module State
+  const [documentsCategory, setDocumentsCategory] = useState<'all' | 'reports' | 'admission' | 'id_card' | 'certificates' | 'receipts' | 'timetable' | 'transcript'>('all');
+  const [documentsToast, setDocumentsToast] = useState<string | null>(null);
+
+  const [studentDocumentsData] = useState<any[]>([
+    {
+      id: 'doc1',
+      title: 'Official Term Report Card — Term 1 2026/2027',
+      category: 'reports',
+      categoryLabel: 'Report Card',
+      fileSize: '1.8 MB PDF',
+      issuedBy: 'Albert Academy Registrar Office',
+      date: 'July 20, 2026',
+      badge: 'Report Card',
+      icon: '📊',
+      action: 'report_card'
+    },
+    {
+      id: 'doc2',
+      title: 'Official Term Report Card — Term 2 2025/2026',
+      category: 'reports',
+      categoryLabel: 'Report Card',
+      fileSize: '1.7 MB PDF',
+      issuedBy: 'Albert Academy Registrar Office',
+      date: 'April 14, 2026',
+      badge: 'Report Card',
+      icon: '📊',
+      action: 'report_card'
+    },
+    {
+      id: 'doc3',
+      title: 'Official School Offer of Admission Letter',
+      category: 'admission',
+      categoryLabel: 'Admission Letter',
+      fileSize: '1.4 MB Signed PDF',
+      issuedBy: 'Office of the Principal & Admissions',
+      date: 'September 15, 2024',
+      badge: 'Admission Document',
+      icon: '📜',
+      action: 'download'
+    },
+    {
+      id: 'doc4',
+      title: 'Digital Student Identity Card & QR Access Badge',
+      category: 'id_card',
+      categoryLabel: 'ID Card',
+      fileSize: '850 KB PNG / PDF',
+      issuedBy: 'Campus Safety & Student Registry',
+      date: 'September 2024 • Valid 2024-2027',
+      badge: 'Identity Card',
+      icon: '🪪',
+      action: 'id_card'
+    },
+    {
+      id: 'doc5',
+      title: 'STEM & Physics Olympiad Certificate of Excellence (1st Place)',
+      category: 'certificates',
+      categoryLabel: 'Certificate',
+      fileSize: '2.2 MB High-Res PDF',
+      issuedBy: 'National Science Foundation',
+      date: 'June 2026',
+      badge: 'Academic Medal',
+      icon: '🥇',
+      action: 'download'
+    },
+    {
+      id: 'doc6',
+      title: 'Inter-School Chess Championship Winner Certificate',
+      category: 'certificates',
+      categoryLabel: 'Certificate',
+      fileSize: '2.0 MB High-Res PDF',
+      issuedBy: 'State Chess Federation',
+      date: 'May 2026',
+      badge: 'Mind Sports Award',
+      icon: '🏆',
+      action: 'download'
+    },
+    {
+      id: 'doc7',
+      title: 'Model UN Conference Outstanding Delegate Citation',
+      category: 'certificates',
+      categoryLabel: 'Certificate',
+      fileSize: '1.9 MB PDF',
+      issuedBy: 'Secondary Schools UN Assembly',
+      date: 'April 2026',
+      badge: 'Leadership Award',
+      icon: '🌟',
+      action: 'download'
+    },
+    {
+      id: 'doc8',
+      title: 'Tuition & Boarding Fee Receipt #REC-2026-90412 (₦450,000)',
+      category: 'receipts',
+      categoryLabel: 'Fee Receipt',
+      fileSize: '650 KB PDF',
+      issuedBy: 'School Bursar & Finance Dept',
+      date: 'July 01, 2026',
+      badge: 'Fully Paid ✓',
+      icon: '💳',
+      action: 'download'
+    },
+    {
+      id: 'doc9',
+      title: 'STEM Lab & Robotics Workshop Receipt #REC-2026-88104 (₦55,000)',
+      category: 'receipts',
+      categoryLabel: 'Fee Receipt',
+      fileSize: '520 KB PDF',
+      issuedBy: 'School Bursar & Finance Dept',
+      date: 'June 18, 2026',
+      badge: 'Fully Paid ✓',
+      icon: '💳',
+      action: 'download'
+    },
+    {
+      id: 'doc10',
+      title: 'Weekly Class Timetable & Exam Slip Docket — Term 1 2026',
+      category: 'timetable',
+      categoryLabel: 'Timetable & Slip',
+      fileSize: '1.1 MB PDF',
+      issuedBy: 'Director of Studies',
+      date: 'July 2026',
+      badge: 'Class Schedule',
+      icon: '📅',
+      action: 'timetable'
+    },
+    {
+      id: 'doc11',
+      title: 'Official Multi-Year Academic Transcript (Cumulative GPA 3.82 / 4.0)',
+      category: 'transcript',
+      categoryLabel: 'Transcript',
+      fileSize: '3.1 MB Signed PDF',
+      issuedBy: 'School Registrar & Academic Board',
+      date: 'July 2026',
+      badge: 'Signed Transcript',
+      icon: '🎓',
+      action: 'transcript'
+    }
+  ]);
+
+  // Central Notification Center & Multi-Channel Alert Desk Interactive State
+  const [notificationsFilter, setNotificationsFilter] = useState<'all' | 'unread' | 'assignment' | 'result' | 'announcement' | 'message' | 'finance' | 'attendance'>('all');
+  const [notificationsSearchQuery, setNotificationsSearchQuery] = useState('');
+  const [notificationsToast, setNotificationsToast] = useState<string | null>(null);
+
+  // Multi-Channel Dispatch Preferences (Push, Email, SMS)
+  const [notificationsDispatchPrefs, setNotificationsDispatchPrefs] = useState({
+    pushEnabled: true,
+    emailEnabled: true,
+    smsEnabled: true,
+    guardianSmsPhone: '+234-803-333-4455'
+  });
+
+  const [notificationsData, setNotificationsData] = useState<any[]>([
+    {
+      id: 'notif1',
+      title: 'Assignment Due Reminder',
+      category: 'assignment',
+      categoryLabel: 'Assignment Due',
+      message: 'Algebra Chapter 4 Proofs & Polynomial exercises are due today at 05:00 PM (100 Pts). Please submit via Assignments Desk.',
+      timestamp: 'Today at 08:30 AM',
+      read: false,
+      priority: 'High',
+      sender: 'Mathematics Dept (Mr. Kwame Darko)',
+      icon: '📝',
+      color: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300',
+      actionTab: 'assignments'
+    },
+    {
+      id: 'notif2',
+      title: 'New Examination Result Published',
+      category: 'result',
+      categoryLabel: 'New Result',
+      message: 'Midterm Organic Chemistry Exam score published: 88 / 100 (Grade A • Outstanding).',
+      timestamp: 'Yesterday at 04:15 PM',
+      read: false,
+      priority: 'Urgent',
+      sender: 'Academic Registrar Office',
+      icon: '📊',
+      color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+      actionTab: 'academics'
+    },
+    {
+      id: 'notif3',
+      title: 'School Announcement: Inter-House Cultural Week',
+      category: 'announcement',
+      categoryLabel: 'New Announcement',
+      message: 'Annual Inter-House Sports & Cultural Festival commences August 15, 2026. All house captains to submit team lists.',
+      timestamp: 'July 28, 2026',
+      read: false,
+      priority: 'Normal',
+      sender: 'Principal Office & Student Affairs',
+      icon: '📢',
+      color: 'border-purple-500/30 bg-purple-500/10 text-purple-300',
+      actionTab: 'calendar'
+    },
+    {
+      id: 'notif4',
+      title: 'Direct Teacher Message Received',
+      category: 'message',
+      categoryLabel: 'Teacher Message',
+      message: 'Mr. Kwame Darko: "Hello Emeka, excellent work on the Math Olympiad qualifying test!"',
+      timestamp: 'July 27, 2026',
+      read: false,
+      priority: 'Normal',
+      sender: 'Mr. Kwame Darko (Math Teacher)',
+      icon: '💬',
+      color: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
+      actionTab: 'messages'
+    },
+    {
+      id: 'notif5',
+      title: 'School Fee Payment Reminder',
+      category: 'finance',
+      categoryLabel: 'Fee Reminder',
+      message: 'Term 2 Installment Fee Balance due date approaching in 10 days. Online card payment is open.',
+      timestamp: 'July 25, 2026',
+      read: false,
+      priority: 'Urgent',
+      sender: 'School Bursar & Finance Dept',
+      icon: '💳',
+      color: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+      actionTab: 'finance'
+    },
+    {
+      id: 'notif6',
+      title: 'Daily Attendance Check-in Recorded',
+      category: 'attendance',
+      categoryLabel: 'Attendance Alert',
+      message: 'Morning Assembly Gate RFID check-in recorded at 07:42 AM (On Time ✓). Attendance status: Present.',
+      timestamp: 'July 24, 2026',
+      read: false,
+      priority: 'Low',
+      sender: 'Attendance Scanner System',
+      icon: '🚨',
+      color: 'border-teal-500/30 bg-teal-500/10 text-teal-300',
+      actionTab: 'attendance'
+    },
+    {
+      id: 'notif7',
+      title: 'Library Book Due Date Advisory',
+      category: 'announcement',
+      categoryLabel: 'New Announcement',
+      message: '"Introduction to Algorithms" library book loan due in 5 days. Please return or renew loan online.',
+      timestamp: 'July 22, 2026',
+      read: true,
+      priority: 'Low',
+      sender: 'School Central Library Desk',
+      icon: '📚',
+      color: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+      actionTab: 'library'
+    }
+  ]);
+
+  // Performance Analytics Visual Dashboard Interactive State
+  const [analyticsSubTab, setAnalyticsSubTab] = useState<'overview' | 'subjects' | 'gpa_trend' | 'attendance_trend' | 'assignments' | 'exam_comp'>('overview');
+  const [analyticsToast, setAnalyticsToast] = useState<string | null>(null);
+
+  const [subjectPerformanceData] = useState<any[]>([
+    { subject: 'Mathematics (MATH-101)', score: 92, grade: 'A+', target: 95, icon: '📐', barColor: 'from-blue-600 to-indigo-600', status: 'Mastery Level' },
+    { subject: 'English Literature (ENG-301)', score: 90, grade: 'A', target: 92, icon: '📖', barColor: 'from-purple-600 to-pink-600', status: 'Mastery Level' },
+    { subject: 'Organic Chemistry (CHEM-202)', score: 88, grade: 'A', target: 90, icon: '🧪', barColor: 'from-emerald-600 to-teal-600', status: 'Strong' },
+    { subject: 'Modern Physics (PHYS-201)', score: 85, grade: 'A-', target: 88, icon: '⚡', barColor: 'from-amber-600 to-orange-600', status: 'Strong' },
+    { subject: 'World History (HIST-102)', score: 78, grade: 'B+', target: 85, icon: '📜', barColor: 'from-rose-600 to-red-600', status: 'Focus Area' }
+  ]);
+
+  const [gpaTrendData] = useState<any[]>([
+    { term: 'Term 1 (2024/2025)', gpa: 3.65, status: 'First Year Baseline' },
+    { term: 'Term 2 (2024/2025)', gpa: 3.72, status: 'Steady Improvement' },
+    { term: 'Term 3 (2024/2025)', gpa: 3.78, status: 'Honor Roll' },
+    { term: 'Term 1 (2025/2026)', gpa: 3.82, status: 'High Distinction' },
+    { term: 'Term 2 (2025/2026)', gpa: 3.85, status: 'Current Standing' },
+    { term: 'Term 3 Target', gpa: 3.92, status: 'Projected Target' }
+  ]);
+
+  const [attendanceTrendData] = useState<any[]>([
+    { month: 'January', rate: 94, status: '18 / 19 Days' },
+    { month: 'February', rate: 96, status: '19 / 20 Days' },
+    { month: 'March', rate: 98, status: '21 / 22 Days' },
+    { month: 'April', rate: 95, status: '19 / 20 Days' },
+    { month: 'May', rate: 98, status: '20 / 21 Days' },
+    { month: 'June', rate: 96, status: '19 / 20 Days' }
+  ]);
+
+  const [examComparisonData] = useState<any[]>([
+    { subject: 'Mathematics', midterm: 88, final: 94, diff: '+6%', trend: 'up' },
+    { subject: 'Organic Chemistry', midterm: 82, final: 88, diff: '+6%', trend: 'up' },
+    { subject: 'Modern Physics', midterm: 80, final: 85, diff: '+5%', trend: 'up' },
+    { subject: 'English Literature', midterm: 88, final: 90, diff: '+2%', trend: 'up' },
+    { subject: 'World History', midterm: 75, final: 78, diff: '+3%', trend: 'up' }
+  ]);
+
+  // AI Learning Assistant (Optional Module) Interactive State
+  const [isAiAssistantEnabled, setIsAiAssistantEnabled] = useState(true);
+  const [aiSubTab, setAiSubTab] = useState<'explain' | 'quiz' | 'summarize' | 'study_plan' | 'qa' | 'weak_topics'>('explain');
+  const [aiAssistantToast, setAiAssistantToast] = useState<string | null>(null);
+
+  // Lesson Explanation State
+  const [aiLessonTopic, setAiLessonTopic] = useState('Organic Chemistry: Electrophilic Addition Reaction Mechanisms');
+  const [aiLessonExplanation, setAiLessonExplanation] = useState<string | null>(null);
+  const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
+
+  // Practice Quiz State
+  const [aiQuizSubject, setAiQuizSubject] = useState('Mathematics (Algebra & Proofs)');
+  const [aiQuizQuestions, setAiQuizQuestions] = useState<any[] | null>([
+    {
+      id: 'q1',
+      question: 'In the quadratic equation ax² + bx + c = 0, what does the discriminant (b² - 4ac) determine?',
+      options: ['The sum of the roots', 'The number and nature of real roots', 'The y-intercept', 'The vertex coordinate'],
+      correctAnswer: 1,
+      selectedAnswer: null,
+      explanation: 'The discriminant b² - 4ac indicates whether the quadratic has 2 distinct real roots (>0), 1 repeated real root (=0), or complex roots (<0).'
+    },
+    {
+      id: 'q2',
+      question: 'Which property guarantees that if a line is tangent to a circle, it is perpendicular to the radius at the point of contact?',
+      options: ['Pythagorean Theorem', 'Radius-Tangent Theorem', 'Chord Inscribed Theorem', 'Secant Segment Rule'],
+      correctAnswer: 1,
+      selectedAnswer: null,
+      explanation: 'The Radius-Tangent Theorem states that a tangent to a circle is always perpendicular to the radius drawn to the point of tangency.'
+    }
+  ]);
+  const [quizScore, setQuizScore] = useState<number | null>(null);
+
+  // Note Summarizer State
+  const [aiNoteText, setAiNoteText] = useState('Photosynthesis takes place in chloroplasts. Chlorophyll absorbs solar radiation to drive the light-dependent reaction, generating ATP and NADPH. In the Calvin Cycle (light-independent), carbon dioxide is fixed by RuBisCO to synthesize glucose (C6H12O6).');
+  const [aiNoteSummaryResult, setAiNoteSummaryResult] = useState<any | null>(null);
+
+  // Recommended Study Plan State
+  const [aiStudyPlanTarget, setAiStudyPlanTarget] = useState('Target GPA 3.90 for Term 3 Finals');
+  const [aiGeneratedStudyPlan, setAiGeneratedStudyPlan] = useState<any[] | null>([
+    { day: 'Monday (04:30 PM - 06:00 PM)', subject: 'Organic Chemistry (CHEM-202)', activity: 'Practice Electrophilic Addition reaction mechanisms & mechanism diagrams.', focus: 'Weak Topic (+5% boost needed)' },
+    { day: 'Wednesday (05:00 PM - 06:30 PM)', subject: 'World History (HIST-102)', activity: 'Draft 3 essay thesis statements with chronological citations.', focus: 'Essay Formatting Boost' },
+    { day: 'Friday (04:00 PM - 05:30 PM)', subject: 'Mathematics (MATH-101)', activity: 'Solve past exam questions on polynomial derivations.', focus: 'Mastery Consolidation' }
+  ]);
+
+  // Curriculum Q&A State
+  const [aiQaPrompt, setAiQaPrompt] = useState('Can you explain Newton’s Second Law of Motion with a real-life example?');
+  const [aiQaResponse, setAiQaResponse] = useState<string | null>(null);
+
+  // Identified Weak Topics Data
+  const [weakTopicsData] = useState<any[]>([
+    {
+      id: 'w1',
+      subject: 'Organic Chemistry (CHEM-202)',
+      topicName: 'Electrophilic Addition Reactions & Reaction Intermediates',
+      masteryScore: 72,
+      status: 'High Priority Focus Area',
+      recommendation: 'Complete 3 revision sessions on carbocation stability with AI Copilot.',
+      badgeColor: 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+    },
+    {
+      id: 'w2',
+      subject: 'World History (HIST-102)',
+      topicName: 'Comparative Analysis & Historical Thesis Citation Formatting',
+      masteryScore: 78,
+      status: 'Moderate Focus Area',
+      recommendation: 'Review Chicago Style footnote citations and primary source analysis.',
+      badgeColor: 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+    },
+    {
+      id: 'w3',
+      subject: 'Modern Physics (PHYS-201)',
+      topicName: 'Photoelectric Effect & Work Function Calculations',
+      masteryScore: 82,
+      status: 'Consolidation Required',
+      recommendation: 'Practice 5 problem sets on Planck’s constant equation E = hf.',
+      badgeColor: 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+    }
+  ]);
+
+  // Digital Student ID Card & Multi-Use Smart Badge State
+  const [idCardSide, setIdCardSide] = useState<'front' | 'back'>('front');
+  const [idCardToast, setIdCardToast] = useState<string | null>(null);
+  const [qrToken, setQrToken] = useState('SCH-QR-8842-9901-SEC');
+
+  const [idCardUseLogs] = useState<any[]>([
+    {
+      id: 'ul1',
+      system: 'Attendance RFID Scanner',
+      systemIcon: '🗓️',
+      action: 'Morning Assembly Gate Check-in',
+      status: 'Verified ✓',
+      time: 'Today, 07:42 AM',
+      location: 'Main School Entrance Gate B',
+      color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+    },
+    {
+      id: 'ul2',
+      system: 'Cafeteria POS Scanner',
+      systemIcon: '🍽️',
+      action: 'Meal Plan Debit (₦1,200 Lunch Combo)',
+      status: 'Approved ✓',
+      time: 'Yesterday, 01:15 PM',
+      location: 'Central Dining Hall Counter #2',
+      color: 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+    },
+    {
+      id: 'ul3',
+      system: 'Library Checkout Scanner',
+      systemIcon: '📚',
+      action: 'Book Loan Scan: "Introduction to Algorithms"',
+      status: 'Active Loan',
+      time: 'July 28, 2026 at 03:40 PM',
+      location: 'School Library Desk #1',
+      color: 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+    },
+    {
+      id: 'ul4',
+      system: 'Exam Hall Verification',
+      systemIcon: '✍️',
+      action: 'Midterm Exam Hall Entry & Desk #24 Slip',
+      status: 'Cleared ✓',
+      time: 'July 24, 2026 at 08:45 AM',
+      location: 'Main Auditorium Exam Desk #24',
+      color: 'border-purple-500/30 bg-purple-500/10 text-purple-300'
+    }
+  ]);
+
+  // Settings & Student Preferences Center Interactive State
+  const [selectedTheme, setSelectedTheme] = useState<'dark' | 'light' | 'system'>('dark');
+  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'fr' | 'es' | 'ha' | 'yo' | 'ig'>('en');
+  const [settingsToast, setSettingsToast] = useState<string | null>(null);
+
+  // Notification Preferences State
+  const [notifPushPref, setNotifPushPref] = useState(true);
+  const [notifEmailPref, setNotifEmailPref] = useState(true);
+  const [notifSmsPref, setNotifSmsPref] = useState(true);
+  const [notifAssignmentsPref, setNotifAssignmentsPref] = useState(true);
+  const [notifGradesPref, setNotifGradesPref] = useState(true);
+  const [notifFeeRemindersPref, setNotifFeeRemindersPref] = useState(true);
+
+  // Password Change State
+  const [currPassword, setCurrPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordToast, setPasswordToast] = useState<string | null>(null);
+
+  // 2FA Security State
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+  const [show2FAModal, setShow2FAModal] = useState(false);
+  const [totpCodeInput, setTotpCodeInput] = useState('');
+  const [backupCodes] = useState<string[]>([
+    '8A4K-92X1', '7L3M-44P9', '2W8Q-11N7', '9C5T-66J3', '4V2P-88K0'
+  ]);
+
+  // Active Sessions Data
+  const [activeLoginSessions, setActiveLoginSessions] = useState<any[]>([
+    { id: 's1', device: 'Chrome on Windows 11 (This Device)', location: 'Lagos, Nigeria', ip: '102.89.44.12', time: 'Active Now', current: true },
+    { id: 's2', device: 'Safari on iPhone 15 Pro', location: 'Lagos, Nigeria', ip: '102.89.44.89', time: 'Today at 02:15 PM', current: false },
+    { id: 's3', device: 'EduPage Android App v4.2', location: 'Abuja, Nigeria', ip: '197.210.8.55', time: 'Yesterday at 09:30 AM', current: false }
+  ]);
+
+  // Help & Support Desk Interactive State
+  const [supportSubTab, setSupportSubTab] = useState<'faqs' | 'tickets' | 'ict_contact' | 'report_issue'>('faqs');
+  const [faqSearchQuery, setFaqSearchQuery] = useState('');
+  const [selectedFaqCategory, setSelectedFaqCategory] = useState<string>('all');
+  const [supportToast, setSupportToast] = useState<string | null>(null);
+
+  // New Support Ticket Form State
+  const [showNewTicketModal, setShowNewTicketModal] = useState(false);
+  const [ticketCategory, setTicketCategory] = useState('ICT & Portal Login');
+  const [ticketPriority, setTicketPriority] = useState('Medium');
+  const [ticketSubject, setTicketSubject] = useState('');
+  const [ticketDescription, setTicketDescription] = useState('');
+
+  // Active Support Tickets List
+  const [supportTickets, setSupportTickets] = useState<any[]>([
+    {
+      id: 'TICK-8842-01',
+      category: 'ICT & Portal Login',
+      subject: 'Unable to access Chemistry LMS virtual lab simulator link',
+      priority: 'High',
+      status: 'In Progress',
+      assignedTo: 'Mr. Gabriel (ICT Lead)',
+      createdAt: 'Yesterday at 04:30 PM',
+      updatedAt: '2 hours ago',
+      color: 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+    },
+    {
+      id: 'TICK-8842-02',
+      category: 'Library & E-Resources',
+      subject: 'E-Book renewal request for "Introduction to Algorithms"',
+      priority: 'Low',
+      status: 'Resolved ✓',
+      assignedTo: 'Mrs. Fatima (Head Librarian)',
+      createdAt: 'July 26, 2026 at 11:15 AM',
+      updatedAt: 'July 27, 2026',
+      color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+    },
+    {
+      id: 'TICK-8842-03',
+      category: 'Hostel Maintenance',
+      subject: 'Hot water heater pressure low in Nelson Mandela Hall Room 204',
+      priority: 'Medium',
+      status: 'Open',
+      assignedTo: 'Facilities Maintenance Team',
+      createdAt: 'Today at 08:10 AM',
+      updatedAt: 'Just now',
+      color: 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+    }
+  ]);
+
+  // Frequently Asked Questions (FAQs) Knowledge Base Data
+  const [faqList] = useState<any[]>([
+    {
+      id: 'f1',
+      category: 'Portal & Passwords',
+      question: 'How do I reset my portal password or update my email address?',
+      answer: 'Navigate to the Settings tab in your portal and fill in the Password & Account Security section. For email updates, contact the School Registrar.'
+    },
+    {
+      id: 'f2',
+      category: 'Portal & Passwords',
+      question: 'What should I do if my Digital Student ID QR Code fails at the cafeteria scanner?',
+      answer: 'Ensure your phone screen brightness is set to high. If the issue persists, click "Refresh QR Token" on your Digital ID card page or visit the ICT Helpdesk.'
+    },
+    {
+      id: 'f3',
+      category: 'Academics & Transcripts',
+      question: 'Where can I download my official term report card and academic transcript?',
+      answer: 'Go to the Official Documents tab or the Academic Grades tab to view high-resolution PDF report cards, digital ID slips, and multi-year transcripts.'
+    },
+    {
+      id: 'f4',
+      category: 'Fees & Payments',
+      question: 'How do installment fee plans work and can I pay online?',
+      answer: 'Tuition fees are structured into approved term installments under the Fees Ledger tab. You can pay online via Debit Card, Mobile Money (MoMo), or Bank Transfer.'
+    },
+    {
+      id: 'f5',
+      category: 'Hostel & Transport',
+      question: 'How do I check my morning bus pickup time and driver contact?',
+      answer: 'Open the School Transport tab to view your assigned bus route, pickup stop schedule (e.g. 07:15 AM at Victoria Island Junction), and live driver contact details.'
+    }
+  ]);
+
+  // Advanced Professional SMS Feature Suite State
+  // 1. Adaptive School Level Dashboard State
+  const [schoolLevel, setSchoolLevel] = useState<'primary' | 'junior' | 'senior'>('senior');
+
+  // 2. Role-Aware Prefect / Student Leader State
+  const [studentLeadershipRole, setStudentLeadershipRole] = useState<'head_prefect' | 'library_prefect' | 'sports_captain' | 'standard'>('head_prefect');
+  const [prefectToast, setPrefectToast] = useState<string | null>(null);
+
+  // 3. Offline-First & Sync Engine State
+  const [isOnline, setIsOnline] = useState(true);
+  const [pendingSyncQueue, setPendingSyncQueue] = useState<any[]>([
+    { id: 'sq1', type: 'Offline Note Draft', detail: 'Organic Chemistry Calvin Cycle Notes', timestamp: '10 mins ago' },
+    { id: 'sq2', type: 'Assignment Submission Draft', detail: 'Physics Homework PDF', timestamp: '5 mins ago' }
+  ]);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
+
+  // 4. Real-Time WebSocket Channel State
+  const [webSocketStatus, setWebSocketStatus] = useState<'connected' | 'reconnecting'>('connected');
+  const [liveSocketEvents] = useState<any[]>([
+    { id: 'se1', text: '🔔 New Math Assignment Posted: Homework #5 due Friday', time: 'Just now' },
+    { id: 'se2', text: '🗓️ Gate RFID Attendance Check-in Verified (07:42 AM)', time: '2 mins ago' }
+  ]);
+
+  // 5. Progressive Web App (PWA) Install Prompt State
+  const [pwaInstalled, setPwaInstalled] = useState(false);
+  const [pwaToast, setPwaToast] = useState<string | null>(null);
+
+  // 6. Accessibility Settings State
+  const [accessibilityTextSize, setAccessibilityTextSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
+  const [isHighContrast, setIsHighContrast] = useState(false);
+
+  // 7. Student Career Portfolio Showcase Data
+  const [portfolioProjects] = useState<any[]>([
+    { id: 'p1', title: 'Solar Powered Hydroponics Farming Kit', category: 'STEM Research Project', date: 'May 2026', grade: 'Grade A+ (Distinction)', desc: 'Engineered a micro-controller automated nutrient feeding system for indoor school greenhouse.' },
+    { id: 'p2', title: 'Comparative Analysis of African Post-Colonial Literature', category: 'Literature Essay', date: 'March 2026', grade: 'Published in School Journal', desc: 'Critical breakdown of narrative structures in Chinua Achebe and Wole Soyinka works.' }
+  ]);
+  const [portfolioCertificates] = useState<any[]>([
+    { id: 'cert1', title: 'WAEC Senior STEM Excellence Certification', issuer: 'West African Examinations Council', year: '2026', badge: '📜 Verified Credential' },
+    { id: 'cert2', title: 'National Mathematics Olympiad Finalist', issuer: 'National Mathematical Centre', year: '2025', badge: '🥇 Gold Medalist' },
+    { id: 'cert3', title: 'Red Cross First Aid & CPR Certification', issuer: 'Nigerian Red Cross Society', year: '2024', badge: '🏥 Active Certified' }
+  ]);
+  const [portfolioExtracurriculars] = useState<any[]>([
+    { id: 'ex1', role: 'President & Founder', club: 'Debate & Public Speaking Society', period: '2025 — Present', impact: 'Led 12-member team to National High School Debate Finals victory.' },
+    { id: 'ex2', role: 'Team Captain', club: 'Mandela House First Eleven Football Squad', period: '2024 — 2026', impact: 'Captained House to Inter-House Sports Championship Trophy.' }
+  ]);
+
+  const [chatChannels, setChatChannels] = useState<any[]>([
+    {
+      id: 'c1',
+      name: 'Mr. Kwame Darko (Math Teacher)',
+      type: 'direct',
+      avatar: 'KD',
+      role: 'Mathematics Educator',
+      online: true,
+      status: 'Teaching 👨‍🏫',
+      unread: 2,
+      isPinned: true,
+      messages: [
+        { id: 'm101', senderId: 'teacher1', senderName: 'Mr. Kwame Darko', text: 'Hello Emeka! I reviewed your polynomial derivation steps in homework 4.', time: '04:15 PM', date: 'Today', status: 'read', reactions: { '👍': 2 } },
+        { id: 'm102', senderId: 'teacher1', senderName: 'Mr. Kwame Darko', text: 'You demonstrated excellent mathematical rigor for problem 8. Please make sure to bring your formula sheet to Friday\'s review session.', time: '04:30 PM', date: 'Today', status: 'read', reactions: { '🔥': 1 } }
+      ]
+    },
+    {
+      id: 'c2',
+      name: 'SS2 Blue Class Group',
+      type: 'group',
+      avatar: 'SS2',
+      role: 'Class Channel (42 Members)',
+      online: true,
+      status: 'Active Group',
+      unread: 1,
+      isPinned: true,
+      messages: [
+        { id: 'm201', senderId: 'student2', senderName: 'David Chen', text: 'Hey everyone, remember we have chemistry lab tomorrow at 11:00 AM.', time: '01:45 PM', date: 'Today', status: 'read', reactions: { '✅': 4 } },
+        { id: 'm202', senderId: 'student3', senderName: 'Amina Yusuf', text: 'Does anyone have the chemistry lab titration outline PDF?', time: '02:15 PM', date: 'Today', status: 'read', reactions: {} }
+      ]
+    },
+    {
+      id: 'c3',
+      name: 'Mrs. Beatrice Mensah (Chemistry)',
+      type: 'direct',
+      avatar: 'BM',
+      role: 'Chemistry Educator',
+      online: false,
+      status: 'In Lab 🥼',
+      unread: 0,
+      isPinned: false,
+      messages: [
+        { id: 'm301', senderId: 'teacher2', senderName: 'Mrs. Beatrice Mensah', text: 'Safety goggles and official white lab coats are compulsory for tomorrow\'s titration lab in Lab B.', time: 'Yesterday 10:15 AM', date: 'Yesterday', status: 'read', reactions: { '👍': 3 } }
+      ]
+    },
+    {
+      id: 'c4',
+      name: 'Dr. Stella Gbandi (English)',
+      type: 'direct',
+      avatar: 'SG',
+      role: 'Literature Educator',
+      online: true,
+      status: 'Available 👋',
+      unread: 0,
+      isPinned: false,
+      messages: [
+        { id: 'm401', senderId: 'teacher3', senderName: 'Dr. Stella Gbandi', text: 'Your Hamlet soliloquy critical essay analysis was very insightful. Excellent work!', time: 'July 26 09:30 AM', date: 'July 26', status: 'read', reactions: { '❤️': 2 } }
+      ]
+    },
+    {
+      id: 'c5',
+      name: 'School Administration Office',
+      type: 'direct',
+      avatar: 'SA',
+      role: 'School Admin Office',
+      online: true,
+      status: 'Office Hours 🏢',
+      unread: 0,
+      isPinned: false,
+      messages: [
+        { id: 'm501', senderId: 'admin1', senderName: 'School Admin', text: 'Official Notice: The Term 2 examination timetable and hall seat dockets are now published on your student portal.', time: 'July 25 09:00 AM', date: 'July 25', status: 'read', reactions: { '📢': 5 } }
+      ]
+    }
+  ]);
   const [forumThreads, setForumThreads] = useState([
     {
       id: 't1',
@@ -408,57 +1582,187 @@ export default function StudentPortalPage() {
   const tabItems = [
     { id: 'dashboard', label: 'My Dashboard', icon: BarChart3 },
     { id: 'profile', label: 'My Profile', icon: GraduationCap },
+    { id: 'id-card', label: 'Digital Student ID', icon: QrCode },
+    { id: 'portfolio', label: 'Career Portfolio', icon: Briefcase },
     { id: 'academics', label: 'Academic & Grades', icon: Award },
+    { id: 'analytics', label: 'Performance Analytics', icon: TrendingUp },
     { id: 'timetable', label: 'Timetable & Exams', icon: Clock },
+    { id: 'calendar', label: 'Academic Calendar', icon: Calendar },
+    { id: 'messages', label: 'Internal Messages', icon: MessageSquare },
+    { id: 'notifications', label: 'Notification Center', icon: Bell },
     { id: 'assignments', label: 'Assignments Desk', icon: BookOpenCheck },
     { id: 'lms', label: 'LMS Courses', icon: BookOpen },
-    { id: 'activities', label: 'School Life & Lib', icon: Trophy },
+    { id: 'library', label: 'Library Hub', icon: BookMarked },
+    { id: 'activities', label: 'School Life', icon: Trophy },
     { id: 'welfare', label: 'Health & Conduct', icon: Heart },
+    { id: 'hostel', label: 'Hostel Module', icon: Landmark },
+    { id: 'transport', label: 'School Transport', icon: Bus },
+    { id: 'documents', label: 'Official Documents', icon: FolderDown },
     { id: 'finance', label: 'Fees Ledger', icon: DollarSign },
     { id: 'ai-copilot', label: 'AI Study Copilot', icon: Brain },
     { id: 'productivity', label: 'Productivity Logs', icon: CheckSquare },
+    { id: 'support', label: 'Help & Support', icon: HelpCircle },
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
+  if (!mounted) {
+    return (
+      <div className="min-h-[600px] flex items-center justify-center">
+        <div className="animate-pulse space-y-3 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-[hsl(var(--accent)/0.2)] mx-auto" />
+          <p className="text-xs font-mono text-[hsl(var(--text-tertiary))]">Loading Student Portal Workspace...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto animate-fade-in px-4 sm:px-6 lg:px-8 pb-12">
-      {/* Top Controls Toolbar */}
-      <div className="flex items-center justify-between gap-4 pb-2 border-b border-[hsl(var(--border))]">
-        <div className="flex items-center gap-2">
-          <span className="px-3 py-1 rounded-full bg-[hsl(var(--accent)/0.12)] text-[hsl(var(--accent))] text-xs font-extrabold uppercase tracking-wider">
-            Student Portal Workspace
-          </span>
-          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold">
-            {studentData.className}
-          </span>
-        </div>
+      {/* Top Controls Toolbar with Advanced SMS Features Suite */}
+      <div className="space-y-3 pb-3 border-b border-[hsl(var(--border))]">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+          {/* Left: Branding & Adaptive School Level Selector */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="px-3 py-1 rounded-full bg-[hsl(var(--accent)/0.12)] text-[hsl(var(--accent))] text-xs font-extrabold uppercase tracking-wider">
+              Student Portal Enterprise
+            </span>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-[hsl(var(--bg-tertiary)/0.6)] border border-[hsl(var(--border))]">
+            {/* 1. ADAPTIVE SCHOOL LEVEL SELECTOR */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[hsl(var(--bg-tertiary)/0.6)] border border-[hsl(var(--border))] text-xs font-bold">
+              {[
+                { id: 'primary', label: '🎒 Primary' },
+                { id: 'junior', label: '🏫 Junior High' },
+                { id: 'senior', label: '🎓 Senior High' }
+              ].map(lvl => (
+                <button
+                  key={lvl.id}
+                  onClick={() => {
+                    setSchoolLevel(lvl.id as any);
+                    if (lvl.id === 'primary') setViewMode('simple');
+                    else setViewMode('advanced');
+                  }}
+                  className={`px-2.5 py-1 rounded-lg transition-all ${
+                    schoolLevel === lvl.id
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                  }`}
+                >
+                  {lvl.label}
+                </button>
+              ))}
+            </div>
+
+            {/* 2. ROLE-AWARE PREFECT / STUDENT LEADER SELECTOR */}
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 font-bold">
+              <span className="text-[10px] text-purple-400 font-mono px-1 uppercase">Role:</span>
+              <select
+                value={studentLeadershipRole}
+                onChange={e => {
+                  setStudentLeadershipRole(e.target.value as any);
+                  setPrefectToast(`Switched active role tools to: ${e.target.value.replace('_', ' ').toUpperCase()}`);
+                  setTimeout(() => setPrefectToast(null), 3000);
+                }}
+                className="bg-transparent text-purple-200 font-bold text-xs focus:outline-none"
+              >
+                <option value="standard" className="bg-slate-900 text-white">Standard Student</option>
+                <option value="head_prefect" className="bg-slate-900 text-white">👑 Head Prefect</option>
+                <option value="library_prefect" className="bg-slate-900 text-white">📚 Library Prefect</option>
+                <option value="sports_captain" className="bg-slate-900 text-white">🏆 Sports Captain</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Right: Offline Status, Real-Time WS Ticker, PWA Install & Accessibility */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* 3. OFFLINE-FIRST SYNC ENGINE STATUS */}
             <button
-              onClick={() => setViewMode('simple')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                viewMode === 'simple'
-                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md'
-                  : 'text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+              onClick={() => {
+                if (pendingSyncQueue.length > 0) {
+                  setSyncToast(`Synchronized ${pendingSyncQueue.length} pending items with cloud server!`);
+                  setPendingSyncQueue([]);
+                  setTimeout(() => setSyncToast(null), 3500);
+                }
+              }}
+              className={`px-3 py-1 rounded-xl border text-[11px] font-mono font-bold flex items-center gap-1.5 transition-all ${
+                isOnline
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
               }`}
             >
-              <Smile className="w-3.5 h-3.5" />
-              <span>Simple View</span>
+              <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+              {isOnline ? `Online (Sync Queue: ${pendingSyncQueue.length})` : 'Offline Mode (Sync Pending)'}
             </button>
+
+            {/* 4. REAL-TIME WEBSOCKET TICKER */}
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[11px] font-mono">
+              <Zap className="w-3 h-3 text-blue-400 animate-pulse" />
+              <span>WS Live 🟢</span>
+            </div>
+
+            {/* 5. PWA INSTALL PROMPT */}
+            {!pwaInstalled && (
+              <button
+                onClick={() => {
+                  setPwaInstalled(true);
+                  setPwaToast('EduPage School SaaS PWA installed to device home screen!');
+                  setTimeout(() => setPwaToast(null), 3500);
+                }}
+                className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-sm flex items-center gap-1 transition-all"
+              >
+                📱 Install App
+              </button>
+            )}
+
+            {/* 6. ACCESSIBILITY CONTROLS */}
             <button
-              onClick={() => setViewMode('advanced')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                viewMode === 'advanced'
-                  ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white shadow-md'
-                  : 'text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+              onClick={() => setIsHighContrast(!isHighContrast)}
+              className={`px-2.5 py-1 rounded-xl border text-[11px] font-bold transition-all ${
+                isHighContrast
+                  ? 'border-amber-400 bg-amber-400 text-slate-950 shadow-md font-black'
+                  : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))]'
               }`}
+              title="Toggle High-Contrast Mode for Accessibility"
             >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>Standard Workspace</span>
+              ⚡ High-Contrast
             </button>
           </div>
         </div>
+
+        {/* ROLE-AWARE PREFECT ACTION BANNER */}
+        {studentLeadershipRole !== 'standard' && (
+          <div className="p-3 rounded-2xl border border-purple-500/30 bg-purple-500/15 text-purple-200 text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner">
+            <div className="flex items-center gap-2">
+              <span className="text-base">👑</span>
+              <div>
+                <span className="font-extrabold text-purple-300 uppercase tracking-wider font-mono text-[10px]">
+                  ACTIVE STUDENT LEADERSHIP TOOLSUITE ({studentLeadershipRole.replace('_', ' ').toUpperCase()})
+                </span>
+                <p className="text-[11px] text-purple-200/90 font-normal">
+                  {studentLeadershipRole === 'head_prefect' && 'Permission granted: Mark class morning assembly attendance & manage prefect roster.'}
+                  {studentLeadershipRole === 'library_prefect' && 'Permission granted: Scan overdue book returns & send reading reminders.'}
+                  {studentLeadershipRole === 'sports_captain' && 'Permission granted: Record inter-house tournament scores & track house points.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setPrefectToast(`Action executed for ${studentLeadershipRole.replace('_', ' ')}!`);
+                setTimeout(() => setPrefectToast(null), 3000);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-md transition-all self-start sm:self-center"
+            >
+              Launch Leader Console
+            </button>
+          </div>
+        )}
+
+        {/* TOAST NOTIFICATIONS FOR PREFECT, SYNC, PWA */}
+        {(prefectToast || syncToast || pwaToast) && (
+          <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 text-xs font-extrabold flex items-center gap-2 shadow-md">
+            <CheckCircle2 className="w-4 h-4" /> {prefectToast || syncToast || pwaToast}
+          </div>
+        )}
       </div>
 
       {savedMessage && (
@@ -666,6 +1970,51 @@ export default function StudentPortalPage() {
                         <span>Report Card</span>
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                {/* 1.5 ONE-CLICK QUICK ACTIONS SUITE (8 SHORTCUTS) */}
+                <div className="glass-card p-6 border border-indigo-500/20 bg-indigo-500/5 rounded-3xl space-y-4 shadow-xl">
+                  <div className="flex justify-between items-center border-b border-indigo-500/20 pb-3">
+                    <div>
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        <Zap className="w-5 h-5 text-amber-400" /> One-Click Student Quick Actions
+                      </h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Instant shortcuts for your daily academic tasks, submissions, timetable, and teacher DMs.</p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[10px] font-black border border-amber-500/30">
+                      8 SHORTCUTS READY
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                    {[
+                      { id: 'tt', label: "Today's Timetable", icon: Clock, tab: 'timetable', color: 'border-blue-500/30 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20' },
+                      { id: 'sub', label: 'Submit Assignment', icon: BookOpenCheck, tab: 'assignments', color: 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20' },
+                      { id: 'res', label: 'Check Results', icon: Award, tab: 'academics', color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20' },
+                      { id: 'att', label: 'View Attendance', icon: CalendarCheck, tab: 'attendance', color: 'border-teal-500/30 bg-teal-500/10 text-teal-300 hover:bg-teal-500/20' },
+                      { id: 'rep', label: 'Report Card', icon: Download, action: 'Downloaded Official Term PDF Report Card!', color: 'border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20' },
+                      { id: 'msg', label: 'Message Teacher', icon: MessageSquare, tab: 'messages', color: 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20' },
+                      { id: 'cal', label: 'Open Calendar', icon: Calendar, tab: 'calendar', color: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20' },
+                      { id: 'lib', label: 'Learning Hub', icon: BookMarked, tab: 'library', color: 'border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20' }
+                    ].map(qa => {
+                      const Icon = qa.icon;
+                      return (
+                        <button
+                          key={qa.id}
+                          onClick={() => {
+                            if (qa.tab) setActiveTab(qa.tab as any);
+                            else if (qa.action) handleAction(qa.action);
+                          }}
+                          className={`p-3.5 rounded-2xl border text-center transition-all duration-300 flex flex-col items-center justify-center gap-2 cursor-pointer shadow-md hover:-translate-y-1 ${qa.color}`}
+                        >
+                          <div className="p-2 rounded-xl bg-slate-950/40 border border-white/10">
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <span className="text-[11px] font-extrabold leading-tight text-center">{qa.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -902,6 +2251,368 @@ export default function StudentPortalPage() {
                             className="flex-1 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl px-3 py-1.5 text-xs text-[hsl(var(--text-primary))]"
                           />
                           <button onClick={handleAddTodo} className="px-3 py-1.5 bg-[hsl(var(--accent))] text-white rounded-xl text-xs font-bold">Add</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 1.5: Student Profile & Identity Record */}
+            {activeTab === 'profile' && (
+              <div className="space-y-8 animate-fade-in">
+                {/* Profile Header & Action Banner */}
+                <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--accent)/0.2)] bg-[hsl(var(--accent)/0.05)] rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-[hsl(var(--accent)/0.2)] text-[hsl(var(--accent))] text-[11px] font-extrabold tracking-wider uppercase border border-[hsl(var(--accent)/0.3)]">
+                        Student Identity &amp; Registry Profile
+                      </span>
+                      <h2 className="text-2xl sm:text-3xl font-black text-[hsl(var(--text-primary))] mt-1">
+                        Student Profile Record
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Official student Information, contact preferences, parent/guardian details, address, admission history, and medical health ledger.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        handleAction('Student Profile Changes Saved Successfully!');
+                      }}
+                      className="px-6 py-3 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2 self-start sm:self-center"
+                    >
+                      <Save className="w-4 h-4" /> Save Profile Changes
+                    </button>
+                  </div>
+                </div>
+
+                {/* Photo & Identity Avatar Banner Card */}
+                <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row items-center gap-6">
+                    {/* Avatar Photo Container */}
+                    <div className="relative group flex-shrink-0">
+                      <div className="w-28 h-28 rounded-3xl bg-gradient-to-tr from-[hsl(var(--accent))] to-purple-600 flex items-center justify-center font-black text-white text-3xl shadow-xl border-4 border-[hsl(var(--bg-secondary))] overflow-hidden">
+                        EO
+                      </div>
+                      <button
+                        onClick={() => handleAction('Photo Upload Triggered')}
+                        className="absolute inset-0 bg-slate-950/60 text-white opacity-0 group-hover:opacity-100 transition-all rounded-3xl flex flex-col items-center justify-center text-[10px] font-bold gap-1"
+                      >
+                        <Upload className="w-5 h-5" />
+                        <span>Change Photo</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 text-center sm:text-left flex-1">
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                        <span className="px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold border border-emerald-500/30">
+                          🟢 Active Enrolled Student
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-[hsl(var(--accent)/0.12)] text-[hsl(var(--accent))] text-[10px] font-extrabold border border-[hsl(var(--accent)/0.2)]">
+                          Matric ID: {studentData.studentId}
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-[10px] font-bold border border-purple-500/20">
+                          {studentData.className}
+                        </span>
+                      </div>
+
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))]">{studentData.fullName}</h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))] font-medium">
+                        {studentData.house} &bull; Science &amp; Technology Track &bull; Boarding Resident
+                      </p>
+
+                      <div className="pt-2 flex flex-wrap justify-center sm:justify-start gap-3">
+                        <button
+                          onClick={() => handleAction('Photo Upload Requested')}
+                          className="px-4 py-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] text-xs font-bold hover:bg-[hsl(var(--border))] transition-all flex items-center gap-1.5"
+                        >
+                          <Upload className="w-3.5 h-3.5 text-[hsl(var(--accent))]" /> Upload New Photo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2-Column Profile Sections Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Left Column */}
+                  <div className="space-y-8">
+                    {/* 1. Contact Information (Editable) */}
+                    <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-5 shadow-xl">
+                      <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          <UserCheck className="w-5 h-5 text-[hsl(var(--accent))]" /> Contact Information
+                        </h3>
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          Editable
+                        </span>
+                      </div>
+
+                      <div className="space-y-4 text-xs">
+                        <div>
+                          <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                            Preferred Display Name
+                          </label>
+                          <input
+                            type="text"
+                            defaultValue={studentData.fullName}
+                            className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                              Student Mobile Phone
+                            </label>
+                            <input
+                              type="text"
+                              defaultValue="+234-802-111-0022"
+                              className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl font-mono text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                              Emergency Contact Phone
+                            </label>
+                            <input
+                              type="text"
+                              defaultValue="+234-803-333-4455"
+                              className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl font-mono text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                            Student Email Address
+                          </label>
+                          <input
+                            type="email"
+                            defaultValue="emeka.obi@student.school.edu"
+                            className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. Parent & Guardian Information (Editable Contact) */}
+                    <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-5 shadow-xl">
+                      <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          <Users className="w-5 h-5 text-indigo-400" /> Parent &amp; Guardian Information
+                        </h3>
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          Editable
+                        </span>
+                      </div>
+
+                      <div className="space-y-4 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                              Primary Guardian Name
+                            </label>
+                            <input
+                              type="text"
+                              defaultValue="Chief Chukwudi Obi"
+                              className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                              Relationship to Student
+                            </label>
+                            <input
+                              type="text"
+                              defaultValue="Father / Primary Sponsor"
+                              className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                              Guardian Phone Number
+                            </label>
+                            <input
+                              type="text"
+                              defaultValue="+234-803-333-4455"
+                              className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl font-mono text-xs text-[hsl(var(--text-primary))]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                              Guardian Email Address
+                            </label>
+                            <input
+                              type="email"
+                              defaultValue="chukwudi.obi@example.com"
+                              className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))]"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                            Secondary Guardian / Mother
+                          </label>
+                          <input
+                            type="text"
+                            defaultValue="Dr. Florence Obi (Mother • +234-802-555-6677)"
+                            className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. Residential Address (Editable) */}
+                    <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-5 shadow-xl">
+                      <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          <Landmark className="w-5 h-5 text-amber-400" /> Home Residential Address
+                        </h3>
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          Editable
+                        </span>
+                      </div>
+
+                      <div className="space-y-4 text-xs">
+                        <div>
+                          <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                            Street Home Address
+                          </label>
+                          <input
+                            type="text"
+                            defaultValue="14 Victoria Garden City Boulevard, Lekki Phase 1"
+                            className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))]"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                              City / Local Govt
+                            </label>
+                            <input
+                              type="text"
+                              defaultValue="Lekki / Eti-Osa LGA"
+                              className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                              State &amp; Country
+                            </label>
+                            <input
+                              type="text"
+                              defaultValue="Lagos State, Nigeria"
+                              className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column */}
+                  <div className="space-y-8">
+                    {/* 4. Admission Details (Locked Registry Record 🔒) */}
+                    <div className="glass-card p-6 sm:p-8 border border-purple-500/20 bg-purple-500/5 rounded-3xl space-y-5 shadow-xl">
+                      <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          <GraduationCap className="w-5 h-5 text-purple-400" /> Admission &amp; Enrolment Record
+                        </h3>
+                        <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20 flex items-center gap-1">
+                          🔒 Locked Official Record
+                        </span>
+                      </div>
+
+                      <div className="space-y-3.5 text-xs">
+                        <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] flex justify-between items-center">
+                          <span className="text-[hsl(var(--text-tertiary))] font-semibold">Official Full Registered Name</span>
+                          <span className="font-extrabold text-[hsl(var(--text-primary))]">{studentData.fullName}</span>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] flex justify-between items-center">
+                          <span className="text-[hsl(var(--text-tertiary))] font-semibold">Admission / Matriculation ID</span>
+                          <span className="font-mono font-extrabold text-purple-400">{studentData.studentId}</span>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] flex justify-between items-center">
+                          <span className="text-[hsl(var(--text-tertiary))] font-semibold">Admission Enrolment Date</span>
+                          <span className="font-mono font-bold text-[hsl(var(--text-primary))]">September 15, 2024</span>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] flex justify-between items-center">
+                          <span className="text-[hsl(var(--text-tertiary))] font-semibold">Current Grade &amp; Track</span>
+                          <span className="font-extrabold text-emerald-400">{studentData.className}</span>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] flex justify-between items-center">
+                          <span className="text-[hsl(var(--text-tertiary))] font-semibold">Enrolment Status</span>
+                          <span className="font-bold text-sky-400">Full-time Boarding Student</span>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] flex justify-between items-center">
+                          <span className="text-[hsl(var(--text-tertiary))] font-semibold">Assigned School House</span>
+                          <span className="font-bold text-amber-400">🌟 {studentData.house}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 5. Medical & Health Information */}
+                    <div className="glass-card p-6 sm:p-8 border border-rose-500/20 bg-rose-500/5 rounded-3xl space-y-5 shadow-xl">
+                      <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          <Heart className="w-5 h-5 text-rose-400" /> Medical &amp; Clinical Health Record
+                        </h3>
+                        <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                          Emergency Record
+                        </span>
+                      </div>
+
+                      <div className="space-y-4 text-xs">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                            <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block">Blood Group</span>
+                            <span className="text-base font-black text-rose-400">O+ Positive 🔒</span>
+                          </div>
+
+                          <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                            <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase block">Genotype</span>
+                            <span className="text-base font-black text-emerald-400">AA 🔒</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-extrabold uppercase text-rose-400 mb-1">
+                            Known Allergies &amp; Dietary Sensitivities
+                          </label>
+                          <input
+                            type="text"
+                            defaultValue="Mild Peanut Allergy (EpiPen in Clinic), Dust Sensitive"
+                            className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-extrabold uppercase text-[hsl(var(--text-tertiary))] mb-1">
+                            Medical Conditions &amp; Chronic Notes
+                          </label>
+                          <textarea
+                            rows={2}
+                            defaultValue="Mild exercise-induced asthma (Ventolin inhaler on file in clinic)."
+                            className="w-full p-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))]"
+                          />
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-[11px] text-[hsl(var(--text-secondary))] space-y-1">
+                          <p>🩺 <strong>School Physician:</strong> Dr. Abigail Taylor (School Clinic)</p>
+                          <p>✅ <strong>Emergency Treatment Permission:</strong> Granted by Parent/Guardian</p>
                         </div>
                       </div>
                     </div>
@@ -1181,6 +2892,344 @@ export default function StudentPortalPage() {
                         <p className="text-xs font-semibold text-rose-400">Asthma Inhaler required inside backpack &bull; Penicillin Allergy</p>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2.5: Digital Student Identity Card & Smart Pass */}
+            {activeTab === 'id-card' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header Banner */}
+                <div className="glass-card p-6 sm:p-8 border border-purple-500/20 bg-purple-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[11px] font-extrabold tracking-wider uppercase border border-purple-500/30">
+                        Campus Identity &amp; Smart Pass Registry
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1 flex items-center gap-2">
+                        <QrCode className="w-6 h-6 text-purple-400" /> Digital Student Identity Card
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Official encrypted digital badge with QR code, barcode ID, photo, house, and class details. Valid for Attendance, Library, Cafeteria, and Exams.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-center">
+                      <button
+                        onClick={() => setIdCardSide(idCardSide === 'front' ? 'back' : 'front')}
+                        className="px-4 py-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] text-xs font-bold hover:bg-[hsl(var(--border))] transition-all flex items-center gap-1.5"
+                      >
+                        <RotateCcw className="w-4 h-4 text-purple-400" /> Flip Card ({idCardSide === 'front' ? 'Show Back' : 'Show Front'})
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setIdCardToast('Downloaded Digital PVC ID Card (High-Res PDF & PNG)');
+                          setTimeout(() => setIdCardToast(null), 3500);
+                        }}
+                        className="px-5 py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" /> Download ID Card
+                      </button>
+                    </div>
+                  </div>
+
+                  {idCardToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {idCardToast}
+                    </div>
+                  )}
+                </div>
+
+                {/* INTERACTIVE DIGITAL PVC ID BADGE */}
+                <div className="max-w-xl mx-auto">
+                  {idCardSide === 'front' ? (
+                    /* ID CARD FRONT SIDE */
+                    <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 border-2 border-purple-500/40 text-white space-y-6 shadow-2xl relative overflow-hidden transition-all duration-500">
+                      {/* Background Watermark Crest */}
+                      <div className="absolute -right-10 -bottom-10 opacity-10 text-9xl pointer-events-none select-none">
+                        🏫
+                      </div>
+
+                      {/* Header Title */}
+                      <div className="flex justify-between items-start border-b border-purple-500/30 pb-4">
+                        <div>
+                          <span className="text-[10px] font-mono text-purple-300 uppercase tracking-widest block font-bold">ALBERT ACADEMY SENIOR HIGH</span>
+                          <h3 className="text-base font-black tracking-tight text-white mt-0.5">OFFICIAL STUDENT IDENTIFICATION</h3>
+                        </div>
+                        <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[10px] font-extrabold border border-emerald-500/30 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> ACTIVE
+                        </span>
+                      </div>
+
+                      {/* Photo Avatar & Details Row */}
+                      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                        {/* Student Photo */}
+                        <div className="relative">
+                          <div className="w-28 h-28 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-blue-600 flex items-center justify-center font-black text-3xl text-white border-2 border-white/20 shadow-2xl">
+                            EO
+                          </div>
+                          <span className="absolute -bottom-2 -right-2 px-2 py-0.5 rounded-full bg-purple-600 text-white text-[9px] font-mono font-bold border border-white/30 shadow">
+                            SS2
+                          </span>
+                        </div>
+
+                        {/* Core Student Information Fields */}
+                        <div className="space-y-2 text-center sm:text-left flex-1">
+                          <h4 className="text-xl font-black text-white leading-tight tracking-tight">{studentData.fullName}</h4>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs font-mono text-slate-300 pt-1">
+                            <div>
+                              <span className="text-[9px] text-purple-300 uppercase block font-bold">Student ID</span>
+                              <span className="font-bold text-white">{studentData.studentId}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-purple-300 uppercase block font-bold">Class Grade</span>
+                              <span className="font-bold text-white">{studentData.className}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-purple-300 uppercase block font-bold">House</span>
+                              <span className="font-bold text-amber-300">🏠 {studentData.house}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-purple-300 uppercase block font-bold">Validity</span>
+                              <span className="text-slate-300">2024 — 2027</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* High-Density Barcode Rendering */}
+                      <div className="pt-4 border-t border-purple-500/30 text-center space-y-1">
+                        <div className="font-mono text-2xl tracking-[0.3em] font-black text-slate-300 select-none">
+                          ║█║ █║▌│█║▌│ 8842-9901 ║█║
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] font-mono text-purple-300 pt-1">
+                          <span>BARCODE &amp; RFID ENCRYPTED</span>
+                          <span className="text-amber-400 font-bold">CAMPUS PASS VALIDATED</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ID CARD BACK SIDE */
+                    <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 border-2 border-purple-500/40 text-white space-y-6 shadow-2xl relative overflow-hidden transition-all duration-500">
+                      <div className="flex justify-between items-center border-b border-purple-500/30 pb-3">
+                        <span className="text-[10px] font-mono text-purple-300 uppercase font-bold tracking-wider">OFFICIAL SECURITY TOKEN &amp; DISCLOSURE</span>
+                        <span className="text-[10px] font-mono text-amber-400 font-bold">CARD BACK SIDE</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
+                        {/* QR Code Container */}
+                        <div className="p-4 rounded-2xl bg-white text-slate-950 text-center space-y-2 shadow-xl border-2 border-purple-400">
+                          <div className="w-32 h-32 mx-auto bg-slate-950 p-2 rounded-xl flex items-center justify-center text-white font-mono text-xs font-bold leading-tight">
+                            [ SCANNABLE QR TOKEN ]
+                          </div>
+                          <span className="text-[9px] font-mono text-slate-600 block truncate">{qrToken}</span>
+                          <button
+                            onClick={() => {
+                              setQrToken(`SCH-QR-8842-${Math.floor(1000 + Math.random() * 9000)}-SEC`);
+                              setIdCardToast('Refreshed Encrypted Security QR Token!');
+                              setTimeout(() => setIdCardToast(null), 3000);
+                            }}
+                            className="px-3 py-1 rounded bg-purple-600 text-white font-bold text-[10px] hover:bg-purple-700 transition-all"
+                          >
+                            Refresh QR Token
+                          </button>
+                        </div>
+
+                        {/* Back Disclosures & Contacts */}
+                        <div className="space-y-3 text-xs">
+                          <div>
+                            <span className="text-[10px] text-purple-300 font-bold uppercase block">Emergency Guardian Contact</span>
+                            <p className="font-bold text-white mt-0.5">Mr. Chidi Obi (+234 802 555 1199)</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-purple-300 font-bold uppercase block">Medical Notice</span>
+                            <p className="text-rose-400 font-bold mt-0.5">Asthma Inhaler in backpack &bull; Penicillin Allergy</p>
+                          </div>
+                          <div className="pt-2 border-t border-purple-500/30 text-[10px] text-slate-400 leading-relaxed">
+                            This card is official property of Albert Academy. Found cards should be returned to Campus Security or Student Registry.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4 MULTI-USE CAMPUS INTEGRATION SERVICES */}
+                <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl">
+                  <div className="border-b border-[hsl(var(--border))] pb-3">
+                    <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                      ⚡ Multi-Use Digital ID Campus Integration Hub
+                    </h3>
+                    <p className="text-xs text-[hsl(var(--text-tertiary))]">Use your Digital Student ID for automated campus access, cafeteria meals, library loans, and exam entry.</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* 1. Attendance */}
+                    <div className="p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 space-y-2 text-xs shadow-md">
+                      <div className="flex justify-between items-center">
+                        <span className="text-2xl">🗓️</span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">ACTIVE PASS</span>
+                      </div>
+                      <h4 className="font-black text-[hsl(var(--text-primary))] text-sm">Attendance RFID</h4>
+                      <p className="text-[11px] text-[hsl(var(--text-secondary))]">Morning Assembly Gate check-in at 07:42 AM (On Time ✓).</p>
+                    </div>
+
+                    {/* 2. Library */}
+                    <div className="p-5 rounded-2xl border border-blue-500/20 bg-blue-500/5 space-y-2 text-xs shadow-md">
+                      <div className="flex justify-between items-center">
+                        <span className="text-2xl">📚</span>
+                        <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold text-[10px]">2 LOANS ACTIVE</span>
+                      </div>
+                      <h4 className="font-black text-[hsl(var(--text-primary))] text-sm">Library Pass</h4>
+                      <p className="text-[11px] text-[hsl(var(--text-secondary))]">Scannable barcode for borrowing books &amp; digital library access.</p>
+                    </div>
+
+                    {/* 3. Cafeteria */}
+                    <div className="p-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 space-y-2 text-xs shadow-md">
+                      <div className="flex justify-between items-center">
+                        <span className="text-2xl">🍽️</span>
+                        <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold text-[10px]">₦18,500 CREDIT</span>
+                      </div>
+                      <h4 className="font-black text-[hsl(var(--text-primary))] text-sm">Cafeteria Meal Plan</h4>
+                      <p className="text-[11px] text-[hsl(var(--text-secondary))]">POS contactless tap-to-pay for dining hall lunch combos.</p>
+                    </div>
+
+                    {/* 4. Exams */}
+                    <div className="p-5 rounded-2xl border border-purple-500/20 bg-purple-500/5 space-y-2 text-xs shadow-md">
+                      <div className="flex justify-between items-center">
+                        <span className="text-2xl">✍️</span>
+                        <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold text-[10px]">DESK #24 VERIFIED</span>
+                      </div>
+                      <h4 className="font-black text-[hsl(var(--text-primary))] text-sm">Exam Docket Pass</h4>
+                      <p className="text-[11px] text-[hsl(var(--text-secondary))]">QR verification for exam hall entry and seat assignment verification.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* RECENT ID SCAN AUDIT LOGS */}
+                <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                  <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                    📋 Recent Smart ID Scan Audit Trail
+                  </h3>
+                  <div className="space-y-3">
+                    {idCardUseLogs.map(log => (
+                      <div key={log.id} className={`p-4 rounded-2xl border ${log.color} flex flex-col sm:flex-row justify-between sm:items-center gap-2 text-xs shadow-md`}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">{log.systemIcon}</span>
+                          <div>
+                            <h4 className="font-extrabold text-[hsl(var(--text-primary))]">{log.action}</h4>
+                            <p className="text-[11px] text-[hsl(var(--text-tertiary))] font-mono">{log.location} &bull; {log.system}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 self-start sm:self-center">
+                          <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">{log.time}</span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] border border-emerald-500/30">
+                            {log.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2.8: Student Career Portfolio Showcase */}
+            {activeTab === 'portfolio' && (
+              <div className="space-y-6 animate-fade-in text-xs">
+                {/* Header Banner */}
+                <div className="glass-card p-6 sm:p-8 border border-purple-500/20 bg-purple-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[11px] font-extrabold tracking-wider uppercase border border-purple-500/30">
+                        Multi-Year Career &amp; Academic Portfolio
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1 flex items-center gap-2">
+                        <Briefcase className="w-6 h-6 text-purple-400" /> Student Career Portfolio &amp; Showcase
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Collect research projects, certified credentials, Olympiad awards, and extracurricular leadership achievements throughout your school career.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-center">
+                      <button
+                        onClick={() => handleAction('Exported Official Student Portfolio PDF')}
+                        className="px-4 py-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] text-xs font-bold hover:bg-[hsl(var(--border))] transition-all flex items-center gap-1.5"
+                      >
+                        <Download className="w-4 h-4 text-purple-400" /> Portfolio PDF
+                      </button>
+
+                      <button
+                        onClick={() => handleAction('Copied Public Shareable Portfolio Link!')}
+                        className="px-5 py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                      >
+                        <Zap className="w-4 h-4" /> Share Portfolio Link
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1. PROJECTS & RESEARCH SHOWCASE */}
+                <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                  <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2 border-b border-[hsl(var(--border))] pb-3">
+                    🚀 Research Projects &amp; Academic Artifacts
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {portfolioProjects.map(proj => (
+                      <div key={proj.id} className="p-5 rounded-2xl border border-purple-500/20 bg-purple-500/5 space-y-2 shadow-md">
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] font-mono text-purple-300 uppercase font-bold">{proj.category}</span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                            {proj.grade}
+                          </span>
+                        </div>
+                        <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{proj.title}</h4>
+                        <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">{proj.desc}</p>
+                        <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))] block pt-2 border-t border-purple-500/20">Completed: {proj.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. CERTIFICATES & AWARDS */}
+                <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                  <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2 border-b border-[hsl(var(--border))] pb-3">
+                    📜 Certified Credentials &amp; Olympiad Awards
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {portfolioCertificates.map(cert => (
+                      <div key={cert.id} className="p-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-2 shadow-md">
+                        <span className="text-xs font-bold text-amber-400 block">{cert.badge}</span>
+                        <h4 className="font-extrabold text-[hsl(var(--text-primary))]">{cert.title}</h4>
+                        <p className="text-[11px] text-[hsl(var(--text-tertiary))] font-mono">{cert.issuer} &bull; {cert.year}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. EXTRACURRICULAR LEADERSHIP */}
+                <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                  <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2 border-b border-[hsl(var(--border))] pb-3">
+                    🏆 Extracurricular Clubs &amp; Leadership Positions
+                  </h3>
+
+                  <div className="space-y-3">
+                    {portfolioExtracurriculars.map(ex => (
+                      <div key={ex.id} className="p-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex flex-col sm:flex-row justify-between sm:items-center gap-2 shadow-md">
+                        <div>
+                          <span className="text-[10px] font-mono text-purple-400 font-bold uppercase">{ex.role}</span>
+                          <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{ex.club}</h4>
+                          <p className="text-xs text-[hsl(var(--text-secondary))] mt-0.5">{ex.impact}</p>
+                        </div>
+                        <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))] self-start sm:self-center">{ex.period}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -2089,6 +4138,253 @@ export default function StudentPortalPage() {
               </div>
             )}
 
+            {/* Tab 3.5: Performance Analytics Visual Dashboard */}
+            {activeTab === 'analytics' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header Banner & Sub-Navigation */}
+                <div className="glass-card p-6 sm:p-8 border border-indigo-500/20 bg-indigo-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 text-[11px] font-extrabold tracking-wider uppercase border border-indigo-500/30">
+                        Visual Performance Diagnostic Engine
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1 flex items-center gap-2">
+                        <TrendingUp className="w-6 h-6 text-indigo-400" /> Student Performance Analytics
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Visual charts comparing subject performance, multi-term GPA trends, monthly attendance, assignment completion, and midterm vs. final exam scores.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setAnalyticsToast('Refreshed visual analytics charts with latest term data!');
+                        setTimeout(() => setAnalyticsToast(null), 3000);
+                      }}
+                      className="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2 self-start sm:self-center"
+                    >
+                      <RefreshCw className="w-4 h-4" /> Refresh Charts
+                    </button>
+                  </div>
+
+                  {analyticsToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {analyticsToast}
+                    </div>
+                  )}
+
+                  {/* Analytics Sub-Navigation Tabs */}
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-[hsl(var(--border))]">
+                    {[
+                      { id: 'overview', label: '📊 Executive Summary' },
+                      { id: 'subjects', label: '📐 Subject Performance' },
+                      { id: 'gpa_trend', label: '📈 GPA Trend Progression' },
+                      { id: 'attendance_trend', label: '🗓️ Attendance Trend' },
+                      { id: 'assignments', label: '📝 Assignment Completion' },
+                      { id: 'exam_comp', label: '⚔️ Midterm vs. Final Exams' }
+                    ].map(st => (
+                      <button
+                        key={st.id}
+                        onClick={() => setAnalyticsSubTab(st.id as any)}
+                        className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+                          analyticsSubTab === st.id
+                            ? 'bg-indigo-600 text-white shadow-md'
+                            : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* KPI SUMMARY METRICS ROW */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* 1. Overall GPA */}
+                  <div className="glass-card p-5 border border-indigo-500/20 bg-indigo-500/5 rounded-3xl space-y-1 shadow-md">
+                    <span className="text-[10px] font-extrabold uppercase text-indigo-400">CUMULATIVE GPA</span>
+                    <div className="text-2xl font-black text-[hsl(var(--text-primary))]">3.85 / 4.0</div>
+                    <p className="text-[10px] text-emerald-400 font-bold">▲ +0.03 vs. Last Term (High Distinction)</p>
+                  </div>
+
+                  {/* 2. Top Subject */}
+                  <div className="glass-card p-5 border border-emerald-500/20 bg-emerald-500/5 rounded-3xl space-y-1 shadow-md">
+                    <span className="text-[10px] font-extrabold uppercase text-emerald-400">HIGHEST SUBJECT</span>
+                    <div className="text-xl font-black text-emerald-400">Mathematics (92%)</div>
+                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono">Mastery Level • Grade A+</p>
+                  </div>
+
+                  {/* 3. Assignment Rate */}
+                  <div className="glass-card p-5 border border-purple-500/20 bg-purple-500/5 rounded-3xl space-y-1 shadow-md">
+                    <span className="text-[10px] font-extrabold uppercase text-purple-400">ASSIGNMENT RATE</span>
+                    <div className="text-2xl font-black text-purple-400">96% On-Time</div>
+                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono">24 of 25 Tasks Submitted</p>
+                  </div>
+
+                  {/* 4. Attendance Rate */}
+                  <div className="glass-card p-5 border border-amber-500/20 bg-amber-500/5 rounded-3xl space-y-1 shadow-md">
+                    <span className="text-[10px] font-extrabold uppercase text-amber-400">ATTENDANCE RATE</span>
+                    <div className="text-2xl font-black text-amber-400">96.5% Average</div>
+                    <p className="text-[10px] text-emerald-400 font-bold">Exam Policy Eligible ✓</p>
+                  </div>
+                </div>
+
+                {/* 1. SUBJECT PERFORMANCE CHART VISUAL */}
+                {(analyticsSubTab === 'overview' || analyticsSubTab === 'subjects') && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          📐 Subject Performance &amp; Mastery Levels
+                        </h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">Visual comparison of student scores against target mastery benchmarks.</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {subjectPerformanceData.map((subj, idx) => (
+                        <div key={idx} className="p-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-2 text-xs shadow-md">
+                          <div className="flex justify-between items-center font-bold">
+                            <span className="text-[hsl(var(--text-primary))] flex items-center gap-2">
+                              <span>{subj.icon}</span> {subj.subject}
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <span className="px-2 py-0.5 rounded bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] text-[10px]">
+                                Grade: {subj.grade}
+                              </span>
+                              <span className="font-mono text-base font-black text-[hsl(var(--text-primary))]">{subj.score}%</span>
+                            </div>
+                          </div>
+
+                          {/* Progress Bar Visual */}
+                          <div className="w-full bg-[hsl(var(--bg-tertiary))] h-3 rounded-full overflow-hidden relative">
+                            <div className={`bg-gradient-to-r ${subj.barColor} h-full rounded-full transition-all duration-1000`} style={{ width: `${subj.score}%` }} />
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px] font-mono text-[hsl(var(--text-tertiary))] pt-1">
+                            <span>Status: <strong>{subj.status}</strong></span>
+                            <span>Target Goal: {subj.target}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. MULTI-TERM GPA TREND progression */}
+                {(analyticsSubTab === 'overview' || analyticsSubTab === 'gpa_trend') && (
+                  <div className="glass-card p-6 sm:p-8 border border-indigo-500/20 bg-indigo-500/5 rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          📈 Multi-Term GPA Progression Trend
+                        </h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">Historical term-by-term GPA trajectory towards graduation target.</p>
+                      </div>
+                      <span className="text-lg font-black text-indigo-400">Current: 3.85 / 4.0</span>
+                    </div>
+
+                    {/* Visual GPA Bar Chart Timeline */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                      {gpaTrendData.map((item, idx) => (
+                        <div key={idx} className="p-4 rounded-2xl border border-indigo-500/20 bg-[hsl(var(--bg-secondary))] text-center space-y-2 flex flex-col justify-between shadow-md">
+                          <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] block">{item.term}</span>
+                          <div className="text-xl font-black text-indigo-400">{item.gpa}</div>
+                          <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                            {item.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. MONTHLY ATTENDANCE TREND & EXAM COMPARISON */}
+                {(analyticsSubTab === 'overview' || analyticsSubTab === 'attendance_trend' || analyticsSubTab === 'exam_comp') && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Attendance Monthly Visual */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                      <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        🗓️ Monthly Attendance Presence Trend
+                      </h3>
+                      <div className="space-y-3">
+                        {attendanceTrendData.map((att, idx) => (
+                          <div key={idx} className="space-y-1 text-xs">
+                            <div className="flex justify-between font-mono">
+                              <span>{att.month}</span>
+                              <span className="font-bold text-emerald-400">{att.rate}% ({att.status})</span>
+                            </div>
+                            <div className="w-full bg-[hsl(var(--bg-tertiary))] h-2 rounded-full overflow-hidden">
+                              <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${att.rate}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Exam Comparison (Midterm vs Final) */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                      <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        ⚔️ Midterm vs. Final Exam Score Comparison
+                      </h3>
+                      <div className="space-y-3 text-xs">
+                        {examComparisonData.map((ex, idx) => (
+                          <div key={idx} className="p-3.5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex justify-between items-center">
+                            <div>
+                              <h4 className="font-extrabold text-[hsl(var(--text-primary))]">{ex.subject}</h4>
+                              <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono">Midterm: {ex.midterm}% ➔ Final: {ex.final}%</p>
+                            </div>
+                            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-extrabold text-xs border border-emerald-500/30">
+                              {ex.diff}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* STRENGTHS vs AREAS FOR IMPROVEMENT INSIGHTS */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Academic Strengths */}
+                  <div className="glass-card p-6 border border-emerald-500/20 bg-emerald-500/5 rounded-3xl space-y-4 shadow-xl">
+                    <h3 className="text-base font-black text-emerald-400 flex items-center gap-2">
+                      🌟 Key Academic Strengths
+                    </h3>
+                    <div className="space-y-2.5 text-xs text-[hsl(var(--text-secondary))]">
+                      <div className="p-3 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]">
+                        🏆 <strong>Top 5% STEM Standing:</strong> Outstanding problem-solving ability in Mathematics &amp; Algebra proofs.
+                      </div>
+                      <div className="p-3 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]">
+                        📝 <strong>96% Assignment Discipline:</strong> Consistently completes homework tasks on-time with high accuracy.
+                      </div>
+                      <div className="p-3 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]">
+                        ⚡ <strong>Exam Retention Growth:</strong> Midterm vs. Final exam scores show average +5.2% knowledge gain.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Areas for Improvement */}
+                  <div className="glass-card p-6 border border-amber-500/20 bg-amber-500/5 rounded-3xl space-y-4 shadow-xl">
+                    <h3 className="text-base font-black text-amber-400 flex items-center gap-2">
+                      💡 Areas for Growth &amp; Target Boost
+                    </h3>
+                    <div className="space-y-2.5 text-xs text-[hsl(var(--text-secondary))]">
+                      <div className="p-3 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]">
+                        🧪 <strong>Organic Chemistry Reactions:</strong> Electrophilic addition mechanisms require additional practice (+5% boost needed).
+                      </div>
+                      <div className="p-3 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]">
+                        📜 <strong>World History Essay Structure:</strong> Focus on thesis formulation and chronological bibliography citations.
+                      </div>
+                      <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300">
+                        🤖 <strong>AI Study Tip:</strong> Schedule 2 revision sessions on the AI Study Copilot tab for Chemistry formulas.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Tab 4: Comprehensive Examination & Timetable Module */}
             {activeTab === 'timetable' && (
               <div className="space-y-6 animate-fade-in">
@@ -2745,6 +5041,1104 @@ export default function StudentPortalPage() {
               </div>
             )}
 
+            {/* Tab 4.8: Admin-Grade Internal Messaging Workspace */}
+            {activeTab === 'messages' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header Banner & Status Selector */}
+                <div className="glass-card p-6 sm:p-8 border border-indigo-500/20 bg-indigo-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 text-[11px] font-extrabold tracking-wider uppercase border border-indigo-500/30">
+                        Admin-Grade Communication Suite
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1">
+                        Internal Messaging &amp; Live Chat
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Direct messaging, class channels, voice/video calls, and real-time status presence with teachers and staff.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 self-start sm:self-center">
+                      {/* Presence Status Selector Dropdown */}
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs font-semibold">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <select
+                          value={userStatusMessage}
+                          onChange={e => setUserStatusMessage(e.target.value)}
+                          className="bg-transparent text-[hsl(var(--text-primary))] focus:outline-none font-bold text-xs cursor-pointer"
+                        >
+                          <option>Available 👋</option>
+                          <option>In class 📚</option>
+                          <option>Studying 📖</option>
+                          <option>Exam Mode ✏️</option>
+                          <option>Focus Mode 🤫</option>
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={() => setShowNewDmModal(true)}
+                        className="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" /> New DM Conversation
+                      </button>
+                    </div>
+                  </div>
+
+                  {chatToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {chatToast}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2-Column Chat Workspace Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[620px]">
+                  {/* Left Column: Chat Sidebar & Channels List (4 Cols) */}
+                  <div className="lg:col-span-4 glass-card p-5 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-lg flex flex-col justify-between">
+                    <div className="space-y-4">
+                      {/* Search Channels */}
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3 top-3 text-[hsl(var(--text-tertiary))]" />
+                        <input
+                          type="text"
+                          value={chatSearch}
+                          onChange={e => setChatSearch(e.target.value)}
+                          placeholder="Search channels or contacts..."
+                          className="w-full pl-9 pr-4 py-2.5 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+
+                      {/* Filter Tabs */}
+                      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                        {[
+                          { id: 'all', label: 'All' },
+                          { id: 'unread', label: 'Unread (3)' },
+                          { id: 'groups', label: 'Groups' },
+                          { id: 'starred', label: 'Starred ⭐' }
+                        ].map(f => (
+                          <button
+                            key={f.id}
+                            onClick={() => setChatFilter(f.id as any)}
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all ${
+                              chatFilter === f.id
+                                ? 'bg-indigo-600 text-white shadow-md'
+                                : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Channels List */}
+                      <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+                        {chatChannels
+                          .filter(c => {
+                            if (chatFilter === 'unread') return c.unread > 0;
+                            if (chatFilter === 'groups') return c.type === 'group';
+                            if (chatFilter === 'starred') return c.isPinned;
+                            if (chatSearch.trim()) return c.name.toLowerCase().includes(chatSearch.toLowerCase());
+                            return true;
+                          })
+                          .map(ch => {
+                            const isSelected = activeChatChannelId === ch.id;
+                            return (
+                              <div
+                                key={ch.id}
+                                onClick={() => {
+                                  setActiveChatChannelId(ch.id);
+                                  setChatChannels(prev => prev.map(item => item.id === ch.id ? { ...item, unread: 0 } : item));
+                                }}
+                                className={`p-3.5 rounded-2xl border cursor-pointer transition-all duration-300 flex items-center justify-between gap-3 ${
+                                  isSelected
+                                    ? 'border-indigo-500 bg-indigo-500/10 shadow-md ring-1 ring-indigo-500'
+                                    : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] hover:bg-[hsl(var(--bg-tertiary)/0.5)]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3 truncate">
+                                  <div className="relative">
+                                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white font-black text-xs flex items-center justify-center shadow-md flex-shrink-0">
+                                      {ch.avatar}
+                                    </div>
+                                    <span className={`w-3 h-3 rounded-full border-2 border-[hsl(var(--bg-secondary))] absolute -bottom-0.5 -right-0.5 ${ch.online ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                                  </div>
+
+                                  <div className="truncate">
+                                    <div className="flex items-center gap-1.5">
+                                      <h4 className="text-xs font-bold text-[hsl(var(--text-primary))] truncate">{ch.name}</h4>
+                                      {ch.isPinned && <span className="text-[10px]" title="Pinned">⭐</span>}
+                                    </div>
+                                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] truncate mt-0.5">{ch.messages[ch.messages.length - 1]?.text || ch.role}</p>
+                                  </div>
+                                </div>
+
+                                <div className="text-right flex-shrink-0 space-y-1">
+                                  <span className="text-[9px] font-mono text-[hsl(var(--text-tertiary))] block">{ch.messages[ch.messages.length - 1]?.time || 'Now'}</span>
+                                  {ch.unread > 0 && (
+                                    <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white font-bold text-[9px] shadow-md inline-block">
+                                      {ch.unread}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Active Chat Window & Thread (8 Cols) */}
+                  <div className="lg:col-span-8 glass-card border border-[hsl(var(--border))] rounded-3xl p-6 shadow-xl flex flex-col justify-between space-y-4">
+                    {(() => {
+                      const activeCh = chatChannels.find(c => c.id === activeChatChannelId) || chatChannels[0];
+                      return (
+                        <>
+                          {/* Chat Window Header */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[hsl(var(--border))] pb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="relative">
+                                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white font-black text-sm flex items-center justify-center shadow-lg">
+                                  {activeCh.avatar}
+                                </div>
+                                <span className={`w-3.5 h-3.5 rounded-full border-2 border-[hsl(var(--bg-secondary))] absolute -bottom-0.5 -right-0.5 ${activeCh.online ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                              </div>
+
+                              <div>
+                                <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                                  {activeCh.name}
+                                </h3>
+                                <p className="text-[11px] text-[hsl(var(--text-tertiary))] flex items-center gap-2 mt-0.5">
+                                  <span>{activeCh.role}</span> &bull; <span className="text-emerald-400 font-semibold">{activeCh.status}</span>
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Call & Chat Controls */}
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setShowCallModal({ type: 'voice', name: activeCh.name })}
+                                className="p-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--border))] transition-all"
+                                title="Start Voice Call"
+                              >
+                                <PhoneCall className="w-4 h-4 text-emerald-400" />
+                              </button>
+                              <button
+                                onClick={() => setShowCallModal({ type: 'video', name: activeCh.name })}
+                                className="p-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--border))] transition-all"
+                                title="Start Video Call"
+                              >
+                                <Video className="w-4 h-4 text-indigo-400" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setChatChannels(prev => prev.map(c => c.id === activeCh.id ? { ...c, isPinned: !c.isPinned } : c));
+                                }}
+                                className={`p-2.5 rounded-2xl border transition-all ${
+                                  activeCh.isPinned ? 'border-amber-500/40 bg-amber-500/10 text-amber-400' : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-tertiary))]'
+                                }`}
+                                title="Pin Channel"
+                              >
+                                <Pin className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Messages Thread Stream */}
+                          <div className="space-y-4 max-h-[380px] overflow-y-auto pr-2 py-2 text-xs">
+                            <div className="text-center font-mono text-[10px] text-[hsl(var(--text-tertiary))] uppercase my-2">
+                              ─── Today ───
+                            </div>
+
+                            {activeCh.messages.map((msg: any) => {
+                              const isMe = msg.senderName.includes('Emeka') || msg.senderId === 'me';
+                              return (
+                                <div key={msg.id} className={`flex flex-col space-y-1 ${isMe ? 'items-end' : 'items-start'}`}>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-[hsl(var(--text-tertiary))] px-1">
+                                    <span className="font-bold text-[hsl(var(--text-primary))]">{msg.senderName}</span>
+                                    <span>&bull;</span>
+                                    <span className="font-mono">{msg.time}</span>
+                                  </div>
+
+                                  <div className={`p-4 rounded-3xl max-w-md space-y-2 relative group shadow-md ${
+                                    isMe
+                                      ? 'bg-indigo-600 text-white rounded-br-none'
+                                      : 'bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-primary))] border border-[hsl(var(--border))] rounded-bl-none'
+                                  }`}>
+                                    <p className="leading-relaxed">{msg.text}</p>
+
+                                    {/* Emoji Reaction Bar */}
+                                    <div className="flex items-center gap-1 pt-1">
+                                      {Object.entries(msg.reactions || {}).map(([emoji, count]: any) => (
+                                        <span key={emoji} className="px-2 py-0.5 rounded-full bg-black/20 text-[10px] font-bold">
+                                          {emoji} {count}
+                                        </span>
+                                      ))}
+                                      
+                                      {/* Quick Reaction Selector */}
+                                      <div className="opacity-0 group-hover:opacity-100 transition-all flex gap-1 ml-2">
+                                        {['👍', '❤️', '🔥', '✅'].map(emoji => (
+                                          <button
+                                            key={emoji}
+                                            onClick={() => {
+                                              setChatChannels(prev => prev.map(c => c.id === activeCh.id ? {
+                                                ...c,
+                                                messages: c.messages.map((m: any) => m.id === msg.id ? {
+                                                  ...m,
+                                                  reactions: { ...m.reactions, [emoji]: ((m.reactions as any)?.[emoji] || 0) + 1 }
+                                                } : m)
+                                              } : c));
+                                            }}
+                                            className="hover:scale-125 transition-all text-xs"
+                                          >
+                                            {emoji}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Reply Preview Header if replying */}
+                          {replyingToMsg && (
+                            <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-xs flex justify-between items-center">
+                              <span className="text-indigo-400 font-bold truncate">Replying to: {replyingToMsg.text}</span>
+                              <button onClick={() => setReplyingToMsg(null)} className="text-rose-400 font-bold text-xs">✕</button>
+                            </div>
+                          )}
+
+                          {/* Chat Input Dock */}
+                          <div className="pt-3 border-t border-[hsl(var(--border))] space-y-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setChatToast('Simulated attachment file uploaded successfully.');
+                                  setTimeout(() => setChatToast(null), 3000);
+                                }}
+                                className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]"
+                                title="Attach File"
+                              >
+                                <Paperclip className="w-4 h-4" />
+                              </button>
+
+                              <input
+                                type="text"
+                                value={chatInputText}
+                                onChange={e => setChatInputText(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter' && chatInputText.trim()) {
+                                    const newMsg = {
+                                      id: `m${Date.now()}`,
+                                      senderId: 'me',
+                                      senderName: 'Emeka Obi (Student)',
+                                      text: chatInputText.trim(),
+                                      time: 'Just now',
+                                      date: 'Today',
+                                      status: 'read',
+                                      reactions: {}
+                                    };
+                                    setChatChannels(prev => prev.map(c => c.id === activeCh.id ? { ...c, messages: [...c.messages, newMsg] } : c));
+                                    setChatInputText('');
+                                    setReplyingToMsg(null);
+                                  }
+                                }}
+                                placeholder={`Message ${activeCh.name}...`}
+                                className="flex-1 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl px-4 py-3 text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-indigo-500"
+                              />
+
+                              <button
+                                onClick={() => {
+                                  if (!chatInputText.trim()) return;
+                                  const newMsg = {
+                                    id: `m${Date.now()}`,
+                                    senderId: 'me',
+                                    senderName: 'Emeka Obi (Student)',
+                                    text: chatInputText.trim(),
+                                    time: 'Just now',
+                                    date: 'Today',
+                                    status: 'read',
+                                    reactions: {}
+                                  };
+                                  setChatChannels(prev => prev.map(c => c.id === activeCh.id ? { ...c, messages: [...c.messages, newMsg] } : c));
+                                  setChatInputText('');
+                                  setReplyingToMsg(null);
+                                }}
+                                className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                              >
+                                <Send className="w-4 h-4" /> Send
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* VOICE / VIDEO CALL MODAL SIMULATOR */}
+                {showCallModal && (
+                  <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+                    <div className="glass-card max-w-sm w-full p-8 border border-indigo-500/30 rounded-3xl space-y-6 text-center shadow-2xl relative">
+                      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 text-white font-black text-2xl flex items-center justify-center mx-auto shadow-2xl animate-bounce">
+                        {showCallModal.name.substring(0, 2).toUpperCase()}
+                      </div>
+
+                      <div>
+                        <h3 className="text-lg font-black text-[hsl(var(--text-primary))]">{showCallModal.name}</h3>
+                        <p className="text-xs text-emerald-400 font-semibold mt-1">
+                          {showCallModal.type === 'voice' ? '📞 Voice Call Connected (00:14)' : '📹 Video Call Connected (00:28)'}
+                        </p>
+                      </div>
+
+                      <div className="flex justify-center items-center gap-4 pt-4 border-t border-[hsl(var(--border))]">
+                        <button
+                          onClick={() => setShowCallModal(null)}
+                          className="w-14 h-14 rounded-full bg-rose-600 text-white font-bold text-xl flex items-center justify-center shadow-lg hover:bg-rose-700 transition-all"
+                          title="End Call"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* NEW DM CONVERSATION MODAL */}
+                {showNewDmModal && (
+                  <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+                    <div className="glass-card max-w-md w-full p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-2xl">
+                      <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-3">
+                        <h3 className="text-base font-extrabold text-[hsl(var(--text-primary))]">Start New DM Conversation</h3>
+                        <button onClick={() => setShowNewDmModal(false)} className="text-[hsl(var(--text-tertiary))] font-bold text-xs">✕</button>
+                      </div>
+
+                      <div className="space-y-4 text-xs">
+                        <div>
+                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">Select Educator / Staff Member</label>
+                          <select
+                            value={newDmRecipient}
+                            onChange={e => setNewDmRecipient(e.target.value)}
+                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-3 text-xs text-[hsl(var(--text-primary))]"
+                          >
+                            <option>Mr. Kwame Darko (Math Teacher)</option>
+                            <option>Mrs. Beatrice Mensah (Chemistry Teacher)</option>
+                            <option>Dr. Stella Gbandi (English Teacher)</option>
+                            <option>Prof. Emmanuel Thorpe (Physics Teacher)</option>
+                            <option>School Administration Office</option>
+                            <option>Head Librarian (Mrs. Janet Osei)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-3 pt-3 border-t border-[hsl(var(--border))]">
+                        <button onClick={() => setShowNewDmModal(false)} className="px-4 py-2 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] font-bold">Cancel</button>
+                        <button
+                          onClick={() => {
+                            const newChan = {
+                              id: `c${chatChannels.length + 1}`,
+                              name: newDmRecipient,
+                              type: 'direct',
+                              avatar: newDmRecipient.substring(0, 2).toUpperCase(),
+                              role: 'Educator / Staff',
+                              online: true,
+                              status: 'Available 👋',
+                              unread: 0,
+                              isPinned: false,
+                              messages: [
+                                { id: `m${Date.now()}`, senderId: 'me', senderName: 'Emeka Obi (Student)', text: 'Hello! I started a new conversation.', time: 'Just now', date: 'Today', status: 'read', reactions: {} }
+                              ]
+                            };
+                            setChatChannels([newChan, ...chatChannels]);
+                            setActiveChatChannelId(newChan.id);
+                            setShowNewDmModal(false);
+                            setChatToast(`Started conversation with ${newDmRecipient}!`);
+                            setTimeout(() => setChatToast(null), 3000);
+                          }}
+                          className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold"
+                        >
+                          Start Chat
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 4.85: Central Notification Center & Multi-Channel Alert Desk */}
+            {activeTab === 'notifications' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header & Control Banner */}
+                <div className="glass-card p-6 sm:p-8 border border-amber-500/20 bg-amber-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[11px] font-extrabold tracking-wider uppercase border border-amber-500/30">
+                        Unified School Notification Engine
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1 flex items-center gap-2">
+                        <Bell className="w-6 h-6 text-amber-400" /> Central Notification Center
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Real-time alerts for assignment deadlines, published exam results, school announcements, teacher messages, fee reminders, and RFID attendance logs.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 self-start sm:self-center">
+                      <button
+                        onClick={() => {
+                          setNotificationsData(prev => prev.map(n => ({ ...n, read: true })));
+                          setNotificationsToast('Marked all notifications as read!');
+                          setTimeout(() => setNotificationsToast(null), 3000);
+                        }}
+                        className="px-4 py-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] text-xs font-bold hover:bg-[hsl(var(--border))] transition-all flex items-center gap-1.5"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Mark All as Read
+                      </button>
+                    </div>
+                  </div>
+
+                  {notificationsToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {notificationsToast}
+                    </div>
+                  )}
+
+                  {/* Multi-Channel Dispatch Preferences Bar (Push, Email, SMS) */}
+                  <div className="p-5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-3 text-xs">
+                    <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-2">
+                      <span className="font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        📲 Multi-Channel Alert Delivery Settings
+                      </span>
+                      <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono">
+                        Guardian SMS Phone: {notificationsDispatchPrefs.guardianSmsPhone}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Push Toggle */}
+                      <button
+                        onClick={() => {
+                          setNotificationsDispatchPrefs(prev => ({ ...prev, pushEnabled: !prev.pushEnabled }));
+                          setNotificationsToast(`Browser Push Notifications ${!notificationsDispatchPrefs.pushEnabled ? 'Enabled ✓' : 'Disabled'}.`);
+                          setTimeout(() => setNotificationsToast(null), 3000);
+                        }}
+                        className={`p-3 rounded-xl border flex justify-between items-center transition-all ${
+                          notificationsDispatchPrefs.pushEnabled
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-bold'
+                            : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)] text-[hsl(var(--text-tertiary))]'
+                        }`}
+                      >
+                        <span>🔔 Push Notifications</span>
+                        <span>{notificationsDispatchPrefs.pushEnabled ? 'ON ✓' : 'OFF'}</span>
+                      </button>
+
+                      {/* Email Toggle */}
+                      <button
+                        onClick={() => {
+                          setNotificationsDispatchPrefs(prev => ({ ...prev, emailEnabled: !prev.emailEnabled }));
+                          setNotificationsToast(`Email Alerts ${!notificationsDispatchPrefs.emailEnabled ? 'Enabled ✓' : 'Disabled'}.`);
+                          setTimeout(() => setNotificationsToast(null), 3000);
+                        }}
+                        className={`p-3 rounded-xl border flex justify-between items-center transition-all ${
+                          notificationsDispatchPrefs.emailEnabled
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-bold'
+                            : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)] text-[hsl(var(--text-tertiary))]'
+                        }`}
+                      >
+                        <span>✉️ Email Alerts</span>
+                        <span>{notificationsDispatchPrefs.emailEnabled ? 'ON ✓' : 'OFF'}</span>
+                      </button>
+
+                      {/* SMS Optional Toggle */}
+                      <button
+                        onClick={() => {
+                          setNotificationsDispatchPrefs(prev => ({ ...prev, smsEnabled: !prev.smsEnabled }));
+                          setNotificationsToast(`SMS Parent Text Messages ${!notificationsDispatchPrefs.smsEnabled ? 'Enabled ✓' : 'Disabled'}.`);
+                          setTimeout(() => setNotificationsToast(null), 3000);
+                        }}
+                        className={`p-3 rounded-xl border flex justify-between items-center transition-all ${
+                          notificationsDispatchPrefs.smsEnabled
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-bold'
+                            : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)] text-[hsl(var(--text-tertiary))]'
+                        }`}
+                      >
+                        <span>📱 SMS Alerts (Optional)</span>
+                        <span>{notificationsDispatchPrefs.smsEnabled ? 'ON ✓' : 'OFF'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Filter Sub-Tabs & Search Input */}
+                  <div className="space-y-4 pt-2 border-t border-[hsl(var(--border))]">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                      {/* Search */}
+                      <div className="md:col-span-6 relative">
+                        <Search className="w-4 h-4 absolute left-4 top-3.5 text-[hsl(var(--text-tertiary))]" />
+                        <input
+                          type="text"
+                          value={notificationsSearchQuery}
+                          onChange={e => setNotificationsSearchQuery(e.target.value)}
+                          placeholder="Search notifications by title, subject, sender..."
+                          className="w-full pl-11 pr-4 py-2.5 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      {/* Category Filter Pills */}
+                      <div className="md:col-span-6 flex flex-wrap gap-1.5 items-center">
+                        {[
+                          { id: 'all', label: `All (${notificationsData.length})` },
+                          { id: 'unread', label: `Unread (${notificationsData.filter(n => !n.read).length})` },
+                          { id: 'assignment', label: '📝 Assignment Due' },
+                          { id: 'result', label: '📊 New Result' },
+                          { id: 'announcement', label: '📢 Announcement' },
+                          { id: 'message', label: '💬 Teacher Message' },
+                          { id: 'finance', label: '💳 Fee Reminder' },
+                          { id: 'attendance', label: '🚨 Attendance' }
+                        ].map(st => (
+                          <button
+                            key={st.id}
+                            onClick={() => setNotificationsFilter(st.id as any)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                              notificationsFilter === st.id
+                                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                                : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                            }`}
+                          >
+                            {st.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* NOTIFICATIONS FEED LIST */}
+                <div className="space-y-4">
+                  {notificationsData
+                    .filter(n => {
+                      if (notificationsFilter === 'unread') return !n.read;
+                      if (notificationsFilter !== 'all') return n.category === notificationsFilter;
+                      return true;
+                    })
+                    .filter(n => {
+                      if (!notificationsSearchQuery.trim()) return true;
+                      const q = notificationsSearchQuery.toLowerCase();
+                      return n.title.toLowerCase().includes(q) || n.message.toLowerCase().includes(q) || n.sender.toLowerCase().includes(q);
+                    })
+                    .map(notif => (
+                      <div
+                        key={notif.id}
+                        className={`glass-card p-6 border ${notif.color} rounded-3xl space-y-3 shadow-xl transition-all ${
+                          !notif.read ? 'ring-2 ring-amber-500/40 bg-amber-500/5' : ''
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">{notif.icon}</span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-extrabold uppercase border border-amber-500/30">
+                                  {notif.categoryLabel}
+                                </span>
+                                {!notif.read && (
+                                  <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black uppercase animate-pulse">
+                                    NEW UNREAD
+                                  </span>
+                                )}
+                                <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">Priority: {notif.priority}</span>
+                              </div>
+                              <h3 className="text-base font-black text-[hsl(var(--text-primary))] mt-1">{notif.title}</h3>
+                            </div>
+                          </div>
+
+                          <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))] self-start sm:self-center">
+                            {notif.timestamp}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">
+                          {notif.message}
+                        </p>
+
+                        <div className="pt-3 border-t border-[hsl(var(--border)/0.5)] flex flex-wrap justify-between items-center gap-2 text-xs">
+                          <span className="text-[11px] text-[hsl(var(--text-tertiary))] font-mono">
+                            Sender: <strong>{notif.sender}</strong>
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setNotificationsData(prev => prev.map(n => n.id === notif.id ? { ...n, read: !n.read } : n));
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] text-xs font-bold hover:bg-[hsl(var(--border))]"
+                            >
+                              {notif.read ? 'Mark Unread' : 'Mark Read ✓'}
+                            </button>
+
+                            {notif.actionTab && (
+                              <button
+                                onClick={() => {
+                                  setNotificationsData(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+                                  setActiveTab(notif.actionTab as any);
+                                }}
+                                className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs hover:bg-amber-400 transition-all flex items-center gap-1 shadow-md"
+                              >
+                                View Related Desk <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => {
+                                setNotificationsData(prev => prev.filter(n => n.id !== notif.id));
+                                setNotificationsToast(`Deleted alert "${notif.title}".`);
+                                setTimeout(() => setNotificationsToast(null), 3000);
+                              }}
+                              className="p-1.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-all"
+                              title="Delete Alert"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tab 4.9: Library & Reading Hub */}
+            {activeTab === 'library' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header & Library Sub-Navigation Bar */}
+                <div className="glass-card p-6 sm:p-8 border border-amber-500/20 bg-amber-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[11px] font-extrabold tracking-wider uppercase border border-amber-500/30">
+                        School Central Library Hub
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1">
+                        Library &amp; Learning Resource Center
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Search books, track borrowed titles, manage reservations, monitor due dates, and review reading history.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setLibrarySubTab('search')}
+                        className="px-5 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                      >
+                        <Search className="w-4 h-4" /> Search Catalog
+                      </button>
+                    </div>
+                  </div>
+
+                  {libraryToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {libraryToast}
+                    </div>
+                  )}
+
+                  {/* Library Sub-Navigation Tabs */}
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-[hsl(var(--border))]">
+                    {[
+                      { id: 'dashboard', label: '📊 Library Dashboard' },
+                      { id: 'search', label: '🔍 Search Books, Authors & Categories' },
+                      { id: 'borrowed', label: '📚 Borrowed Books & Due Dates' },
+                      { id: 'reservations', label: '🔖 Reservations & Holds' },
+                      { id: 'history', label: '📜 Reading History' },
+                      { id: 'fines', label: '💰 Fines (₦500.00)' }
+                    ].map(st => (
+                      <button
+                        key={st.id}
+                        onClick={() => setLibrarySubTab(st.id as any)}
+                        className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+                          librarySubTab === st.id
+                            ? 'bg-amber-600 text-white shadow-md'
+                            : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 1. LIBRARY DASHBOARD OVERVIEW */}
+                {librarySubTab === 'dashboard' && (
+                  <div className="space-y-6 animate-fade-in">
+                    {/* Summary KPI Metric Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="glass-card p-5 border border-blue-500/20 bg-blue-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-blue-400">
+                          <span>BORROWED BOOKS</span>
+                          <BookOpen className="w-4 h-4" />
+                        </div>
+                        <div className="text-2xl font-black text-[hsl(var(--text-primary))]">2 Active</div>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))]">1 Book Overdue</p>
+                      </div>
+
+                      <div className="glass-card p-5 border border-emerald-500/20 bg-emerald-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-emerald-400">
+                          <span>NEXT DUE DATE</span>
+                          <Clock className="w-4 h-4" />
+                        </div>
+                        <div className="text-xl font-black text-[hsl(var(--text-primary))]">August 02, 2026</div>
+                        <p className="text-[10px] text-emerald-400 font-semibold">4 Days Remaining</p>
+                      </div>
+
+                      <div className="glass-card p-5 border border-purple-500/20 bg-purple-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-purple-400">
+                          <span>RESERVATIONS</span>
+                          <BookMarked className="w-4 h-4" />
+                        </div>
+                        <div className="text-2xl font-black text-[hsl(var(--text-primary))]">1 On Hold</div>
+                        <p className="text-[10px] text-purple-400 font-semibold">Ready at Front Desk</p>
+                      </div>
+
+                      <div className="glass-card p-5 border border-rose-500/20 bg-rose-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-rose-400">
+                          <span>LIBRARY FINES</span>
+                          <DollarSign className="w-4 h-4" />
+                        </div>
+                        <div className="text-2xl font-black text-rose-400">₦500.00</div>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))]">1 Overdue Book Fee</p>
+                      </div>
+                    </div>
+
+                    {/* Active Borrowed Books Grid */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                      <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center justify-between">
+                        <span>Currently Borrowed Books ({borrowedBooksData.length})</span>
+                        <button onClick={() => setLibrarySubTab('borrowed')} className="text-xs text-amber-400 hover:underline">View All &rarr;</button>
+                      </h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {borrowedBooksData.map(book => (
+                          <div key={book.id} className="p-5 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex gap-4 shadow-md">
+                            <div className={`w-20 h-28 rounded-2xl bg-gradient-to-br ${book.coverBg} text-white font-black text-xs flex flex-col justify-between p-3 shadow-lg flex-shrink-0`}>
+                              <span className="text-[9px] uppercase font-mono tracking-wider opacity-80">{book.callNo}</span>
+                              <BookOpen className="w-6 h-6 opacity-90" />
+                              <span className="text-[10px] font-bold line-clamp-2 leading-tight">{book.category}</span>
+                            </div>
+
+                            <div className="flex-1 space-y-2 text-xs">
+                              <div>
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border ${
+                                  book.status === 'overdue' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                }`}>
+                                  {book.status === 'overdue' ? 'Overdue • Late Fine ₦500' : `Due in ${book.daysLeft} Days`}
+                                </span>
+                                <h4 className="text-sm font-extrabold text-[hsl(var(--text-primary))] mt-1">{book.title}</h4>
+                                <p className="text-[11px] text-[hsl(var(--text-tertiary))]">Author: {book.author}</p>
+                              </div>
+
+                              <div className="pt-2 border-t border-[hsl(var(--border)/0.5)] flex justify-between items-center text-[10px] text-[hsl(var(--text-tertiary))] font-mono">
+                                <span>Due: {book.dueDate}</span>
+                                <button
+                                  onClick={() => {
+                                    setLibraryToast(`Loan renewal requested for "${book.title}". Extended by 7 days.`);
+                                    setTimeout(() => setLibraryToast(null), 4000);
+                                  }}
+                                  className="px-3 py-1 rounded-xl bg-amber-600/20 text-amber-300 font-bold border border-amber-500/30 hover:bg-amber-600/30 transition-all"
+                                >
+                                  Renew Loan
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. CATALOG SEARCH (BOOKS, AUTHORS, CATEGORIES) */}
+                {librarySubTab === 'search' && (
+                  <div className="space-y-6 animate-fade-in">
+                    {/* Search Controls Bar */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                        {/* Search Input */}
+                        <div className="md:col-span-8 relative">
+                          <Search className="w-4 h-4 absolute left-4 top-3.5 text-[hsl(var(--text-tertiary))]" />
+                          <input
+                            type="text"
+                            value={librarySearchQuery}
+                            onChange={e => setLibrarySearchQuery(e.target.value)}
+                            placeholder="Search by book title, author (e.g. Shakespeare), or category..."
+                            className="w-full pl-11 pr-4 py-3 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        {/* Category Dropdown Filter */}
+                        <div className="md:col-span-4">
+                          <select
+                            value={libraryCategoryFilter}
+                            onChange={e => setLibraryCategoryFilter(e.target.value)}
+                            className="w-full py-3 px-4 bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl text-xs text-[hsl(var(--text-primary))] focus:outline-none font-bold"
+                          >
+                            <option value="all">All Categories</option>
+                            <option value="Mathematics">Mathematics</option>
+                            <option value="Chemistry">Chemistry</option>
+                            <option value="Literature">Literature</option>
+                            <option value="Physics">Physics</option>
+                            <option value="Computer Science">Computer Science</option>
+                            <option value="Fiction">Fiction</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Quick Category Filter Badges */}
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-[hsl(var(--border))]">
+                        {['all', 'Mathematics', 'Chemistry', 'Literature', 'Physics', 'Computer Science', 'Fiction'].map(cat => (
+                          <button
+                            key={cat}
+                            onClick={() => setLibraryCategoryFilter(cat)}
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all ${
+                              libraryCategoryFilter === cat
+                                ? 'bg-amber-600 text-white shadow-md'
+                                : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                            }`}
+                          >
+                            {cat === 'all' ? 'All Books' : cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Catalog Books Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {libraryCatalogData
+                        .filter(book => {
+                          if (libraryCategoryFilter !== 'all' && book.category !== libraryCategoryFilter) return false;
+                          if (librarySearchQuery.trim()) {
+                            const q = librarySearchQuery.toLowerCase();
+                            return (
+                              book.title.toLowerCase().includes(q) ||
+                              book.author.toLowerCase().includes(q) ||
+                              book.category.toLowerCase().includes(q) ||
+                              book.callNo.toLowerCase().includes(q)
+                            );
+                          }
+                          return true;
+                        })
+                        .map(book => (
+                          <div key={book.id} className="glass-card p-5 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-lg hover:-translate-y-1 transition-all flex flex-col justify-between">
+                            <div className="space-y-3">
+                              <div className="flex gap-4">
+                                <div className={`w-20 h-28 rounded-2xl bg-gradient-to-br ${book.coverBg} text-white font-black text-xs flex flex-col justify-between p-3 shadow-lg flex-shrink-0`}>
+                                  <span className="text-[9px] uppercase font-mono tracking-wider opacity-80">{book.callNo}</span>
+                                  <BookOpen className="w-6 h-6 opacity-90" />
+                                  <span className="text-[10px] font-bold line-clamp-2 leading-tight">{book.category}</span>
+                                </div>
+
+                                <div className="space-y-1 text-xs">
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-extrabold uppercase">
+                                    {book.category}
+                                  </span>
+                                  <h4 className="text-sm font-extrabold text-[hsl(var(--text-primary))] leading-snug">{book.title}</h4>
+                                  <p className="text-[11px] text-[hsl(var(--text-tertiary))]">By {book.author}</p>
+                                  <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono">Call No: {book.callNo}</p>
+                                </div>
+                              </div>
+
+                              <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed line-clamp-3">
+                                {book.description}
+                              </p>
+                            </div>
+
+                            <div className="pt-3 border-t border-[hsl(var(--border))] flex items-center justify-between text-xs">
+                              <span className="text-[11px] font-bold text-emerald-400">
+                                {book.availableCopies} / {book.totalCopies} Available
+                              </span>
+
+                              <button
+                                onClick={() => {
+                                  const newRes = {
+                                    id: `r${reservedBooksData.length + 1}`,
+                                    title: book.title,
+                                    author: book.author,
+                                    category: book.category,
+                                    callNo: book.callNo,
+                                    coverBg: book.coverBg,
+                                    reservedDate: 'Just now',
+                                    pickupDeadline: 'In 3 days',
+                                    status: 'Reservation Confirmed',
+                                    deskLocation: 'Main Reserve Counter'
+                                  };
+                                  setReservedBooksData([newRes, ...reservedBooksData]);
+                                  setLibraryToast(`Book "${book.title}" successfully reserved! Place on hold at Front Desk.`);
+                                  setTimeout(() => setLibraryToast(null), 4000);
+                                }}
+                                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5"
+                              >
+                                <BookMarked className="w-3.5 h-3.5" /> Reserve Book
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. BORROWED BOOKS & DUE DATES */}
+                {librarySubTab === 'borrowed' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))]">Currently Borrowed Books &amp; Due Dates</h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">Active library checkouts with expiration timers and renewal options.</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {borrowedBooksData.map(book => (
+                        <div key={book.id} className="p-5 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex flex-col sm:flex-row justify-between sm:items-center gap-4 shadow-md">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-14 h-16 rounded-2xl bg-gradient-to-br ${book.coverBg} text-white font-black text-xs flex items-center justify-center shadow-md flex-shrink-0`}>
+                              <BookOpen className="w-6 h-6" />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase border ${
+                                  book.status === 'overdue' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                }`}>
+                                  {book.status === 'overdue' ? 'Overdue Fee Applied' : 'Active Checkout'}
+                                </span>
+                                <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">{book.callNo}</span>
+                              </div>
+                              <h4 className="text-sm font-extrabold text-[hsl(var(--text-primary))] mt-1">{book.title}</h4>
+                              <p className="text-xs text-[hsl(var(--text-tertiary))]">Author: {book.author}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-[hsl(var(--border))] justify-between sm:justify-end">
+                            <div className="text-right text-xs">
+                              <span className="text-[10px] text-[hsl(var(--text-tertiary))] block">Due Date</span>
+                              <span className="font-extrabold text-[hsl(var(--text-primary))] font-mono">{book.dueDate}</span>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setLibraryToast(`Renewed loan for "${book.title}". New due date extended.`);
+                                setTimeout(() => setLibraryToast(null), 4000);
+                              }}
+                              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition-all"
+                            >
+                              Renew Loan
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. RESERVATIONS & HOLDS */}
+                {librarySubTab === 'reservations' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3">
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))]">Reserved Books &amp; Pickup Holds</h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Books currently reserved for you at the central library front desk counter.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      {reservedBooksData.map(res => (
+                        <div key={res.id} className="p-5 rounded-3xl border border-purple-500/30 bg-purple-500/5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shadow-md">
+                          <div className="flex items-center gap-4">
+                            <div className="w-14 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-pink-600 text-white font-black text-xs flex items-center justify-center shadow-md flex-shrink-0">
+                              <BookMarked className="w-6 h-6" />
+                            </div>
+
+                            <div>
+                              <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[9px] font-extrabold uppercase">
+                                {res.status}
+                              </span>
+                              <h4 className="text-sm font-extrabold text-[hsl(var(--text-primary))] mt-1">{res.title}</h4>
+                              <p className="text-xs text-[hsl(var(--text-tertiary))]">📍 Pickup Counter: {res.deskLocation}</p>
+                            </div>
+                          </div>
+
+                          <div className="text-right text-xs">
+                            <span className="text-[10px] text-[hsl(var(--text-tertiary))] block">Hold Deadline</span>
+                            <span className="font-extrabold text-amber-400 font-mono">{res.pickupDeadline}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. READING HISTORY */}
+                {librarySubTab === 'history' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3">
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))]">Borrowing &amp; Reading History</h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Archived log of previously checked out and completed books.</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {readingHistoryData.map(hist => (
+                        <div key={hist.id} className="p-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex flex-col sm:flex-row justify-between sm:items-center gap-3 text-xs">
+                          <div>
+                            <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{hist.title}</h4>
+                            <p className="text-[11px] text-[hsl(var(--text-tertiary))]">Author: {hist.author} &bull; Category: {hist.category}</p>
+                            <p className="text-[11px] text-amber-400 font-semibold mt-1">"{hist.reviewNote}"</p>
+                          </div>
+
+                          <div className="text-right flex-shrink-0">
+                            <div className="flex gap-1 justify-end text-amber-400 mb-1">
+                              {[...Array(hist.rating)].map((_, i) => <Star key={i} className="w-3.5 h-3.5 fill-current" />)}
+                            </div>
+                            <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">Returned: {hist.returnedDate}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. FINES & OVERDUE PAYMENTS */}
+                {librarySubTab === 'fines' && (
+                  <div className="glass-card p-6 sm:p-8 border border-rose-500/20 bg-rose-500/5 rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))]">Library Fines &amp; Overdue Charges</h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">Pay overdue fines online or at the library circulation desk.</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase block">Total Due</span>
+                        <span className="text-2xl font-black text-rose-400">₦500.00</span>
+                      </div>
+                    </div>
+
+                    <div className="p-5 rounded-2xl border border-rose-500/30 bg-rose-500/10 flex justify-between items-center text-xs">
+                      <div>
+                        <h4 className="font-extrabold text-[hsl(var(--text-primary))]">Organic Chemistry: Structure &amp; Mechanism</h4>
+                        <p className="text-[11px] text-rose-300">7 Days Overdue (Due July 22, 2026)</p>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setLibraryToast('Library fine of ₦500.00 paid successfully online via portal payment gateway.');
+                          setTimeout(() => setLibraryToast(null), 5000);
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold shadow-md transition-all flex items-center gap-2"
+                      >
+                        <DollarSign className="w-4 h-4" /> Pay ₦500.00 Fine
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Tab 5: Homework & Assignment Center */}
             {activeTab === 'assignments' && (
               <div className="space-y-6 animate-fade-in">
@@ -3359,140 +6753,2040 @@ export default function StudentPortalPage() {
               </div>
             )}
 
-            {/* Tab 7: Activities & Library */}
+            {/* Tab 7: Clubs & Extracurricular Activities Hub */}
             {activeTab === 'activities' && (
-              <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] space-y-6 rounded-3xl animate-fade-in text-xs shadow-lg">
-                <h3 className="text-lg font-bold text-[hsl(var(--text-primary))]">Clubs, Sports &amp; Library Records</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Library */}
-                  <div className="space-y-4 border border-[hsl(var(--border))] p-5 rounded-2xl bg-[hsl(var(--bg-secondary))]">
-                    <p className="font-bold text-[hsl(var(--text-primary))] text-sm flex items-center gap-2">
-                      <BookMarked className="w-4 h-4 text-[hsl(var(--accent))]" /> Borrowed Library Books
-                    </p>
-                    <div className="space-y-2.5">
-                      <div className="p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)] flex justify-between">
-                        <span>Introduction to Algorithms</span>
-                        <span className="text-[hsl(var(--text-tertiary))] font-semibold">Due in 5 days</span>
-                      </div>
-                      <div className="p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 text-rose-400 font-semibold">
-                        Organic Chemistry Volume 1 (Overdue) &bull; Fine: ₦500
-                      </div>
+              <div className="space-y-6 animate-fade-in">
+                {/* Header & Sub-Navigation Bar */}
+                <div className="glass-card p-6 sm:p-8 border border-purple-500/20 bg-purple-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[11px] font-extrabold tracking-wider uppercase border border-purple-500/30">
+                        Extracurricular Life &amp; Leadership
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1">
+                        Clubs, Events &amp; Trophy Cabinet
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Join school clubs, view meeting schedules, register for events, track attendance participation, and celebrate achievements.
+                      </p>
                     </div>
-                  </div>
 
-                  {/* Sports */}
-                  <div className="space-y-4 border border-[hsl(var(--border))] p-5 rounded-2xl bg-[hsl(var(--bg-secondary))]">
-                    <p className="font-bold text-[hsl(var(--text-primary))] text-sm flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-emerald-400" /> Active Clubs &amp; Sports
-                    </p>
-                    <div className="space-y-2.5 text-xs">
-                      <div className="p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)]">
-                        President &mdash; School Chess Club
-                      </div>
-                      <div className="p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)]">
-                        Forward &mdash; Senior Secondary Basketball Team
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tab 8: Health & Conduct */}
-            {activeTab === 'welfare' && (
-              <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] space-y-6 rounded-3xl animate-fade-in text-xs shadow-lg">
-                <h3 className="text-lg font-bold text-[hsl(var(--text-primary))]">Health Visits &amp; Conduct Ledger</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4 border border-[hsl(var(--border))] p-5 rounded-2xl bg-[hsl(var(--bg-secondary))]">
-                    <p className="font-bold text-[hsl(var(--text-primary))] text-sm flex items-center gap-2">
-                      <Heart className="w-4 h-4 text-rose-400" /> Clinic Check-ins
-                    </p>
-                    <div className="p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)]">
-                      12th May 2026 &mdash; Asthmatic fit treatment (Inhaler administered)
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 border border-[hsl(var(--border))] p-5 rounded-2xl bg-[hsl(var(--bg-secondary))]">
-                    <p className="font-bold text-[hsl(var(--text-primary))] text-sm flex items-center gap-2">
-                      <Award className="w-4 h-4 text-emerald-400" /> Merit &amp; Demerit Points
-                    </p>
-                    <div className="space-y-2.5">
-                      <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 font-semibold">
-                        +15 Merit points for Science Fair runner-up
-                      </div>
-                      <div className="p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.4)] text-[hsl(var(--text-tertiary))]">
-                        0 Demerit warnings issued this term
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tab 9: Fees Ledger */}
-            {activeTab === 'finance' && (
-              <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] space-y-6 rounded-3xl animate-fade-in text-xs shadow-lg">
-                <div>
-                  <h3 className="text-lg font-bold text-[hsl(var(--text-primary))]">Fees Invoice &amp; Payment Ledger (Read-Only)</h3>
-                  <p className="text-xs text-[hsl(var(--text-tertiary))] mt-0.5">All fee payments and invoices are managed via parent accounts. Below is your current tuition standing.</p>
-                </div>
-                <div className="p-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex justify-between items-center">
-                  <div>
-                    <p className="font-bold text-[hsl(var(--text-primary))] text-sm">First Term Tuition Fee</p>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono mt-0.5">Invoice: INV-2026-0902</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-extrabold text-emerald-400 text-sm">₦250,000 Paid</p>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono mt-0.5">Receipt: REC-80812</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tab 10: AI Study Copilot */}
-            {activeTab === 'ai-copilot' && (
-              <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] space-y-6 rounded-3xl animate-fade-in text-xs shadow-lg">
-                <div className="border-b border-[hsl(var(--border))] pb-4">
-                  <h3 className="text-lg font-bold text-[hsl(var(--text-primary))] flex items-center gap-2">
-                    <Brain className="w-5 h-5 text-indigo-400" /> AI Study Assistant &amp; Revision Planner
-                  </h3>
-                  <p className="text-xs text-[hsl(var(--text-tertiary))] mt-0.5">Generate topic explanations, study outlines, and revision flashcards.</p>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-2">Select Prompts</label>
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {['Explain photosynthesis', 'Generate Algebra quiz', 'Create revision schedule'].map(p => (
-                        <button
-                          key={p}
-                          onClick={() => setStudyPrompt(p)}
-                          className="px-3.5 py-1.5 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-xl text-xs font-semibold text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]"
-                        >
-                          {p}
-                        </button>
-                      ))}
-                    </div>
-                    <textarea
-                      value={studyPrompt}
-                      onChange={e => setStudyPrompt(e.target.value)}
-                      className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl p-4 text-xs text-[hsl(var(--text-primary))] h-28 focus:outline-none focus:border-[hsl(var(--accent))]"
-                    />
-                  </div>
-
-                  <div className="flex justify-end">
-                    <button onClick={handleAskAI} className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:opacity-90 transition-all flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" /> Ask Study Copilot
+                    <button
+                      onClick={() => setClubsSubTab('browse')}
+                      className="px-5 py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2 self-start sm:self-center"
+                    >
+                      <Plus className="w-4 h-4" /> Browse All Clubs
                     </button>
                   </div>
 
-                  {aiResponse && (
-                    <div className="p-5 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 leading-relaxed text-xs text-[hsl(var(--text-secondary))] space-y-2">
-                      <p className="font-bold text-indigo-400">Copilot Explanation:</p>
-                      <p>{aiResponse}</p>
+                  {clubsToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {clubsToast}
+                    </div>
+                  )}
+
+                  {/* Clubs Sub-Navigation Tabs */}
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-[hsl(var(--border))]">
+                    {[
+                      { id: 'my_clubs', label: `👥 My Clubs (${clubsData.filter(c => c.joined).length})` },
+                      { id: 'browse', label: '🔍 Browse All Clubs' },
+                      { id: 'schedules', label: '📅 Weekly Meeting Schedules' },
+                      { id: 'events', label: '🎟️ Events & Competitions' },
+                      { id: 'participation', label: '📊 Attendance & Participation' },
+                      { id: 'achievements', label: '🏆 Trophy Cabinet (4)' }
+                    ].map(st => (
+                      <button
+                        key={st.id}
+                        onClick={() => setClubsSubTab(st.id as any)}
+                        className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+                          clubsSubTab === st.id
+                            ? 'bg-purple-600 text-white shadow-md'
+                            : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 1. MY JOINED CLUBS */}
+                {clubsSubTab === 'my_clubs' && (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {clubsData
+                        .filter(c => c.joined)
+                        .map(club => (
+                          <div key={club.id} className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-all">
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-start">
+                                <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-extrabold uppercase">
+                                  {club.category}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-extrabold">
+                                  {club.role}
+                                </span>
+                              </div>
+
+                              <div>
+                                <h3 className="text-base font-black text-[hsl(var(--text-primary))] leading-snug">{club.name}</h3>
+                                <p className="text-[11px] text-[hsl(var(--text-tertiary))] mt-0.5">Patron: {club.patron}</p>
+                              </div>
+
+                              <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed line-clamp-3">
+                                {club.description}
+                              </p>
+                            </div>
+
+                            <div className="pt-3 border-t border-[hsl(var(--border))] space-y-2 text-xs">
+                              <div className="flex justify-between text-[11px] text-[hsl(var(--text-tertiary))] font-mono">
+                                <span>📍 {club.room}</span>
+                                <span>⏰ {club.attendanceRate} Attendance</span>
+                              </div>
+
+                              <div className="flex justify-between items-center pt-1">
+                                <span className="text-[10px] font-semibold text-[hsl(var(--text-tertiary))]">{club.schedule}</span>
+                                <button
+                                  onClick={() => {
+                                    setClubsData(prev => prev.map(item => item.id === club.id ? { ...item, joined: false } : item));
+                                    setClubsToast(`Left "${club.name}". Membership updated.`);
+                                    setTimeout(() => setClubsToast(null), 3000);
+                                  }}
+                                  className="px-3 py-1 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 font-bold text-[10px] hover:bg-rose-500/20 transition-all"
+                                >
+                                  Leave Club
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. BROWSE ALL CLUBS */}
+                {clubsSubTab === 'browse' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
+                    {clubsData.map(club => (
+                      <div key={club.id} className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-all">
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-start">
+                            <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-extrabold uppercase">
+                              {club.category}
+                            </span>
+                            <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">{club.members} Active Members</span>
+                          </div>
+
+                          <div>
+                            <h3 className="text-base font-black text-[hsl(var(--text-primary))] leading-snug">{club.name}</h3>
+                            <p className="text-[11px] text-[hsl(var(--text-tertiary))] mt-0.5">Faculty Patron: {club.patron}</p>
+                          </div>
+
+                          <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">
+                            {club.description}
+                          </p>
+                        </div>
+
+                        <div className="pt-3 border-t border-[hsl(var(--border))] space-y-3 text-xs">
+                          <div className="space-y-1 text-[11px] text-[hsl(var(--text-tertiary))]">
+                            <p>📅 <strong>Schedule:</strong> {club.schedule}</p>
+                            <p>📍 <strong>Venue:</strong> {club.room}</p>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              setClubsData(prev => prev.map(item => item.id === club.id ? { ...item, joined: !item.joined } : item));
+                              setClubsToast(club.joined ? `Left "${club.name}".` : `Successfully joined "${club.name}"!`);
+                              setTimeout(() => setClubsToast(null), 3000);
+                            }}
+                            className={`w-full py-2.5 rounded-2xl font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 ${
+                              club.joined
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20'
+                                : 'bg-purple-600 hover:bg-purple-700 text-white'
+                            }`}
+                          >
+                            {club.joined ? 'Leave Club' : 'Join Club'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 3. MEETING SCHEDULES */}
+                {clubsSubTab === 'schedules' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3">
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))]">Weekly Club Meeting Schedules</h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Timetable mapping for all extracurricular club meetings and practice sessions.</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {clubsData.map(club => (
+                        <div key={club.id} className="p-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex flex-col sm:flex-row justify-between sm:items-center gap-3 text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold text-purple-400 uppercase">{club.category}</span>
+                            <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{club.name}</h4>
+                            <p className="text-[11px] text-[hsl(var(--text-tertiary))]">Patron: {club.patron} &bull; Room: {club.room}</p>
+                          </div>
+
+                          <div className="text-right flex-shrink-0 font-mono text-amber-400 font-bold bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20">
+                            {club.schedule}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. EVENTS & COMPETITIONS */}
+                {clubsSubTab === 'events' && (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {clubEventsData.map(ev => (
+                        <div key={ev.id} className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl flex flex-col justify-between">
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-start">
+                              <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-extrabold uppercase">
+                                {ev.badge}
+                              </span>
+                              <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">{ev.date}</span>
+                            </div>
+
+                            <div>
+                              <h3 className="text-base font-black text-[hsl(var(--text-primary))] leading-snug">{ev.title}</h3>
+                              <p className="text-xs text-[hsl(var(--text-tertiary))] mt-1">Organized by: {ev.club}</p>
+                              <p className="text-xs text-[hsl(var(--text-secondary))] mt-0.5">📍 Venue: {ev.venue}</p>
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-[hsl(var(--border))] flex justify-between items-center text-xs">
+                            <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                              {ev.registered ? `Status: ${ev.seatNo}` : 'Registration Open'}
+                            </span>
+
+                            <button
+                              onClick={() => {
+                                setClubEventsData(prev => prev.map(item => item.id === ev.id ? { ...item, registered: !item.registered, seatNo: 'Seat #22' } : item));
+                                setClubsToast(ev.registered ? `Cancelled registration for "${ev.title}".` : `Registered for "${ev.title}"!`);
+                                setTimeout(() => setClubsToast(null), 3000);
+                              }}
+                              className={`px-4 py-2 rounded-xl font-extrabold text-xs shadow-md transition-all ${
+                                ev.registered
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-purple-600 hover:bg-purple-700 text-white'
+                              }`}
+                            >
+                              {ev.registered ? 'Registered ✓' : 'Register for Event'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. ATTENDANCE & PARTICIPATION TRACKING */}
+                {clubsSubTab === 'participation' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))]">Club Participation &amp; Session Attendance</h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">Overall club meeting attendance rate and active participation standing.</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase block">Overall Attendance</span>
+                        <span className="text-2xl font-black text-emerald-400">95% Average</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {clubsData.filter(c => c.joined).map(club => (
+                        <div key={club.id} className="p-5 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-3 shadow-md">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{club.name}</h4>
+                              <p className="text-xs text-[hsl(var(--text-tertiary))]">Role: {club.role} &bull; Patron: {club.patron}</p>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-lg font-black text-emerald-400">{club.attendanceRate}</span>
+                              <span className="text-[10px] text-[hsl(var(--text-tertiary))] block font-mono">{club.sessionsAttended}</span>
+                            </div>
+                          </div>
+
+                          {/* Attendance Progress Bar */}
+                          <div className="w-full bg-[hsl(var(--bg-tertiary))] h-2 rounded-full overflow-hidden">
+                            <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full" style={{ width: club.attendanceRate }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. ACHIEVEMENTS & TROPHY CABINET */}
+                {clubsSubTab === 'achievements' && (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                      {achievementsData.map(ach => (
+                        <div key={ach.id} className={`glass-card p-6 border ${ach.color} rounded-3xl space-y-4 shadow-xl hover:-translate-y-1 transition-all text-center flex flex-col justify-between`}>
+                          <div className="space-y-3">
+                            <div className="text-4xl animate-bounce">{ach.icon}</div>
+                            <div>
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider block opacity-80">{ach.category}</span>
+                              <h4 className="text-sm font-extrabold text-[hsl(var(--text-primary))] mt-1 leading-snug">{ach.title}</h4>
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-[hsl(var(--border)/0.5)] text-[10px] font-mono text-[hsl(var(--text-tertiary))]">
+                            <span>Issued By: {ach.issuedBy}</span>
+                            <span className="block font-bold text-[hsl(var(--text-primary))] mt-0.5">{ach.awardedDate}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 8: Discipline, Conduct & Health Ledger */}
+            {activeTab === 'welfare' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header & Conduct Standing Banner */}
+                <div className="glass-card p-6 sm:p-8 border border-emerald-500/20 bg-emerald-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-extrabold tracking-wider uppercase border border-emerald-500/30">
+                        Behavior &amp; Conduct Transparency Ledger
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1">
+                        Discipline, Merits &amp; Conduct Portal
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Complete transparency on commendations, warnings, discipline records, merit points, and demerits to foster personal growth.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-right">
+                        <span className="text-[10px] text-emerald-400 font-extrabold uppercase block">Net Standing</span>
+                        <span className="text-xl font-black text-emerald-400">+75 Net Merits</span>
+                        <span className="text-[10px] text-emerald-300 block font-semibold">Tier 1: Model Conduct</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Discipline Sub-Navigation Tabs */}
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-[hsl(var(--border))]">
+                    {[
+                      { id: 'overview', label: '📊 Conduct Overview' },
+                      { id: 'commendations', label: '🌟 Commendations (3)' },
+                      { id: 'warnings', label: '⚠️ Warnings (2)' },
+                      { id: 'records', label: '📋 Discipline Records (2)' },
+                      { id: 'merits', label: '🏆 Merit Points (+85)' },
+                      { id: 'demerits', label: '🔻 Demerits (-10)' },
+                      { id: 'health', label: '🏥 Health & Clinic Logs' }
+                    ].map(st => (
+                      <button
+                        key={st.id}
+                        onClick={() => setDisciplineSubTab(st.id as any)}
+                        className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+                          disciplineSubTab === st.id
+                            ? 'bg-emerald-600 text-white shadow-md'
+                            : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 1. OVERVIEW VIEW */}
+                {disciplineSubTab === 'overview' && (
+                  <div className="space-y-6 animate-fade-in">
+                    {/* Summary KPI Metric Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="glass-card p-5 border border-emerald-500/20 bg-emerald-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-emerald-400">
+                          <span>COMMENDATIONS</span>
+                          <Award className="w-4 h-4" />
+                        </div>
+                        <div className="text-2xl font-black text-emerald-400">3 Citations</div>
+                        <p className="text-[10px] text-emerald-300 font-semibold">Exemplary Character</p>
+                      </div>
+
+                      <div className="glass-card p-5 border border-amber-500/20 bg-amber-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-amber-400">
+                          <span>ACTIVE WARNINGS</span>
+                          <AlertTriangle className="w-4 h-4" />
+                        </div>
+                        <div className="text-2xl font-black text-[hsl(var(--text-primary))]">2 Advisories</div>
+                        <p className="text-[10px] text-amber-400 font-semibold">All Resolved with Counseling</p>
+                      </div>
+
+                      <div className="glass-card p-5 border border-blue-500/20 bg-blue-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-blue-400">
+                          <span>TOTAL MERITS</span>
+                          <Trophy className="w-4 h-4" />
+                        </div>
+                        <div className="text-2xl font-black text-blue-400">+85 Points</div>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Leadership &amp; Tutoring</p>
+                      </div>
+
+                      <div className="glass-card p-5 border border-rose-500/20 bg-rose-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-rose-400">
+                          <span>TOTAL DEMERITS</span>
+                          <ShieldAlert className="w-4 h-4" />
+                        </div>
+                        <div className="text-2xl font-black text-rose-400">-10 Points</div>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Assembly &amp; Lab Apparel</p>
+                      </div>
+                    </div>
+
+                    {/* Commendations Highlights */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                      <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center justify-between">
+                        <span className="flex items-center gap-2"><Award className="w-4 h-4 text-emerald-400" /> Recent Commendations &amp; Honors</span>
+                        <button onClick={() => setDisciplineSubTab('commendations')} className="text-xs text-emerald-400 hover:underline">View All &rarr;</button>
+                      </h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        {commendationsData.map(com => (
+                          <div key={com.id} className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-extrabold uppercase">
+                                {com.badge}
+                              </span>
+                              <span className="font-mono text-emerald-400 font-bold">{com.pointsAwarded}</span>
+                            </div>
+                            <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-xs leading-snug">{com.title}</h4>
+                            <p className="text-[10px] text-[hsl(var(--text-tertiary))]">By: {com.issuedBy}</p>
+                            <p className="text-[11px] text-[hsl(var(--text-secondary))] pt-1 border-t border-[hsl(var(--border)/0.5)] leading-relaxed">{com.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Discipline Incident Log Table */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                      <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center justify-between">
+                        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-indigo-400" /> Discipline Incident Records</span>
+                        <button onClick={() => setDisciplineSubTab('records')} className="text-xs text-indigo-400 hover:underline">View All &rarr;</button>
+                      </h3>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="border-b border-[hsl(var(--border))] font-mono text-[10px] text-[hsl(var(--text-tertiary))] uppercase">
+                              <th className="py-2.5 px-3">Date</th>
+                              <th className="py-2.5 px-3">Incident / Category</th>
+                              <th className="py-2.5 px-3">Reported By</th>
+                              <th className="py-2.5 px-3">Action Taken</th>
+                              <th className="py-2.5 px-3 text-right">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[hsl(var(--border)/0.5)]">
+                            {disciplineRecordsData.map(rec => (
+                              <tr key={rec.id} className="hover:bg-[hsl(var(--bg-tertiary)/0.3)] transition-all">
+                                <td className="py-3 px-3 font-mono text-[10px] text-[hsl(var(--text-tertiary))]">{rec.date}</td>
+                                <td className="py-3 px-3">
+                                  <span className="font-bold text-[hsl(var(--text-primary))]">{rec.incident}</span>
+                                  <span className="block text-[10px] text-[hsl(var(--text-tertiary))]">{rec.category}</span>
+                                </td>
+                                <td className="py-3 px-3 text-[hsl(var(--text-secondary))]">{rec.reportedBy}</td>
+                                <td className="py-3 px-3 text-amber-400 font-semibold">{rec.actionTaken}</td>
+                                <td className="py-3 px-3 text-right">
+                                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-extrabold uppercase">
+                                    {rec.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. COMMENDATIONS VIEW */}
+                {disciplineSubTab === 'commendations' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3">
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        <Award className="w-5 h-5 text-emerald-400" /> Commendations &amp; Official Citations
+                      </h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Recognition citations awarded for exemplary character, leadership, and service.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      {commendationsData.map(com => (
+                        <div key={com.id} className="p-5 rounded-3xl border border-emerald-500/30 bg-emerald-500/5 space-y-3 shadow-md">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-extrabold uppercase">
+                                {com.badge}
+                              </span>
+                              <h4 className="text-base font-extrabold text-[hsl(var(--text-primary))] mt-1">{com.title}</h4>
+                            </div>
+                            <span className="px-3 py-1 rounded-full bg-emerald-600 text-white font-black text-xs shadow-md">
+                              {com.pointsAwarded}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">{com.description}</p>
+                          <div className="flex justify-between items-center text-[10px] font-mono text-[hsl(var(--text-tertiary))] pt-2 border-t border-[hsl(var(--border)/0.5)]">
+                            <span>Issued By: {com.issuedBy}</span>
+                            <span>Date: {com.date}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. WARNINGS & ADVISORIES VIEW */}
+                {disciplineSubTab === 'warnings' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3">
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-amber-400" /> Warnings &amp; Advisory Notices
+                      </h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Official warning notes issued for minor school rule infractions with guidance support.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      {warningsData.map(warn => (
+                        <div key={warn.id} className="p-5 rounded-3xl border border-amber-500/30 bg-amber-500/5 space-y-3 shadow-md">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold uppercase">
+                                {warn.status}
+                              </span>
+                              <h4 className="text-base font-extrabold text-[hsl(var(--text-primary))] mt-1">{warn.title}</h4>
+                            </div>
+                            <span className="px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 font-extrabold text-xs">
+                              {warn.deduction}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">{warn.description}</p>
+                          <div className="flex justify-between items-center text-[10px] font-mono text-[hsl(var(--text-tertiary))] pt-2 border-t border-[hsl(var(--border)/0.5)]">
+                            <span>Issued By: {warn.issuedBy}</span>
+                            <span>Date: {warn.date}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. DISCIPLINE INCIDENT RECORDS */}
+                {disciplineSubTab === 'records' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3">
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        <ShieldCheck className="w-5 h-5 text-indigo-400" /> Discipline Incident Log
+                      </h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Transparent record of all conduct notes, counseling outcomes, and corrective steps.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      {disciplineRecordsData.map(rec => (
+                        <div key={rec.id} className="p-5 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-3 shadow-md">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-extrabold uppercase">
+                                {rec.category} &bull; {rec.severity}
+                              </span>
+                              <h4 className="text-base font-extrabold text-[hsl(var(--text-primary))] mt-1">{rec.incident}</h4>
+                            </div>
+                            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold">
+                              {rec.status}
+                            </span>
+                          </div>
+
+                          <div className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary)/0.5)] border border-[hsl(var(--border)/0.5)] text-xs text-[hsl(var(--text-primary))]">
+                            <strong>Action / Outcome:</strong> {rec.actionTaken}
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px] font-mono text-[hsl(var(--text-tertiary))] pt-1">
+                            <span>Reported By: {rec.reportedBy}</span>
+                            <span>Date: {rec.date}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. MERIT POINTS LEDGER */}
+                {disciplineSubTab === 'merits' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          <Trophy className="w-5 h-5 text-emerald-400" /> Merit Points History
+                        </h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">Earned merit points for academic, conduct, and leadership contributions.</p>
+                      </div>
+                      <span className="text-2xl font-black text-emerald-400">+85 Merits</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {meritsData.map(m => (
+                        <div key={m.id} className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 flex justify-between items-center text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold text-emerald-400 uppercase">{m.category}</span>
+                            <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{m.title}</h4>
+                            <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">{m.date}</span>
+                          </div>
+                          <span className="text-base font-black text-emerald-400">{m.points} Merits</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. DEMERIT POINTS LEDGER */}
+                {disciplineSubTab === 'demerits' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          <ShieldAlert className="w-5 h-5 text-rose-400" /> Demerit Points History
+                        </h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">Demerit deductions logged for rule non-compliance.</p>
+                      </div>
+                      <span className="text-2xl font-black text-rose-400">-10 Demerits</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {demeritsData.map(d => (
+                        <div key={d.id} className="p-4 rounded-2xl border border-rose-500/20 bg-rose-500/5 flex justify-between items-center text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold text-rose-400 uppercase">{d.category}</span>
+                            <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{d.title}</h4>
+                            <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">{d.date}</span>
+                          </div>
+                          <span className="text-base font-black text-rose-400">{d.points} Demerits</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 7. HEALTH & CLINIC LOGS */}
+                {disciplineSubTab === 'health' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3">
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        <Heart className="w-5 h-5 text-rose-400" /> School Clinic &amp; Medical Visit Records
+                      </h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Log of health visits, medical check-ins, and treatments administered.</p>
+                    </div>
+
+                    <div className="p-5 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-2 text-xs">
+                      <div className="flex justify-between font-bold">
+                        <span className="text-rose-400">Clinic Visit &bull; Asthmatic Inhaler Administration</span>
+                        <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono">May 12, 2026</span>
+                      </div>
+                      <p className="text-[hsl(var(--text-secondary))] leading-relaxed">
+                        Attended school clinic during PE period due to mild shortness of breath. Two puffs of Ventolin inhaler administered by Nurse Abigail. Rested for 20 minutes before returning to class.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 8.5: Hostel & Boarding Accommodation Module (Optional Module for Boarding Schools) */}
+            {activeTab === 'hostel' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header Banner & Module Toggle Controls */}
+                <div className="glass-card p-6 sm:p-8 border border-sky-500/20 bg-sky-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-sky-500/20 text-sky-400 text-[11px] font-extrabold tracking-wider uppercase border border-sky-500/30">
+                        Boarding School Accommodation
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1">
+                        Hostel &amp; Boarding Ledger
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        View hostel hall assignment, room number, bed allocation, house warden contact details, and room inspection notices.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Module Enable / Disable Toggle Switch */}
+                      <button
+                        onClick={() => {
+                          setIsHostelModuleEnabled(!isHostelModuleEnabled);
+                          setHostelToast(isHostelModuleEnabled ? 'Hostel module disabled (Switched to Day Student Mode).' : 'Hostel module enabled for Boarding Student!');
+                          setTimeout(() => setHostelToast(null), 4000);
+                        }}
+                        className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all border flex items-center gap-2 ${
+                          isHostelModuleEnabled
+                            ? 'bg-sky-600 text-white border-sky-500 shadow-md'
+                            : 'bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] border-[hsl(var(--border))] hover:text-[hsl(var(--text-primary))]'
+                        }`}
+                      >
+                        <Landmark className="w-4 h-4" />
+                        {isHostelModuleEnabled ? 'Module Enabled ✓' : 'Module Disabled (Enable Boarding)'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {hostelToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {hostelToast}
                     </div>
                   )}
                 </div>
+
+                {/* IF HOSTEL MODULE IS ENABLED */}
+                {isHostelModuleEnabled ? (
+                  <div className="space-y-6 animate-fade-in">
+                    {/* 4 Primary Hostel Information Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* 1. Hostel Hall */}
+                      <div className="glass-card p-5 border border-sky-500/20 bg-sky-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-sky-400">
+                          <span>HOSTEL HALL</span>
+                          <Landmark className="w-4 h-4" />
+                        </div>
+                        <div className="text-sm font-black text-[hsl(var(--text-primary))] leading-snug">{hostelData.hostelName}</div>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Senior Secondary Wing</p>
+                      </div>
+
+                      {/* 2. Room Assignment */}
+                      <div className="glass-card p-5 border border-indigo-500/20 bg-indigo-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-indigo-400">
+                          <span>ROOM NUMBER</span>
+                          <BookOpen className="w-4 h-4" />
+                        </div>
+                        <div className="text-base font-black text-indigo-400">{hostelData.roomNumber}</div>
+                        <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{hostelData.dormitoryType}</p>
+                      </div>
+
+                      {/* 3. Bed Number */}
+                      <div className="glass-card p-5 border border-emerald-500/20 bg-emerald-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-emerald-400">
+                          <span>BED ALLOCATION</span>
+                          <CheckSquare className="w-4 h-4" />
+                        </div>
+                        <div className="text-base font-black text-emerald-400">{hostelData.bedNumber}</div>
+                        <p className="text-[10px] text-emerald-300 font-semibold">Assigned &amp; Verified</p>
+                      </div>
+
+                      {/* 4. Warden Contact */}
+                      <div className="glass-card p-5 border border-purple-500/20 bg-purple-500/5 rounded-3xl space-y-1 shadow-md">
+                        <div className="flex justify-between items-center text-xs font-extrabold text-purple-400">
+                          <span>HOUSE WARDEN</span>
+                          <Phone className="w-4 h-4" />
+                        </div>
+                        <div className="text-xs font-black text-[hsl(var(--text-primary))] leading-tight">{hostelData.wardenName}</div>
+                        <p className="text-[9px] text-purple-300 font-mono mt-0.5">{hostelData.wardenContact}</p>
+                      </div>
+                    </div>
+
+                    {/* Roommates & Dorm Rules Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Roommates */}
+                      <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                        <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center justify-between">
+                          <span>Room Occupants &amp; Roommates ({hostelData.roommates.length})</span>
+                          <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">{hostelData.roomNumber}</span>
+                        </h3>
+
+                        <div className="space-y-2.5">
+                          {hostelData.roommates.map((rm, idx) => (
+                            <div key={idx} className="p-3.5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex justify-between items-center text-xs font-bold text-[hsl(var(--text-primary))]">
+                              <span>👤 {rm}</span>
+                              <span className="text-[10px] text-sky-400 font-mono">Confirmed Resident</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Curfew & Dorm Rules */}
+                      <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                        <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))]">Dormitory Guidelines &amp; Curfew</h3>
+                        <div className="space-y-3 text-xs">
+                          <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 space-y-1">
+                            <span className="font-extrabold uppercase block text-[10px]">Nightly Curfew &amp; Lights Out</span>
+                            <p className="text-xs font-bold">{hostelData.curfewTime}</p>
+                          </div>
+
+                          <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1 text-[11px] text-[hsl(var(--text-secondary))]">
+                            <p>&bull; Mandatory morning bed dressing by 07:15 AM prior to assembly.</p>
+                            <p>&bull; High-wattage electrical cooking appliances are strictly prohibited.</p>
+                            <p>&bull; Visitors allowed in common study lounge on Saturdays 02:00 PM - 05:00 PM.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Room Inspection Notices & Audits */}
+                    <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-5 shadow-xl">
+                      <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                        <div>
+                          <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                            <FileCheck className="w-5 h-5 text-sky-400" /> Dormitory Room Inspection Notices
+                          </h3>
+                          <p className="text-xs text-[hsl(var(--text-tertiary))]">Weekly room neatness reviews, curfew attendance audits, and safety inspections.</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        {hostelData.inspectionNotices.map(insp => (
+                          <div key={insp.id} className="p-5 rounded-3xl border border-sky-500/20 bg-sky-500/5 space-y-3 shadow-md">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="text-sm font-extrabold text-[hsl(var(--text-primary))]">{insp.title}</h4>
+                                <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">Inspector: {insp.inspector}</p>
+                              </div>
+                              <span className="px-3 py-1 rounded-full bg-sky-600 text-white font-extrabold text-xs shadow-md">
+                                {insp.score}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">
+                              <strong>Inspector Remarks:</strong> {insp.remarks}
+                            </p>
+
+                            <div className="text-[10px] font-mono text-[hsl(var(--text-tertiary))] pt-2 border-t border-[hsl(var(--border)/0.5)]">
+                              Inspection Date: {insp.date}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* IF HOSTEL MODULE IS DISABLED (DAY STUDENT MODE) */
+                  <div className="glass-card p-12 border border-[hsl(var(--border))] rounded-3xl text-center space-y-5 shadow-xl">
+                    <div className="w-16 h-16 rounded-full bg-slate-500/10 text-slate-400 font-black text-2xl flex items-center justify-center mx-auto">
+                      🏢
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-[hsl(var(--text-primary))]">Hostel &amp; Boarding Module Disabled</h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))] max-w-md mx-auto mt-1 leading-relaxed">
+                        This student account is currently configured in <strong>Day Student Mode</strong> (or the institution operates as a Day School).
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsHostelModuleEnabled(true);
+                        setHostelToast('Hostel & Boarding Accommodation module activated for Boarding Student!');
+                        setTimeout(() => setHostelToast(null), 4000);
+                      }}
+                      className="px-6 py-3 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs shadow-lg transition-all"
+                    >
+                      Enable Boarding Accommodation
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 8.8: School Transport & Bus Tracking Module */}
+            {activeTab === 'transport' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header Banner */}
+                <div className="glass-card p-6 sm:p-8 border border-amber-500/20 bg-amber-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[11px] font-extrabold tracking-wider uppercase border border-amber-500/30">
+                        School Fleet &amp; Commute Management
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1">
+                        School Transport &amp; Bus Tracking
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        View assigned bus vehicle, driver profile, pickup &amp; drop-off times, route stop sequence, and live GPS map tracking.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          setTransportToast('Refreshed Live GPS location. Bus #07 is currently 1.8 km away.');
+                          setTimeout(() => setTransportToast(null), 3000);
+                        }}
+                        className="px-4 py-2 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-extrabold shadow-md hover:bg-amber-500/30 transition-all flex items-center gap-2"
+                      >
+                        <Bus className="w-4 h-4" /> Refresh Live GPS
+                      </button>
+                    </div>
+                  </div>
+
+                  {transportToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {transportToast}
+                    </div>
+                  )}
+                </div>
+
+                {/* 4 Transport Key Detail Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* 1. Bus Vehicle */}
+                  <div className="glass-card p-5 border border-amber-500/20 bg-amber-500/5 rounded-3xl space-y-1 shadow-md">
+                    <div className="flex justify-between items-center text-xs font-extrabold text-amber-400">
+                      <span>ASSIGNED BUS</span>
+                      <Bus className="w-4 h-4" />
+                    </div>
+                    <div className="text-sm font-black text-[hsl(var(--text-primary))] leading-snug">{transportData.busNumber}</div>
+                    <p className="text-[10px] text-amber-300 font-mono font-bold">Plate: {transportData.plateNumber}</p>
+                  </div>
+
+                  {/* 2. Driver & Attendant */}
+                  <div className="glass-card p-5 border border-blue-500/20 bg-blue-500/5 rounded-3xl space-y-1 shadow-md">
+                    <div className="flex justify-between items-center text-xs font-extrabold text-blue-400">
+                      <span>BUS DRIVER</span>
+                      <Phone className="w-4 h-4" />
+                    </div>
+                    <div className="text-xs font-black text-[hsl(var(--text-primary))] leading-tight">{transportData.driverName}</div>
+                    <p className="text-[9px] text-blue-300 font-mono mt-0.5">{transportData.driverPhone}</p>
+                  </div>
+
+                  {/* 3. Scheduled Pickup */}
+                  <div className="glass-card p-5 border border-emerald-500/20 bg-emerald-500/5 rounded-3xl space-y-1 shadow-md">
+                    <div className="flex justify-between items-center text-xs font-extrabold text-emerald-400">
+                      <span>MORNING PICKUP</span>
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <div className="text-base font-black text-emerald-400">{transportData.morningPickupTime}</div>
+                    <p className="text-[10px] text-emerald-300 font-semibold">Afternoon Drop-off: {transportData.afternoonDropoffTime}</p>
+                  </div>
+
+                  {/* 4. Route Corridor */}
+                  <div className="glass-card p-5 border border-purple-500/20 bg-purple-500/5 rounded-3xl space-y-1 shadow-md">
+                    <div className="flex justify-between items-center text-xs font-extrabold text-purple-400">
+                      <span>ASSIGNED ROUTE</span>
+                      <Navigation className="w-4 h-4" />
+                    </div>
+                    <div className="text-xs font-black text-[hsl(var(--text-primary))] leading-tight">{transportData.routeName}</div>
+                    <p className="text-[9px] text-purple-300 font-bold mt-0.5">My Stop: Stop #4</p>
+                  </div>
+                </div>
+
+                {/* Live GPS Map Simulation Card */}
+                <div className="glass-card p-6 sm:p-8 border border-amber-500/20 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[hsl(var(--border))] pb-4">
+                    <div>
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold uppercase animate-pulse">
+                        🛰️ {transportData.gpsStatus}
+                      </span>
+                      <h3 className="text-lg font-black text-[hsl(var(--text-primary))] mt-1">Live Vehicle GPS Tracking</h3>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">Real-time bus location tracking and arrival estimate for your designated bus stop.</p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase block font-bold">Estimated Arrival</span>
+                      <span className="text-xl font-black text-amber-400">{transportData.liveEta}</span>
+                    </div>
+                  </div>
+
+                  {/* Simulated GPS Visual Map Box */}
+                  <div className="relative w-full h-56 rounded-3xl bg-slate-950 border border-amber-500/30 p-6 flex flex-col justify-between overflow-hidden shadow-inner">
+                    {/* Background Map Grid Effect */}
+                    <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]" />
+
+                    {/* Top Status Overlay */}
+                    <div className="relative z-10 flex justify-between items-center text-xs">
+                      <div className="bg-slate-900/90 backdrop-blur px-3 py-1.5 rounded-xl border border-amber-500/30 text-amber-300 font-mono text-[11px] flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        Speed: {transportData.currentSpeed} &bull; Toyota Coaster #07
+                      </div>
+
+                      <a
+                        href={`tel:${transportData.driverPhone}`}
+                        className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs shadow-md hover:bg-amber-400 transition-all flex items-center gap-1.5"
+                      >
+                        <Phone className="w-3.5 h-3.5" /> Call Driver
+                      </a>
+                    </div>
+
+                    {/* Bus Route Progress Bar Line */}
+                    <div className="relative z-10 space-y-2 my-auto">
+                      <div className="flex justify-between text-[11px] text-slate-300 font-mono font-bold">
+                        <span>Central Depot (Start)</span>
+                        <span className="text-amber-400 font-black animate-pulse">📍 Bus #07 (Approaching VGC Gate)</span>
+                        <span>Campus Bus Bay (End)</span>
+                      </div>
+
+                      <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                        <div className="bg-gradient-to-r from-emerald-500 via-amber-400 to-amber-500 h-full rounded-full w-[72%] transition-all duration-1000 shadow-lg relative">
+                          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-amber-300 rounded-full border-2 border-slate-950 shadow-md animate-ping" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Location Info */}
+                    <div className="relative z-10 flex justify-between items-center text-[11px] text-slate-400 font-mono">
+                      <span>Driver: {transportData.driverName}</span>
+                      <span>Target Stop: {transportData.myStop}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Route Stops Sequence Table */}
+                <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-5 shadow-xl">
+                  <div className="border-b border-[hsl(var(--border))] pb-3">
+                    <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                      <Navigation className="w-5 h-5 text-amber-400" /> Route Stops &amp; Timetable Sequence
+                    </h3>
+                    <p className="text-xs text-[hsl(var(--text-tertiary))]">Sequential list of morning pickup stops along Route B.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {transportData.routeStops.map(stop => (
+                      <div
+                        key={stop.id}
+                        className={`p-4 rounded-2xl border transition-all flex justify-between items-center text-xs ${
+                          stop.status === 'Target Stop'
+                            ? 'border-amber-500/40 bg-amber-500/10 text-[hsl(var(--text-primary))] shadow-md'
+                            : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--text-secondary))]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg">{stop.icon}</span>
+                          <div>
+                            <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{stop.name}</h4>
+                            <p className="text-[11px] font-mono text-[hsl(var(--text-tertiary))]">Scheduled Time: {stop.time}</p>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`px-3 py-1 rounded-full font-extrabold text-[10px] ${
+                            stop.status === 'Passed'
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : stop.status === 'Target Stop'
+                              ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                              : 'bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-tertiary))]'
+                          }`}
+                        >
+                          {stop.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 8.9: Official Documents & Downloads Vault */}
+            {activeTab === 'documents' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header Banner */}
+                <div className="glass-card p-6 sm:p-8 border border-blue-500/20 bg-blue-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[11px] font-extrabold tracking-wider uppercase border border-blue-500/30">
+                        Official School Document Registry
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1">
+                        Documents &amp; Downloads Vault
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Preview &amp; download verified report cards, admission letters, digital ID card, academic certificates, fee receipts, timetables, and transcripts.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setDocumentsToast('Packaging all 11 official verified documents into ZIP archive... Download started!');
+                        setTimeout(() => setDocumentsToast(null), 4000);
+                      }}
+                      className="px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2 self-start sm:self-center"
+                    >
+                      <Download className="w-4 h-4" /> Download All Files (.zip)
+                    </button>
+                  </div>
+
+                  {documentsToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {documentsToast}
+                    </div>
+                  )}
+
+                  {/* Document Category Filter Tabs */}
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-[hsl(var(--border))]">
+                    {[
+                      { id: 'all', label: `📂 All Verified Documents (${studentDocumentsData.length})` },
+                      { id: 'reports', label: '📊 Report Cards (2)' },
+                      { id: 'admission', label: '📜 Admission Letter (1)' },
+                      { id: 'id_card', label: '🪪 Digital ID Card (1)' },
+                      { id: 'certificates', label: '🏆 Certificates (3)' },
+                      { id: 'receipts', label: '💳 Fee Receipts (2)' },
+                      { id: 'timetable', label: '📅 Timetable & Slip (1)' },
+                      { id: 'transcript', label: '🎓 Academic Transcript (1)' }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setDocumentsCategory(tab.id as any)}
+                        className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+                          documentsCategory === tab.id
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* DIGITAL ID CARD PREVIEW FEATURE BOX */}
+                {(documentsCategory === 'all' || documentsCategory === 'id_card') && (
+                  <div className="glass-card p-6 sm:p-8 border border-purple-500/20 bg-purple-500/5 rounded-3xl space-y-4 shadow-xl">
+                    <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-3">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          🪪 Official Digital Student Identity Card
+                        </h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">Digital access badge with QR code verification &amp; barcode ID.</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setDocumentsToast('Downloaded Digital Student ID Card (PDF / Image Badge)');
+                          setTimeout(() => setDocumentsToast(null), 3000);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs shadow-md hover:bg-purple-700 transition-all flex items-center gap-1.5"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Download ID Card
+                      </button>
+                    </div>
+
+                    {/* ID Card Graphical Render Box */}
+                    <div className="max-w-md mx-auto p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-purple-500/40 text-white space-y-4 shadow-2xl relative overflow-hidden">
+                      <div className="flex justify-between items-start border-b border-purple-500/30 pb-3">
+                        <div>
+                          <span className="text-[9px] font-mono text-purple-300 uppercase tracking-widest block">ALBERT ACADEMY SENIOR HIGH</span>
+                          <h4 className="text-sm font-black tracking-tight">OFFICIAL STUDENT IDENTIFICATION</h4>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[9px] font-extrabold border border-emerald-500/30">
+                          VERIFIED
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center font-black text-2xl border-2 border-white/20 shadow-inner flex-shrink-0">
+                          EO
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <h5 className="text-base font-black text-white leading-tight">{studentData.fullName}</h5>
+                          <p className="text-[11px] text-purple-200 font-mono">ID: {studentData.studentId}</p>
+                          <p className="text-[11px] text-slate-300">Grade: {studentData.className} &bull; {studentData.house}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">Emergency Contact: +234-803-333-4455</p>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-purple-500/30 flex justify-between items-center text-[10px] font-mono text-purple-300">
+                        <span>Issued: Sept 2024 &bull; Exp: July 2027</span>
+                        <span className="font-bold text-amber-400">QR &amp; BARCODE ENCRYPTED</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* DOCUMENT CARDS GRID */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {studentDocumentsData
+                    .filter(doc => documentsCategory === 'all' || doc.category === documentsCategory)
+                    .map(doc => (
+                      <div
+                        key={doc.id}
+                        className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-all"
+                      >
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-start">
+                            <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-extrabold uppercase">
+                              {doc.badge}
+                            </span>
+                            <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">{doc.fileSize}</span>
+                          </div>
+
+                          <div className="flex items-start gap-3">
+                            <span className="text-2xl">{doc.icon}</span>
+                            <div>
+                              <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] leading-snug">{doc.title}</h3>
+                              <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">Issued By: {doc.issuedBy}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-[hsl(var(--border))] space-y-3 text-xs">
+                          <div className="flex justify-between items-center text-[10px] font-mono text-[hsl(var(--text-tertiary))]">
+                            <span>Issue Date: {doc.date}</span>
+                            <span className="text-emerald-400 font-bold">QR Verified ✓</span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => {
+                                if (doc.action === 'report_card') setShowReportCardModal(true);
+                                else if (doc.action === 'transcript') setShowTranscriptModal(true);
+                                else if (doc.action === 'timetable') handlePrintTimetable();
+                                else {
+                                  setDocumentsToast(`Opened preview for "${doc.title}".`);
+                                  setTimeout(() => setDocumentsToast(null), 3000);
+                                }
+                              }}
+                              className="py-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] font-bold text-xs hover:bg-[hsl(var(--border))] transition-all flex items-center justify-center gap-1"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-blue-400" /> Preview
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setDocumentsToast(`Downloaded verified file: "${doc.title}" (${doc.fileSize}).`);
+                                setTimeout(() => setDocumentsToast(null), 3500);
+                              }}
+                              className="py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-1"
+                            >
+                              <Download className="w-3.5 h-3.5" /> Download
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tab 9: Fee Information & Payment Portal */}
+            {activeTab === 'finance' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Finance Banner & Summary Cards */}
+                <div className="glass-card p-6 sm:p-8 border border-emerald-500/20 bg-emerald-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-extrabold tracking-wider uppercase border border-emerald-500/30">
+                        Official Student Financial Ledger
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1">
+                        Fee Information &amp; Payment Portal
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        View outstanding balance, payment history, official receipts, and manage installment plans or pay online.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 self-start sm:self-center">
+                      <button
+                        onClick={() => setShowPayNowModal(true)}
+                        className="px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-lg transition-all flex items-center gap-2"
+                      >
+                        <DollarSign className="w-4 h-4" /> Pay Now Online
+                      </button>
+                      <button
+                        onClick={() => handleAction('Download Financial Statement PDF')}
+                        className="px-4 py-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] text-xs font-bold hover:bg-[hsl(var(--border))] transition-all flex items-center gap-2"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Statement PDF
+                      </button>
+                    </div>
+                  </div>
+
+                  {paymentSuccessToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {paymentSuccessToast}
+                    </div>
+                  )}
+
+                  {/* Financial KPI Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2 border-t border-[hsl(var(--border))]">
+                    <div className="p-4 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-1">
+                      <span className="text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase">Total Term Invoice</span>
+                      <p className="text-lg font-black text-[hsl(var(--text-primary))]">₦250,000.00</p>
+                      <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono">Invoice: INV-2026-0902</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-1">
+                      <span className="text-[10px] font-bold text-emerald-400 uppercase">Paid Fees</span>
+                      <p className="text-lg font-black text-emerald-400">₦205,000.00</p>
+                      <span className="text-[10px] text-emerald-300 font-semibold">82.0% Settled</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 space-y-1">
+                      <span className="text-[10px] font-bold text-rose-400 uppercase">Outstanding Balance</span>
+                      <p className="text-lg font-black text-rose-400">₦45,000.00</p>
+                      <span className="text-[10px] text-rose-300 font-semibold">Due Aug 15, 2026</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1">
+                      <span className="text-[10px] font-bold text-amber-400 uppercase">Payment Standing</span>
+                      <p className="text-sm font-black text-amber-400 mt-1">Partially Paid</p>
+                      <span className="text-[10px] text-amber-300 font-semibold">Installment Plan Active</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Installment Plans & Schedule */}
+                <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-lg">
+                  <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-3">
+                    <div>
+                      <h3 className="text-base font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        <CheckSquare className="w-4 h-4 text-emerald-400" /> Approved Fee Installment Plan
+                      </h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Term 2 tuition broken down into 3 structured payment installments.</p>
+                    </div>
+                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                      3 Installments
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    {[
+                      { num: 'Installment 1 of 3', amount: '₦105,000.00', due: 'Paid May 01, 2026', status: 'Paid in Full', receipt: 'REC-2026-0891', color: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' },
+                      { num: 'Installment 2 of 3', amount: '₦100,000.00', due: 'Paid June 15, 2026', status: 'Paid in Full', receipt: 'REC-2026-1042', color: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' },
+                      { num: 'Installment 3 of 3', amount: '₦45,000.00', due: 'Due August 15, 2026', status: 'Pending / Due', receipt: 'Pending', color: 'border-rose-500/30 bg-rose-500/5 text-rose-400' }
+                    ].map((inst, idx) => (
+                      <div key={idx} className={`p-4 rounded-2xl border ${inst.color} space-y-2`}>
+                        <div className="flex justify-between font-bold">
+                          <span className="text-[11px] opacity-80">{inst.num}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border border-current">
+                            {inst.status}
+                          </span>
+                        </div>
+                        <p className="text-lg font-black text-[hsl(var(--text-primary))]">{inst.amount}</p>
+                        <div className="flex justify-between items-center text-[10px] font-mono pt-1 border-t border-[hsl(var(--border)/0.5)]">
+                          <span>{inst.due}</span>
+                          <span className="font-semibold">{inst.receipt}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payment History & Official Receipts Table */}
+                <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-lg">
+                  <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-3">
+                    <h3 className="text-base font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-[hsl(var(--accent))]" /> Payment History &amp; Official Receipts
+                    </h3>
+                    <span className="text-xs font-mono text-[hsl(var(--text-tertiary))]">2 Verified Transactions</span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-[hsl(var(--border))] font-mono text-[10px] text-[hsl(var(--text-tertiary))] uppercase">
+                          <th className="py-2 px-3">Date</th>
+                          <th className="py-2 px-3">Transaction Ref</th>
+                          <th className="py-2 px-3">Amount Paid</th>
+                          <th className="py-2 px-3">Payment Method</th>
+                          <th className="py-2 px-3">Status</th>
+                          <th className="py-2 px-3">Receipt No</th>
+                          <th className="py-2 px-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[hsl(var(--border)/0.5)] font-semibold">
+                        {[
+                          { date: 'June 15, 2026', ref: 'TXN-882190', amount: '₦100,000.00', method: '💳 Visa / Mastercard Online', status: 'Completed', receipt: 'REC-2026-1042' },
+                          { date: 'May 01, 2026', ref: 'TXN-773104', amount: '₦105,000.00', method: '📱 Mobile Money (MTN)', status: 'Completed', receipt: 'REC-2026-0891' }
+                        ].map((row, idx) => (
+                          <tr key={idx} className="hover:bg-[hsl(var(--bg-tertiary)/0.4)] transition-all">
+                            <td className="py-3 px-3 font-mono text-[11px] text-[hsl(var(--text-secondary))]">{row.date}</td>
+                            <td className="py-3 px-3 font-mono text-[11px] text-[hsl(var(--text-primary))]">{row.ref}</td>
+                            <td className="py-3 px-3 font-extrabold text-emerald-400">{row.amount}</td>
+                            <td className="py-3 px-3 text-[11px] text-[hsl(var(--text-secondary))]">{row.method}</td>
+                            <td className="py-3 px-3">
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                                {row.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 font-mono text-[11px] text-[hsl(var(--accent))]">{row.receipt}</td>
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                onClick={() => handleAction(`Download Receipt ${row.receipt} PDF`)}
+                                className="px-3 py-1.5 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-primary))] text-[11px] font-bold hover:bg-[hsl(var(--border))] transition-all flex items-center gap-1 ml-auto"
+                              >
+                                <Download className="w-3 h-3" /> Receipt PDF
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* PAY NOW ONLINE PAYMENT MODAL */}
+                {showPayNowModal && (
+                  <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+                    <div className="glass-card max-w-md w-full p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-2xl relative">
+                      <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-4">
+                        <div>
+                          <span className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-wider block">Secure Payment Gateway</span>
+                          <h3 className="text-lg font-black text-[hsl(var(--text-primary))] mt-0.5">Pay Tuition Fees Online</h3>
+                        </div>
+                        <button
+                          onClick={() => setShowPayNowModal(false)}
+                          className="w-8 h-8 rounded-full bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] font-bold flex items-center justify-center"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="space-y-4 text-xs">
+                        {/* Amount Input */}
+                        <div>
+                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">
+                            Payment Amount (₦)
+                          </label>
+                          <input
+                            type="number"
+                            value={payAmountInput}
+                            onChange={e => setPayAmountInput(e.target.value)}
+                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl px-4 py-3 text-base font-black text-[hsl(var(--text-primary))] focus:outline-none focus:border-emerald-500"
+                          />
+                          <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">Outstanding Balance: ₦45,000.00</p>
+                        </div>
+
+                        {/* Payment Method Selector */}
+                        <div>
+                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">
+                            Select Payment Method
+                          </label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { id: 'card', label: '💳 Card' },
+                              { id: 'momo', label: '📱 MoMo' },
+                              { id: 'bank', label: '🏦 Bank' }
+                            ].map(m => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => setSelectedPayMethod(m.id as any)}
+                                className={`p-3 rounded-xl border font-bold text-center transition-all ${
+                                  selectedPayMethod === m.id
+                                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 shadow-md'
+                                    : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.5)] text-[hsl(var(--text-secondary))]'
+                                }`}
+                              >
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Payment Details Input */}
+                        {selectedPayMethod === 'card' && (
+                          <div className="space-y-2.5 p-4 rounded-2xl bg-[hsl(var(--bg-tertiary)/0.4)] border border-[hsl(var(--border))]">
+                            <input type="text" placeholder="Card Number (4000 1234 5678 9010)" className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-xl px-3 py-2 text-xs text-[hsl(var(--text-primary))]" />
+                            <div className="grid grid-cols-2 gap-2">
+                              <input type="text" placeholder="MM/YY" className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-xl px-3 py-2 text-xs text-[hsl(var(--text-primary))]" />
+                              <input type="text" placeholder="CVV" className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-xl px-3 py-2 text-xs text-[hsl(var(--text-primary))]" />
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedPayMethod === 'momo' && (
+                          <div className="p-4 rounded-2xl bg-[hsl(var(--bg-tertiary)/0.4)] border border-[hsl(var(--border))] space-y-2">
+                            <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold">Mobile Money Number</label>
+                            <input type="text" placeholder="+233 24 123 4567 / +234 80 1234 5678" className="w-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-xl px-3 py-2 text-xs text-[hsl(var(--text-primary))]" />
+                          </div>
+                        )}
+
+                        {selectedPayMethod === 'bank' && (
+                          <div className="p-4 rounded-2xl bg-[hsl(var(--bg-tertiary)/0.4)] border border-[hsl(var(--border))] space-y-1 font-mono text-[11px]">
+                            <p className="font-bold text-[hsl(var(--text-primary))]">Bank Account Details:</p>
+                            <p className="text-[hsl(var(--text-secondary))]">Bank: Zenith Bank PLC</p>
+                            <p className="text-[hsl(var(--text-secondary))]">Account No: 1019283746</p>
+                            <p className="text-[hsl(var(--text-secondary))]">Name: St. Jude International School</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Modal Footer Buttons */}
+                      <div className="flex justify-end gap-3 pt-3 border-t border-[hsl(var(--border))]">
+                        <button
+                          type="button"
+                          onClick={() => setShowPayNowModal(false)}
+                          className="px-4 py-2.5 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] font-bold text-xs hover:bg-[hsl(var(--bg-tertiary))]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isProcessingPayment}
+                          onClick={() => {
+                            setIsProcessingPayment(true);
+                            setTimeout(() => {
+                              setIsProcessingPayment(false);
+                              setShowPayNowModal(false);
+                              setPaymentSuccessToast(`Payment of ₦${Number(payAmountInput).toLocaleString()} processed successfully! Receipt REC-2026-1192 generated.`);
+                              setTimeout(() => setPaymentSuccessToast(null), 5000);
+                            }, 1500);
+                          }}
+                          className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                        >
+                          {isProcessingPayment ? (
+                            <>Processing Payment...</>
+                          ) : (
+                            <>Confirm &amp; Pay ₦{Number(payAmountInput).toLocaleString()}</>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 10: AI Learning Assistant & Curriculum Copilot (Optional Module) */}
+            {activeTab === 'ai-copilot' && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Header Banner & Enable/Disable Toggle */}
+                <div className="glass-card p-6 sm:p-8 border border-indigo-500/20 bg-indigo-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-3 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 text-[11px] font-extrabold tracking-wider uppercase border border-indigo-500/30">
+                          AI Learning Engine v3.5
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-300 text-[10px] font-bold border border-purple-500/20">
+                          Curriculum Aligned (WAEC / IGCSE / SAT)
+                        </span>
+                      </div>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1 flex items-center gap-2">
+                        <Brain className="w-6 h-6 text-indigo-400" /> AI Learning Assistant &amp; Curriculum Copilot
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Personalized AI tutor to explain lessons, generate practice quizzes, summarize class notes, recommend study plans, answer curriculum Q&amp;A, and diagnose weak topics.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Module Enable / Disable Toggle Switch */}
+                      <button
+                        onClick={() => {
+                          setIsAiAssistantEnabled(!isAiAssistantEnabled);
+                          setAiAssistantToast(
+                            !isAiAssistantEnabled
+                              ? 'AI Learning Assistant enabled for self-directed study!'
+                              : 'AI Learning Assistant module disabled.'
+                          );
+                          setTimeout(() => setAiAssistantToast(null), 3500);
+                        }}
+                        className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all border flex items-center gap-2 ${
+                          isAiAssistantEnabled
+                            ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                            : 'bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] border-[hsl(var(--border))] hover:text-[hsl(var(--text-primary))]'
+                        }`}
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        {isAiAssistantEnabled ? 'Module Enabled ✓' : 'Module Disabled (Enable AI)'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {aiAssistantToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {aiAssistantToast}
+                    </div>
+                  )}
+
+                  {/* AI Assistant Sub-Navigation Tabs */}
+                  {isAiAssistantEnabled && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-[hsl(var(--border))]">
+                      {[
+                        { id: 'explain', label: '📖 Explain Lessons' },
+                        { id: 'quiz', label: '🧪 Generate Quizzes' },
+                        { id: 'summarize', label: '📝 Summarize Notes' },
+                        { id: 'study_plan', label: '📅 Recommend Study Plans' },
+                        { id: 'qa', label: '💬 Curriculum Q&A' },
+                        { id: 'weak_topics', label: '🎯 Identify Weak Topics' }
+                      ].map(st => (
+                        <button
+                          key={st.id}
+                          onClick={() => setAiSubTab(st.id as any)}
+                          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+                            aiSubTab === st.id
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                          }`}
+                        >
+                          {st.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* MODULE DISABLED STATE BANNER */}
+                {!isAiAssistantEnabled ? (
+                  <div className="glass-card p-12 text-center border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-xl">
+                    <div className="w-16 h-16 rounded-full bg-indigo-500/10 text-indigo-400 font-black text-2xl flex items-center justify-center mx-auto border border-indigo-500/20">
+                      🤖
+                    </div>
+                    <div className="max-w-md mx-auto space-y-2">
+                      <h3 className="text-lg font-black text-[hsl(var(--text-primary))]">AI Learning Assistant is Disabled</h3>
+                      <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">
+                        The AI Learning Assistant module is currently turned off for your profile. Click the toggle button in the header above to activate AI lesson explanations, quiz generators, and study plan recommendations.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsAiAssistantEnabled(true);
+                        setAiAssistantToast('AI Learning Assistant enabled for self-directed study!');
+                        setTimeout(() => setAiAssistantToast(null), 3500);
+                      }}
+                      className="px-6 py-3 rounded-2xl bg-indigo-600 text-white font-extrabold text-xs shadow-lg hover:bg-indigo-700 transition-all inline-flex items-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4" /> Enable AI Assistant Now
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* 1. EXPLAIN LESSONS FEATURE */}
+                    {aiSubTab === 'explain' && (
+                      <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                        <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                          <div>
+                            <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                              📖 AI Interactive Lesson Explainer
+                            </h3>
+                            <p className="text-xs text-[hsl(var(--text-tertiary))]">Enter any curriculum topic to generate clear concept breakdowns, formulas, and real-life examples.</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 text-xs">
+                          <div>
+                            <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">Quick Presets / Custom Topic</label>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {[
+                                'Organic Chemistry: Electrophilic Addition',
+                                'Calculus: Integration by Parts',
+                                'Newton’s Laws of Motion',
+                                'Photosynthesis: Calvin Cycle'
+                              ].map(preset => (
+                                <button
+                                  key={preset}
+                                  onClick={() => setAiLessonTopic(preset)}
+                                  className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold transition-all ${
+                                    aiLessonTopic === preset
+                                      ? 'border-indigo-500 bg-indigo-500/20 text-indigo-300'
+                                      : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))]'
+                                  }`}
+                                >
+                                  {preset}
+                                </button>
+                              ))}
+                            </div>
+
+                            <input
+                              type="text"
+                              value={aiLessonTopic}
+                              onChange={e => setAiLessonTopic(e.target.value)}
+                              placeholder="Enter lesson concept (e.g. Quadratic Formula, Photosynthesis, French Grammar)..."
+                              className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl p-3.5 text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => {
+                                setIsGeneratingExplanation(true);
+                                setAiLessonExplanation(null);
+                                setTimeout(() => {
+                                  setIsGeneratingExplanation(false);
+                                  setAiLessonExplanation(
+                                    `### Concept Breakdown: ${aiLessonTopic}\n\n1. **Core Principle**: Electrophilic addition is a reaction where a double carbon bond (alkene) opens up to add electrophiles (electron-seeking species) across the double bond.\n\n2. **Key Steps**:\n   - **Step 1**: The electron-rich C=C double bond attacks the electrophile H⁺, forming a stable **carbocation intermediate**.\n   - **Step 2**: The halide ion (Cl⁻/Br⁻) attacks the positive carbocation to yield an alkyl halide product.\n\n3. **Markovnikov Rule**: The hydrogen atom adds to the carbon atom that already possesses the greater number of hydrogen atoms.\n\n4. **Real-Life Application**: Essential process in industrial polymer manufacturing (making polyethylene plastics) and pharmaceutical drug synthesis.`
+                                  );
+                                }, 1200);
+                              }}
+                              className="px-6 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-lg transition-all flex items-center gap-2"
+                            >
+                              <Sparkles className="w-4 h-4" /> {isGeneratingExplanation ? 'Generating Explanation...' : 'Explain Lesson Concept'}
+                            </button>
+                          </div>
+
+                          {(aiLessonExplanation || isGeneratingExplanation) && (
+                            <div className="p-6 rounded-2xl border border-indigo-500/30 bg-indigo-500/5 text-xs text-[hsl(var(--text-primary))] space-y-3 shadow-inner">
+                              {isGeneratingExplanation ? (
+                                <div className="flex items-center gap-2 text-indigo-400 font-bold animate-pulse">
+                                  <Sparkles className="w-4 h-4 animate-spin" /> AI Tutor is synthesizing curriculum lesson breakdown...
+                                </div>
+                              ) : (
+                                <div className="space-y-3 leading-relaxed whitespace-pre-line font-sans">
+                                  <div className="flex justify-between items-center border-b border-indigo-500/20 pb-2">
+                                    <span className="font-mono text-[10px] text-indigo-300 uppercase tracking-wider">AI TUTOR EXPLANATION</span>
+                                    <span className="text-[10px] text-emerald-400 font-bold">Verified Curriculum Explanation ✓</span>
+                                  </div>
+                                  <p>{aiLessonExplanation}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 2. GENERATE QUIZZES FEATURE */}
+                    {aiSubTab === 'quiz' && (
+                      <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                        <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                          <div>
+                            <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                              🧪 AI Practice Quiz Generator
+                            </h3>
+                            <p className="text-xs text-[hsl(var(--text-tertiary))]">Generate interactive 5-question quizzes with instant scoring and explanations.</p>
+                          </div>
+                          {quizScore !== null && (
+                            <span className="px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-black text-xs border border-emerald-500/30">
+                              Quiz Score: {quizScore} / {aiQuizQuestions?.length || 0}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-6 text-xs">
+                          {/* Subject Selector */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]">
+                            <div>
+                              <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold block">Selected Quiz Subject</span>
+                              <span className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{aiQuizSubject}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={aiQuizSubject}
+                                onChange={e => setAiQuizSubject(e.target.value)}
+                                className="bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl px-3 py-2 text-xs text-[hsl(var(--text-primary))]"
+                              >
+                                <option>Mathematics (Algebra &amp; Proofs)</option>
+                                <option>Organic Chemistry (CHEM-202)</option>
+                                <option>Modern Physics (PHYS-201)</option>
+                                <option>English Literature (ENG-301)</option>
+                              </select>
+                              <button
+                                onClick={() => {
+                                  setQuizScore(null);
+                                  setAiQuizQuestions([
+                                    {
+                                      id: 'q1',
+                                      question: 'In the quadratic equation ax² + bx + c = 0, what does the discriminant (b² - 4ac) determine?',
+                                      options: ['The sum of the roots', 'The number and nature of real roots', 'The y-intercept', 'The vertex coordinate'],
+                                      correctAnswer: 1,
+                                      selectedAnswer: null,
+                                      explanation: 'The discriminant b² - 4ac indicates whether the quadratic has 2 distinct real roots (>0), 1 repeated real root (=0), or complex roots (<0).'
+                                    },
+                                    {
+                                      id: 'q2',
+                                      question: 'Which property guarantees that if a line is tangent to a circle, it is perpendicular to the radius at the point of contact?',
+                                      options: ['Pythagorean Theorem', 'Radius-Tangent Theorem', 'Chord Inscribed Theorem', 'Secant Segment Rule'],
+                                      correctAnswer: 1,
+                                      selectedAnswer: null,
+                                      explanation: 'The Radius-Tangent Theorem states that a tangent to a circle is always perpendicular to the radius drawn to the point of tangency.'
+                                    }
+                                  ]);
+                                  setAiAssistantToast(`Generated new AI Quiz for ${aiQuizSubject}!`);
+                                  setTimeout(() => setAiAssistantToast(null), 3000);
+                                }}
+                                className="px-4 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs shadow-md hover:bg-purple-700 transition-all flex items-center gap-1.5"
+                              >
+                                <Sparkles className="w-3.5 h-3.5" /> Generate Quiz
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quiz Questions List */}
+                          <div className="space-y-4">
+                            {aiQuizQuestions?.map((q, qIdx) => (
+                              <div key={q.id} className="p-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-3 shadow-md">
+                                <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">
+                                  Q{qIdx + 1}. {q.question}
+                                </h4>
+
+                                <div className="space-y-2">
+                                  {q.options.map((opt: string, oIdx: number) => {
+                                    const isSelected = q.selectedAnswer === oIdx;
+                                    const isCorrect = q.correctAnswer === oIdx;
+                                    let btnStyle = 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.5)] text-[hsl(var(--text-secondary))]';
+
+                                    if (quizScore !== null) {
+                                      if (isCorrect) btnStyle = 'border-emerald-500 bg-emerald-500/20 text-emerald-300 font-bold';
+                                      else if (isSelected && !isCorrect) btnStyle = 'border-rose-500 bg-rose-500/20 text-rose-300 font-bold';
+                                    } else if (isSelected) {
+                                      btnStyle = 'border-indigo-500 bg-indigo-500/20 text-indigo-300 font-bold';
+                                    }
+
+                                    return (
+                                      <button
+                                        key={oIdx}
+                                        onClick={() => {
+                                          if (quizScore !== null) return;
+                                          setAiQuizQuestions(prev => prev?.map((item, i) => i === qIdx ? { ...item, selectedAnswer: oIdx } : item) || null);
+                                        }}
+                                        className={`w-full text-left p-3 rounded-xl border text-xs transition-all flex justify-between items-center ${btnStyle}`}
+                                      >
+                                        <span>{String.fromCharCode(65 + oIdx)}. {opt}</span>
+                                        {quizScore !== null && isCorrect && <span className="text-emerald-400 font-bold text-[10px]">Correct ✓</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {quizScore !== null && (
+                                  <p className="text-[11px] text-[hsl(var(--text-tertiary))] p-3 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] font-mono">
+                                    💡 <strong>Explanation:</strong> {q.explanation}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => {
+                                if (!aiQuizQuestions) return;
+                                let correct = 0;
+                                aiQuizQuestions.forEach(q => {
+                                  if (q.selectedAnswer === q.correctAnswer) correct++;
+                                });
+                                setQuizScore(correct);
+                                setAiAssistantToast(`Quiz scored! You got ${correct} / ${aiQuizQuestions.length} correct.`);
+                                setTimeout(() => setAiAssistantToast(null), 3500);
+                              }}
+                              className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                            >
+                              <CheckCircle2 className="w-4 h-4" /> Submit Answers &amp; Grade Quiz
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3. SUMMARIZE NOTES FEATURE */}
+                    {aiSubTab === 'summarize' && (
+                      <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                        <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                          <div>
+                            <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                              📝 AI Class Note Summarizer &amp; Flashcard Generator
+                            </h3>
+                            <p className="text-xs text-[hsl(var(--text-tertiary))]">Paste class lecture notes or textbook passages to extract bulleted executive summaries and flashcards.</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 text-xs">
+                          <div>
+                            <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">Paste Lecture Notes or Passage</label>
+                            <textarea
+                              value={aiNoteText}
+                              onChange={e => setAiNoteText(e.target.value)}
+                              placeholder="Paste lecture notes here..."
+                              className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl p-4 text-xs text-[hsl(var(--text-primary))] h-32 focus:outline-none focus:border-indigo-500 font-mono"
+                            />
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => {
+                                setAiNoteSummaryResult({
+                                  summary: [
+                                    'Photosynthesis occurs inside chloroplast organelles using chlorophyll pigment to capture light energy.',
+                                    'Light-dependent reaction generates high-energy ATP and NADPH electron carriers.',
+                                    'Calvin Cycle (light-independent) utilizes RuBisCO enzyme for carbon fixation into glucose sugar.'
+                                  ],
+                                  flashcards: [
+                                    { front: 'Where does photosynthesis occur?', back: 'Chloroplast organelles in plant cell leaves.' },
+                                    { front: 'What is the primary carbon-fixing enzyme?', back: 'RuBisCO in the Calvin Cycle.' }
+                                  ]
+                                });
+                                setAiAssistantToast('Summarized class notes & created revision flashcard deck!');
+                                setTimeout(() => setAiAssistantToast(null), 3000);
+                              }}
+                              className="px-6 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                            >
+                              <Sparkles className="w-4 h-4" /> Summarize Notes &amp; Create Flashcards
+                            </button>
+                          </div>
+
+                          {aiNoteSummaryResult && (
+                            <div className="p-6 rounded-2xl border border-purple-500/30 bg-purple-500/5 space-y-4 shadow-inner">
+                              <h4 className="font-extrabold text-purple-300 text-sm flex items-center gap-2">
+                                ✨ Executive Summary &amp; Key Takeaways
+                              </h4>
+                              <ul className="list-disc pl-5 space-y-1.5 text-xs text-[hsl(var(--text-secondary))]">
+                                {aiNoteSummaryResult.summary.map((bullet: string, bIdx: number) => (
+                                  <li key={bIdx}>{bullet}</li>
+                                ))}
+                              </ul>
+
+                              <div className="pt-3 border-t border-purple-500/20 space-y-2">
+                                <span className="text-[10px] font-mono text-purple-300 uppercase font-bold">REVISION FLASHCARDS DECK</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {aiNoteSummaryResult.flashcards.map((fc: any, fcIdx: number) => (
+                                    <div key={fcIdx} className="p-4 rounded-xl border border-purple-500/20 bg-[hsl(var(--bg-secondary))] space-y-1 text-xs">
+                                      <p className="font-bold text-[hsl(var(--text-primary))]">Q: {fc.front}</p>
+                                      <p className="text-[11px] text-purple-300 font-mono">A: {fc.back}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 4. RECOMMEND STUDY PLANS FEATURE */}
+                    {aiSubTab === 'study_plan' && (
+                      <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                        <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                          <div>
+                            <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                              📅 AI Personalized Study Plan Generator
+                            </h3>
+                            <p className="text-xs text-[hsl(var(--text-tertiary))]">Automated study schedule customized to your target GPA and weak subject areas.</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 text-xs">
+                          <div>
+                            <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">Academic Goal / Target GPA</label>
+                            <input
+                              type="text"
+                              value={aiStudyPlanTarget}
+                              onChange={e => setAiStudyPlanTarget(e.target.value)}
+                              className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl p-3.5 text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-indigo-500 font-bold"
+                            />
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => {
+                                setAiGeneratedStudyPlan([
+                                  { day: 'Monday (04:30 PM - 06:00 PM)', subject: 'Organic Chemistry (CHEM-202)', activity: 'Practice Electrophilic Addition reaction mechanisms & mechanism diagrams.', focus: 'Weak Topic (+5% boost needed)' },
+                                  { day: 'Wednesday (05:00 PM - 06:30 PM)', subject: 'World History (HIST-102)', activity: 'Draft 3 essay thesis statements with chronological citations.', focus: 'Essay Formatting Boost' },
+                                  { day: 'Friday (04:00 PM - 05:30 PM)', subject: 'Mathematics (MATH-101)', activity: 'Solve past exam questions on polynomial derivations.', focus: 'Mastery Consolidation' }
+                                ]);
+                                setAiAssistantToast('Generated customized weekly study schedule!');
+                                setTimeout(() => setAiAssistantToast(null), 3000);
+                              }}
+                              className="px-6 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                            >
+                              <Sparkles className="w-4 h-4" /> Recommend Study Plan
+                            </button>
+                          </div>
+
+                          {aiGeneratedStudyPlan && (
+                            <div className="space-y-3">
+                              {aiGeneratedStudyPlan.map((plan, pIdx) => (
+                                <div key={pIdx} className="p-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex flex-col sm:flex-row justify-between sm:items-center gap-2 shadow-md">
+                                  <div>
+                                    <span className="text-[10px] font-mono text-indigo-400 font-bold">{plan.day}</span>
+                                    <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm mt-0.5">{plan.subject}</h4>
+                                    <p className="text-xs text-[hsl(var(--text-secondary))] mt-0.5">{plan.activity}</p>
+                                  </div>
+
+                                  <span className="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-[10px] font-extrabold self-start sm:self-center">
+                                    {plan.focus}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 5. CURRICULUM Q&A TUTOR FEATURE */}
+                    {aiSubTab === 'qa' && (
+                      <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                        <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                          <div>
+                            <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                              💬 AI Curriculum Q&amp;A Conversational Tutor
+                            </h3>
+                            <p className="text-xs text-[hsl(var(--text-tertiary))]">Ask any STEM, Literature, or History question for instant step-by-step guidance.</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 text-xs">
+                          <div>
+                            <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">Ask a Curriculum Question</label>
+                            <input
+                              type="text"
+                              value={aiQaPrompt}
+                              onChange={e => setAiQaPrompt(e.target.value)}
+                              placeholder="e.g. How do I balance redox equations in basic solution?"
+                              className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-2xl p-3.5 text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => {
+                                setAiQaResponse(
+                                  `**Newton’s Second Law of Motion** states that the acceleration of an object is directly proportional to the net force acting on it and inversely proportional to its mass: **F = m × a**.\n\n**Real-Life Example**: Pushing a grocery cart. An empty cart (small mass) accelerates quickly with a light push. A full cart (heavy mass) requires much more force to achieve the exact same acceleration.`
+                                );
+                              }}
+                              className="px-6 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                            >
+                              <Send className="w-4 h-4" /> Ask AI Tutor
+                            </button>
+                          </div>
+
+                          {aiQaResponse && (
+                            <div className="p-6 rounded-2xl border border-indigo-500/30 bg-indigo-500/5 text-xs text-[hsl(var(--text-primary))] space-y-2 whitespace-pre-line leading-relaxed shadow-inner">
+                              <span className="font-bold text-indigo-400 block border-b border-indigo-500/20 pb-1">AI Tutor Answer:</span>
+                              <p>{aiQaResponse}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 6. IDENTIFY WEAK TOPICS FEATURE */}
+                    {aiSubTab === 'weak_topics' && (
+                      <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                        <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                          <div>
+                            <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                              🎯 Curriculum Diagnostic &amp; Weak Topic Finder
+                            </h3>
+                            <p className="text-xs text-[hsl(var(--text-tertiary))]">Automated analysis highlighting curriculum topics requiring review prior to term finals.</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          {weakTopicsData.map(topic => (
+                            <div key={topic.id} className="p-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-3 shadow-md">
+                              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                                <div>
+                                  <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))] uppercase block">{topic.subject}</span>
+                                  <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm mt-0.5">{topic.topicName}</h4>
+                                </div>
+                                <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold border ${topic.badgeColor} self-start sm:self-center`}>
+                                  {topic.status} (Mastery: {topic.masteryScore}%)
+                                </span>
+                              </div>
+
+                              <div className="pt-2 border-t border-[hsl(var(--border)/0.5)] flex flex-wrap justify-between items-center gap-2 text-xs">
+                                <p className="text-xs text-[hsl(var(--text-secondary))]">💡 <strong>AI Tip:</strong> {topic.recommendation}</p>
+
+                                <button
+                                  onClick={() => {
+                                    setAiLessonTopic(topic.topicName);
+                                    setAiSubTab('explain');
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-1"
+                                >
+                                  Start AI Lesson Review <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -3530,45 +8824,780 @@ export default function StudentPortalPage() {
               </div>
             )}
 
-            {/* Tab 12: Settings */}
-            {activeTab === 'settings' && (
+            {/* Tab 11.5: Help & Support Desk Module */}
+            {activeTab === 'support' && (
               <div className="space-y-6 animate-fade-in text-xs">
-                <div className="glass-card p-6 border border-[hsl(var(--border))] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-3xl shadow-lg">
-                  <div>
-                    <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Student Settings &amp; Profile Preferences</h3>
-                    <p className="text-xs text-[hsl(var(--text-tertiary))] mt-0.5">Customize your student portal experience, notification preferences, and request updates.</p>
+                {/* Header Banner & New Ticket Action */}
+                <div className="glass-card p-6 sm:p-8 border border-blue-500/20 bg-blue-500/5 rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[11px] font-extrabold tracking-wider uppercase border border-blue-500/30">
+                        Student Care &amp; ICT Helpdesk
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1 flex items-center gap-2">
+                        <HelpCircle className="w-6 h-6 text-blue-400" /> Help &amp; Support Desk
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Report portal issues, contact ICT support, search FAQs knowledge base, and track your active support tickets.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setShowNewTicketModal(true)}
+                      className="px-6 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2 self-start sm:self-center"
+                    >
+                      <PlusCircle className="w-4 h-4" /> Submit Support Ticket
+                    </button>
                   </div>
-                  <button onClick={() => handleAction('Student Preferences Saved')} className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] hover:opacity-90 transition-all shadow-md">
-                    <Save className="w-4 h-4" /> Save Preferences
-                  </button>
+
+                  {supportToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {supportToast}
+                    </div>
+                  )}
+
+                  {/* Sub-Navigation Tabs */}
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-[hsl(var(--border))]">
+                    {[
+                      { id: 'faqs', label: '❓ Knowledge Base FAQs' },
+                      { id: 'tickets', label: `🎟️ Active Tickets (${supportTickets.length})` },
+                      { id: 'ict_contact', label: '💻 Contact ICT Support' },
+                      { id: 'report_issue', label: '🚨 Report Portal Issue' }
+                    ].map(st => (
+                      <button
+                        key={st.id}
+                        onClick={() => setSupportSubTab(st.id as any)}
+                        className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+                          supportSubTab === st.id
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2 space-y-6">
-                    <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-4 rounded-3xl shadow-lg">
-                      <p className="font-bold text-[hsl(var(--text-primary))] text-sm flex items-center gap-2">
-                        <UserCheck className="w-4 h-4 text-[hsl(var(--accent))]" /> Personal Customization
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Preferred Display Name</label>
-                          <input type="text" defaultValue={studentData.fullName} className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-xs text-[hsl(var(--text-primary))]" />
+                {/* 1. FAQS KNOWLEDGE BASE FEATURE */}
+                {supportSubTab === 'faqs' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          ❓ Frequently Asked Questions (FAQs)
+                        </h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">Search instant answers to common portal, academic, and fee questions.</p>
+                      </div>
+
+                      {/* FAQ Search Bar */}
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-[hsl(var(--text-tertiary))]" />
+                        <input
+                          type="text"
+                          value={faqSearchQuery}
+                          onChange={e => setFaqSearchQuery(e.target.value)}
+                          placeholder="Search FAQs..."
+                          className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl pl-9 pr-3 py-2 text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Category Filter Pills */}
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {['all', 'Portal & Passwords', 'Academics & Transcripts', 'Fees & Payments', 'Hostel & Transport'].map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => setSelectedFaqCategory(cat)}
+                          className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold transition-all ${
+                            selectedFaqCategory === cat
+                              ? 'border-blue-500 bg-blue-500/20 text-blue-300'
+                              : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.6)] text-[hsl(var(--text-secondary))]'
+                          }`}
+                        >
+                          {cat === 'all' ? 'All FAQs' : cat}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* FAQ List Accordions */}
+                    <div className="space-y-3">
+                      {faqList
+                        .filter(f => selectedFaqCategory === 'all' || f.category === selectedFaqCategory)
+                        .filter(f => !faqSearchQuery || f.question.toLowerCase().includes(faqSearchQuery.toLowerCase()) || f.answer.toLowerCase().includes(faqSearchQuery.toLowerCase()))
+                        .map(faq => (
+                          <div key={faq.id} className="p-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-2 shadow-md">
+                            <div className="flex justify-between items-center">
+                              <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{faq.question}</h4>
+                              <span className="px-2.5 py-0.5 rounded bg-blue-500/10 text-blue-300 font-mono text-[9px] font-bold border border-blue-500/20">
+                                {faq.category}
+                              </span>
+                            </div>
+                            <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed pt-1 border-t border-[hsl(var(--border)/0.5)]">
+                              {faq.answer}
+                            </p>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. SUPPORT TICKETS TRACKER FEATURE */}
+                {supportSubTab === 'tickets' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          🎟️ Active Support Tickets Tracker
+                        </h3>
+                        <p className="text-xs text-[hsl(var(--text-tertiary))]">View progress and technician responses for your submitted helpdesk tickets.</p>
+                      </div>
+
+                      <button
+                        onClick={() => setShowNewTicketModal(true)}
+                        className="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-md hover:bg-blue-700 transition-all flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> New Ticket
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {supportTickets.map(ticket => (
+                        <div key={ticket.id} className={`p-5 rounded-2xl border ${ticket.color} space-y-3 shadow-md`}>
+                          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-[hsl(var(--border)/0.5)] pb-3">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-mono text-[10px] font-bold text-[hsl(var(--text-tertiary))] uppercase">{ticket.id}</span>
+                                <span className="px-2 py-0.5 rounded bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] text-[10px] font-bold">
+                                  {ticket.category}
+                                </span>
+                              </div>
+                              <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">{ticket.subject}</h4>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-start sm:self-center">
+                              <span className="px-3 py-1 rounded-full text-[10px] font-black border border-current">
+                                Priority: {ticket.priority}
+                              </span>
+                              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold text-[10px] border border-emerald-500/30">
+                                {ticket.status}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap justify-between items-center gap-2 text-[11px] text-[hsl(var(--text-tertiary))] font-mono">
+                            <span>Assigned Tech: <strong className="text-[hsl(var(--text-primary))]">{ticket.assignedTo}</strong></span>
+                            <span>Created: {ticket.createdAt} &bull; Updated: {ticket.updatedAt}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. CONTACT ICT SUPPORT FEATURE */}
+                {supportSubTab === 'ict_contact' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3">
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        💻 Contact School ICT Helpdesk
+                      </h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Direct support channels for technical assistance, password resets, and hardware issues.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {/* Live Chat Card */}
+                      <div className="p-5 rounded-2xl border border-blue-500/20 bg-blue-500/5 space-y-3 shadow-md">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-lg">
+                          💬
                         </div>
                         <div>
-                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Personal Contact Phone</label>
-                          <input type="text" defaultValue="+2348021110022" className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 font-mono text-xs text-[hsl(var(--text-primary))]" />
+                          <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">Live ICT Chat</h4>
+                          <p className="text-[11px] text-[hsl(var(--text-secondary))] mt-0.5">Average response time: &lt; 5 mins (Mon-Fri, 08:00 AM - 05:00 PM).</p>
                         </div>
+                        <button
+                          onClick={() => {
+                            setSupportToast('Initiated Live Chat with ICT Support Specialist!');
+                            setTimeout(() => setSupportToast(null), 3500);
+                          }}
+                          className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all"
+                        >
+                          Start Live Chat
+                        </button>
+                      </div>
+
+                      {/* Email Support Card */}
+                      <div className="p-5 rounded-2xl border border-purple-500/20 bg-purple-500/5 space-y-3 shadow-md">
+                        <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-lg">
+                          📧
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">Email ICT Desk</h4>
+                          <p className="text-[11px] text-[hsl(var(--text-secondary))] mt-0.5">Direct email line: support@schoolsaas.com (24hr response guarantee).</p>
+                        </div>
+                        <a
+                          href="mailto:support@schoolsaas.com"
+                          className="block text-center w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-md transition-all"
+                        >
+                          Send Email
+                        </a>
+                      </div>
+
+                      {/* Phone Hotline Card */}
+                      <div className="p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 space-y-3 shadow-md">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg">
+                          📞
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-sm">Phone Hotline</h4>
+                          <p className="text-[11px] text-[hsl(var(--text-secondary))] mt-0.5">Toll-Free ICT Line: +234 800 SCH HELP (+234-800-724-4357).</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSupportToast('Calling ICT Hotline (+234-800-SCH-HELP)...');
+                            setTimeout(() => setSupportToast(null), 3500);
+                          }}
+                          className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all"
+                        >
+                          Call Support
+                        </button>
                       </div>
                     </div>
                   </div>
+                )}
 
-                  <div className="space-y-6">
-                    <div className="glass-card p-6 border border-rose-500/20 bg-rose-500/5 space-y-4 rounded-3xl shadow-lg">
-                      <p className="font-bold text-rose-400 flex items-center gap-2 text-sm">
-                        <AlertTriangle className="w-4 h-4" /> Locked School Registry Records
+                {/* 4. REPORT PORTAL ISSUE WIZARD FEATURE */}
+                {supportSubTab === 'report_issue' && (
+                  <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl animate-fade-in">
+                    <div className="border-b border-[hsl(var(--border))] pb-3">
+                      <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                        🚨 Report Portal Technical Issue
+                      </h3>
+                      <p className="text-xs text-[hsl(var(--text-tertiary))]">Report a bug, broken page link, or grading discrepancy directly to system engineering.</p>
+                    </div>
+
+                    <form
+                      onSubmit={e => {
+                        e.preventDefault();
+                        if (!ticketSubject.trim()) return;
+                        const newId = `TICK-8842-0${supportTickets.length + 1}`;
+                        setSupportTickets(prev => [
+                          {
+                            id: newId,
+                            category: ticketCategory,
+                            subject: ticketSubject,
+                            priority: ticketPriority,
+                            status: 'Open',
+                            assignedTo: 'ICT Helpdesk Team',
+                            createdAt: 'Just now',
+                            updatedAt: 'Just now',
+                            color: 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+                          },
+                          ...prev
+                        ]);
+                        setSupportToast(`Reported issue successfully! Created Ticket ${newId}.`);
+                        setTicketSubject('');
+                        setTicketDescription('');
+                        setSupportSubTab('tickets');
+                        setTimeout(() => setSupportToast(null), 4000);
+                      }}
+                      className="space-y-4"
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">Issue Category</label>
+                          <select
+                            value={ticketCategory}
+                            onChange={e => setTicketCategory(e.target.value)}
+                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-3 text-xs text-[hsl(var(--text-primary))]"
+                          >
+                            <option>ICT &amp; Portal Login</option>
+                            <option>LMS Courseware &amp; Labs</option>
+                            <option>Grade &amp; Transcript Discrepancy</option>
+                            <option>Cafeteria &amp; Digital ID</option>
+                            <option>Hostel &amp; Maintenance</option>
+                            <option>Transport &amp; Bus Route</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">Urgency / Priority</label>
+                          <select
+                            value={ticketPriority}
+                            onChange={e => setTicketPriority(e.target.value)}
+                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-3 text-xs text-[hsl(var(--text-primary))]"
+                          >
+                            <option>Low (General Inquiry)</option>
+                            <option>Medium (Standard Issue)</option>
+                            <option>High (Urgent / Exam Blocked)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">Issue Title / Subject</label>
+                        <input
+                          type="text"
+                          value={ticketSubject}
+                          onChange={e => setTicketSubject(e.target.value)}
+                          placeholder="Brief summary of the issue (e.g. Unable to submit Homework #3 PDF)..."
+                          className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-3 text-xs text-[hsl(var(--text-primary))]"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1.5">Detailed Description</label>
+                        <textarea
+                          value={ticketDescription}
+                          onChange={e => setTicketDescription(e.target.value)}
+                          placeholder="Provide steps to reproduce the issue..."
+                          className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-3 text-xs text-[hsl(var(--text-primary))] h-28 focus:outline-none"
+                          required
+                        />
+                      </div>
+
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          className="px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2"
+                        >
+                          <Send className="w-4 h-4" /> Submit Technical Issue
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* SUBMIT SUPPORT TICKET MODAL */}
+                {showNewTicketModal && (
+                  <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+                    <div className="glass-card max-w-lg w-full p-6 border border-blue-500/30 rounded-3xl space-y-4 shadow-2xl bg-[hsl(var(--bg-secondary))] text-xs">
+                      <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-3">
+                        <h3 className="text-base font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          <PlusCircle className="w-5 h-5 text-blue-400" /> Create Support Ticket
+                        </h3>
+                        <button onClick={() => setShowNewTicketModal(false)} className="text-[hsl(var(--text-tertiary))] hover:text-white font-bold">✕</button>
+                      </div>
+
+                      <form
+                        onSubmit={e => {
+                          e.preventDefault();
+                          if (!ticketSubject.trim()) return;
+                          const newId = `TICK-8842-0${supportTickets.length + 1}`;
+                          setSupportTickets(prev => [
+                            {
+                              id: newId,
+                              category: ticketCategory,
+                              subject: ticketSubject,
+                              priority: ticketPriority,
+                              status: 'Open',
+                              assignedTo: 'ICT Helpdesk Desk',
+                              createdAt: 'Just now',
+                              updatedAt: 'Just now',
+                              color: 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+                            },
+                            ...prev
+                          ]);
+                          setSupportToast(`Created Ticket ${newId} successfully!`);
+                          setTicketSubject('');
+                          setTicketDescription('');
+                          setShowNewTicketModal(false);
+                          setSupportSubTab('tickets');
+                          setTimeout(() => setSupportToast(null), 4000);
+                        }}
+                        className="space-y-4"
+                      >
+                        <div>
+                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Category</label>
+                          <select
+                            value={ticketCategory}
+                            onChange={e => setTicketCategory(e.target.value)}
+                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-xs text-[hsl(var(--text-primary))]"
+                          >
+                            <option>ICT &amp; Portal Login</option>
+                            <option>LMS Courseware &amp; Labs</option>
+                            <option>Grade &amp; Transcript Discrepancy</option>
+                            <option>Cafeteria &amp; Digital ID</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Subject</label>
+                          <input
+                            type="text"
+                            value={ticketSubject}
+                            onChange={e => setTicketSubject(e.target.value)}
+                            placeholder="Brief description of request..."
+                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-xs text-[hsl(var(--text-primary))]"
+                            required
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowNewTicketModal(false)}
+                            className="px-4 py-2 rounded-xl bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] font-bold text-xs"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-5 py-2 rounded-xl bg-blue-600 text-white font-extrabold text-xs shadow-md"
+                          >
+                            Submit Ticket
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 12: Comprehensive Settings & Student Preferences Center */}
+            {activeTab === 'settings' && (
+              <div className="space-y-6 animate-fade-in text-xs">
+                {/* Header Banner & Save Controls */}
+                <div className="glass-card p-6 sm:p-8 border border-[hsl(var(--border))] rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="px-3 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[11px] font-extrabold tracking-wider uppercase border border-indigo-500/30">
+                        Account Controls &amp; Preferences
+                      </span>
+                      <h2 className="text-2xl font-black text-[hsl(var(--text-primary))] mt-1 flex items-center gap-2">
+                        <Settings className="w-6 h-6 text-indigo-400" /> Settings &amp; Student Preferences
+                      </h2>
+                      <p className="text-xs text-[hsl(var(--text-secondary))]">
+                        Manage your theme, language, notification channels, password security, and two-factor authentication.
                       </p>
-                      <p className="text-xs text-[hsl(var(--text-tertiary))] leading-relaxed">
-                        Official student records (legal names, class arm allocation, and CGPA) are locked and managed by school registrar staff.
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setSettingsToast('Student preferences and notification settings saved!');
+                        setTimeout(() => setSettingsToast(null), 3500);
+                      }}
+                      className="px-6 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-lg transition-all flex items-center gap-2 self-start sm:self-center"
+                    >
+                      <Save className="w-4 h-4" /> Save Preferences
+                    </button>
+                  </div>
+
+                  {settingsToast && (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-extrabold text-xs flex items-center gap-2 shadow-md">
+                      <CheckCircle2 className="w-4 h-4" /> {settingsToast}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* LEFT COLUMN: APPEARANCE, NOTIFICATIONS, SECURITY */}
+                  <div className="lg:col-span-2 space-y-6">
+                    {/* 1. THEME & LANGUAGE PREFERENCES */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-lg">
+                      <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2 border-b border-[hsl(var(--border))] pb-3">
+                        🎨 Theme &amp; Language Customization
+                      </h3>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Theme Switcher */}
+                        <div>
+                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-2">Display Theme</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { id: 'dark', label: '🌙 Dark' },
+                              { id: 'light', label: '☀️ Light' },
+                              { id: 'system', label: '💻 System' }
+                            ].map(t => (
+                              <button
+                                key={t.id}
+                                onClick={() => setSelectedTheme(t.id as any)}
+                                className={`p-2.5 rounded-xl border text-center font-bold transition-all text-xs ${
+                                  selectedTheme === t.id
+                                    ? 'border-indigo-500 bg-indigo-500/20 text-indigo-300 shadow-md'
+                                    : 'border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.5)] text-[hsl(var(--text-secondary))]'
+                                }`}
+                              >
+                                {t.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Language Switcher */}
+                        <div>
+                          <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-2">Portal Language</label>
+                          <select
+                            value={selectedLanguage}
+                            onChange={e => setSelectedLanguage(e.target.value as any)}
+                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-xs text-[hsl(var(--text-primary))] font-bold"
+                          >
+                            <option value="en">🇬🇧 English (Default)</option>
+                            <option value="fr">🇫🇷 French (Français)</option>
+                            <option value="es">🇪🇸 Spanish (Español)</option>
+                            <option value="ha">🇳🇬 Hausa</option>
+                            <option value="yo">🇳🇬 Yoruba</option>
+                            <option value="ig">🇳🇬 Igbo</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. MULTI-CHANNEL NOTIFICATION PREFERENCES */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-lg">
+                      <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2 border-b border-[hsl(var(--border))] pb-3">
+                        <Bell className="w-4 h-4 text-indigo-400" /> Multi-Channel Notification Preferences
+                      </h3>
+
+                      <div className="space-y-3">
+                        {[
+                          { label: 'Push Notifications (App Alerts)', desc: 'Instant mobile & browser alerts for assignments, grades & DMs.', state: notifPushPref, setter: setNotifPushPref },
+                          { label: 'Email Notifications', desc: 'Term report cards, fee receipts & official school newsletters.', state: notifEmailPref, setter: setNotifEmailPref },
+                          { label: 'SMS Notifications (Parent Phone)', desc: 'Emergency school closures & gate RFID check-in SMS to +234-803-333-4455.', state: notifSmsPref, setter: setNotifSmsPref },
+                          { label: 'Assignment Due Reminders', desc: 'Alerts 24 hours prior to homework & project deadlines.', state: notifAssignmentsPref, setter: setNotifAssignmentsPref },
+                          { label: 'New Published Grade Alerts', desc: 'Alerts when subject teachers release midterm or test scores.', state: notifGradesPref, setter: setNotifGradesPref },
+                          { label: 'Fee Payment Reminders', desc: 'Installment deadline reminders & receipt confirmations.', state: notifFeeRemindersPref, setter: setNotifFeeRemindersPref }
+                        ].map((item, idx) => (
+                          <div key={idx} className="p-3.5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex justify-between items-center gap-3">
+                            <div>
+                              <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-xs">{item.label}</h4>
+                              <p className="text-[11px] text-[hsl(var(--text-tertiary))]">{item.desc}</p>
+                            </div>
+                            <button
+                              onClick={() => item.setter(!item.state)}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all border ${
+                                item.state
+                                  ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                                  : 'bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-tertiary))] border-[hsl(var(--border))]'
+                              }`}
+                            >
+                              {item.state ? 'Enabled ✓' : 'Disabled'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 3. PASSWORD CHANGE FORM */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-lg">
+                      <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2 border-b border-[hsl(var(--border))] pb-3">
+                        🔑 Password &amp; Account Security
+                      </h3>
+
+                      <form
+                        onSubmit={e => {
+                          e.preventDefault();
+                          if (!currPassword) {
+                            setPasswordToast('Please enter your current password.');
+                            return;
+                          }
+                          if (newPassword.length < 8) {
+                            setPasswordToast('New password must be at least 8 characters long.');
+                            return;
+                          }
+                          if (newPassword !== confirmPassword) {
+                            setPasswordToast('New password and confirm password do not match.');
+                            return;
+                          }
+                          setPasswordToast('Password updated successfully! Next login will require new password.');
+                          setCurrPassword('');
+                          setNewPassword('');
+                          setConfirmPassword('');
+                          setTimeout(() => setPasswordToast(null), 4000);
+                        }}
+                        className="space-y-4"
+                      >
+                        {passwordToast && (
+                          <div className="p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 font-bold text-xs flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4" /> {passwordToast}
+                          </div>
+                        )}
+
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Current Password</label>
+                            <input
+                              type="password"
+                              value={currPassword}
+                              onChange={e => setCurrPassword(e.target.value)}
+                              placeholder="••••••••••••"
+                              className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-xs text-[hsl(var(--text-primary))]"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">New Password</label>
+                              <input
+                                type="password"
+                                value={newPassword}
+                                onChange={e => setNewPassword(e.target.value)}
+                                placeholder="••••••••••••"
+                                className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-xs text-[hsl(var(--text-primary))]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold mb-1">Confirm New Password</label>
+                              <input
+                                type="password"
+                                value={confirmPassword}
+                                onChange={e => setConfirmPassword(e.target.value)}
+                                placeholder="••••••••••••"
+                                className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2.5 text-xs text-[hsl(var(--text-primary))]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <button
+                            type="submit"
+                            className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-2"
+                          >
+                            <ShieldCheck className="w-4 h-4" /> Update Password
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+
+                  {/* RIGHT COLUMN: 2FA & ACTIVE SESSIONS */}
+                  <div className="space-y-6">
+                    {/* 4. TWO-FACTOR AUTHENTICATION (2FA) */}
+                    <div className="glass-card p-6 border border-indigo-500/20 bg-indigo-500/5 rounded-3xl space-y-4 shadow-lg">
+                      <div className="flex justify-between items-center border-b border-indigo-500/20 pb-3">
+                        <div>
+                          <h3 className="text-sm font-black text-[hsl(var(--text-primary))] flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4 text-indigo-400" /> Two-Factor Authentication (2FA)
+                          </h3>
+                          <p className="text-[11px] text-[hsl(var(--text-tertiary))] mt-0.5">Secure your portal account with TOTP Authenticator apps.</p>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold border ${
+                          is2FAEnabled
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                            : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                        }`}>
+                          {is2FAEnabled ? '2FA Active ✓' : '2FA Disabled'}
+                        </span>
+                      </div>
+
+                      <div className="space-y-3">
+                        <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">
+                          Require a 6-digit verification code from Google Authenticator or Authy when signing in.
+                        </p>
+
+                        <button
+                          onClick={() => setShow2FAModal(true)}
+                          className={`w-full py-2.5 rounded-xl font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-2 ${
+                            is2FAEnabled
+                              ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                              : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                          }`}
+                        >
+                          <Shield className="w-4 h-4" />
+                          {is2FAEnabled ? 'Disable Two-Factor Auth' : 'Setup 2FA Authenticator'}
+                        </button>
+                      </div>
+
+                      {/* 2FA MODAL / SETUP PREVIEW */}
+                      {show2FAModal && (
+                        <div className="p-4 rounded-2xl border border-indigo-500/30 bg-[hsl(var(--bg-secondary))] space-y-3 shadow-xl mt-3">
+                          <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-2">
+                            <span className="font-extrabold text-[hsl(var(--text-primary))] text-xs">Scan 2FA QR Code</span>
+                            <button onClick={() => setShow2FAModal(false)} className="text-[hsl(var(--text-tertiary))] hover:text-white text-xs">✕</button>
+                          </div>
+
+                          <div className="p-3 bg-white rounded-xl text-center space-y-1 text-slate-950">
+                            <div className="w-24 h-24 mx-auto bg-slate-950 text-white p-2 rounded-lg flex items-center justify-center font-mono text-[10px]">
+                              [ TOTP QR CODE ]
+                            </div>
+                            <span className="text-[9px] font-mono text-slate-600 block">SECRET: JBSWY3DPEHPK3PXP</span>
+                          </div>
+
+                          <input
+                            type="text"
+                            value={totpCodeInput}
+                            onChange={e => setTotpCodeInput(e.target.value)}
+                            placeholder="Enter 6-digit TOTP code (e.g. 849201)"
+                            className="w-full bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-xl p-2 text-xs text-center font-mono text-[hsl(var(--text-primary))]"
+                          />
+
+                          <button
+                            onClick={() => {
+                              setIs2FAEnabled(!is2FAEnabled);
+                              setShow2FAModal(false);
+                              setTotpCodeInput('');
+                              setSettingsToast(is2FAEnabled ? '2FA has been disabled.' : '2FA successfully paired & activated!');
+                              setTimeout(() => setSettingsToast(null), 3500);
+                            }}
+                            className="w-full py-2 rounded-xl bg-emerald-600 text-white font-extrabold text-xs shadow-md"
+                          >
+                            Verify &amp; Enable 2FA
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Backup Recovery Codes */}
+                      {is2FAEnabled && (
+                        <div className="pt-3 border-t border-indigo-500/20 space-y-2">
+                          <span className="text-[10px] font-mono text-indigo-300 uppercase font-bold">BACKUP RECOVERY CODES</span>
+                          <div className="grid grid-cols-2 gap-1.5 font-mono text-[10px] text-slate-300">
+                            {backupCodes.map((code, cIdx) => (
+                              <div key={cIdx} className="p-1.5 rounded bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-center">
+                                {code}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 5. ACTIVE LOGIN SESSIONS */}
+                    <div className="glass-card p-6 border border-[hsl(var(--border))] rounded-3xl space-y-4 shadow-lg">
+                      <div className="flex justify-between items-center border-b border-[hsl(var(--border))] pb-3">
+                        <h3 className="text-sm font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                          📱 Active Device Sessions
+                        </h3>
+                        <button
+                          onClick={() => {
+                            setActiveLoginSessions(prev => prev.filter(s => s.current));
+                            setSettingsToast('Signed out of all other device sessions!');
+                            setTimeout(() => setSettingsToast(null), 3500);
+                          }}
+                          className="text-[10px] font-bold text-rose-400 hover:underline"
+                        >
+                          Sign out others
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {activeLoginSessions.map(sess => (
+                          <div key={sess.id} className="p-3 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] space-y-1">
+                            <div className="flex justify-between items-center">
+                              <h4 className="font-extrabold text-[hsl(var(--text-primary))] text-xs">{sess.device}</h4>
+                              {sess.current && (
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[9px] border border-emerald-500/30">
+                                  Current Session
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-mono text-[hsl(var(--text-tertiary))]">
+                              IP: {sess.ip} &bull; {sess.location} &bull; {sess.time}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 6. LOCKED REGISTRY NOTICE */}
+                    <div className="glass-card p-6 border border-rose-500/20 bg-rose-500/5 rounded-3xl space-y-3 shadow-lg">
+                      <p className="font-bold text-rose-400 flex items-center gap-2 text-xs">
+                        <AlertTriangle className="w-4 h-4" /> Locked Registrar Records
+                      </p>
+                      <p className="text-[11px] text-[hsl(var(--text-tertiary))] leading-relaxed">
+                        Official student details (Full Legal Name, Date of Birth, Class Allocation, and Official Transcripts) are locked to maintain academic compliance. Contact the School Registrar to request corrections.
                       </p>
                     </div>
                   </div>

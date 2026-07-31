@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, GraduationCap, Award, Clock, BookOpenCheck, BookOpen,
-  Trophy, Heart, DollarSign, Brain, CheckSquare, Settings, Calendar
+  Trophy, Heart, DollarSign, Brain, CheckSquare, Settings, Calendar, MessageSquare, BookMarked, Landmark, Bus, FolderDown, Bell, TrendingUp, QrCode, HelpCircle, Briefcase
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './sidebar-provider';
@@ -20,16 +20,26 @@ export function StudentSidebar({ tenantSlug, tenantName, primaryColor }: { tenan
     { id: 'dashboard', label: 'Dashboard Overview', href: `${basePath}?tab=dashboard`, icon: LayoutDashboard },
     { id: 'attendance', label: 'Attendance Tracker', href: `${basePath}?tab=attendance`, icon: CalendarCheck },
     { id: 'profile', label: 'My Profile', href: `${basePath}?tab=profile`, icon: GraduationCap },
+    { id: 'id-card', label: 'Digital Student ID', href: `${basePath}?tab=id-card`, icon: QrCode },
+    { id: 'portfolio', label: 'Career Portfolio', href: `${basePath}?tab=portfolio`, icon: Briefcase },
     { id: 'academics', label: 'Academic & Grades', href: `${basePath}?tab=academics`, icon: Award },
+    { id: 'analytics', label: 'Performance Analytics', href: `${basePath}?tab=analytics`, icon: TrendingUp },
     { id: 'timetable', label: 'Timetable & Exams', href: `${basePath}?tab=timetable`, icon: Clock },
     { id: 'calendar', label: 'Academic Calendar', href: `${basePath}?tab=calendar`, icon: Calendar },
+    { id: 'messages', label: 'Internal Messages', href: `${basePath}?tab=messages`, icon: MessageSquare },
+    { id: 'notifications', label: 'Notification Center', href: `${basePath}?tab=notifications`, icon: Bell },
     { id: 'assignments', label: 'Assignments Desk', href: `${basePath}?tab=assignments`, icon: BookOpenCheck },
     { id: 'lms', label: 'LMS Courses', href: `${basePath}?tab=lms`, icon: BookOpen },
-    { id: 'activities', label: 'School Life & Library', href: `${basePath}?tab=activities`, icon: Trophy },
+    { id: 'library', label: 'Library & Reading Hub', href: `${basePath}?tab=library`, icon: BookMarked },
+    { id: 'activities', label: 'School Life', href: `${basePath}?tab=activities`, icon: Trophy },
     { id: 'welfare', label: 'Health & Conduct', href: `${basePath}?tab=welfare`, icon: Heart },
+    { id: 'hostel', label: 'Hostel Accommodation', href: `${basePath}?tab=hostel`, icon: Landmark },
+    { id: 'transport', label: 'School Transport', href: `${basePath}?tab=transport`, icon: Bus },
+    { id: 'documents', label: 'Official Documents', href: `${basePath}?tab=documents`, icon: FolderDown },
     { id: 'finance', label: 'Fees Ledger', href: `${basePath}?tab=finance`, icon: DollarSign },
     { id: 'ai-copilot', label: 'AI Study Copilot', href: `${basePath}?tab=ai-copilot`, icon: Brain },
     { id: 'productivity', label: 'Productivity Logs', href: `${basePath}?tab=productivity`, icon: CheckSquare },
+    { id: 'support', label: 'Help & Support Desk', href: `${basePath}?tab=support`, icon: HelpCircle },
     { id: 'settings', label: 'Settings', href: `${basePath}?tab=settings`, icon: Settings }
   ];
 

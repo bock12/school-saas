@@ -3,11 +3,11 @@ import { Suspense } from 'react';
 
 export default async function SuperAdminLoginPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm font-bold text-slate-400">Loading Platform Administration Console...</div>}>
       <TenantLoginForm
-        tenantSlug="admin"
-        tenantName="System Administration"
-        schoolId=""
+        tenantSlug="super-admin"
+        tenantName="Platform Super Administration"
+        schoolId="platform-master"
       />
     </Suspense>
   );

@@ -28,7 +28,42 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   const inputPhoneNorm = normalizePhone(cleanId);
   const adminSupabase = createAdminClient();
 
-  // 1. Resolve Tenant
+  // 1. Resolve Super Admin authentication
+  const isSuperAdminPortal = tenantSlug === 'admin' || tenantSlug === 'super-admin';
+  const supabase = await createClient();
+
+  let emailToAuth = cleanLower;
+  if (emailToAuth === 'superadmin' || emailToAuth === 'super_admin' || emailToAuth === 'admin') {
+    emailToAuth = 'superadmin@schoolsaas.com';
+  }
+
+  // If signing into super admin portal or if identifier belongs to superadmin
+  if (isSuperAdminPortal || emailToAuth.includes('superadmin')) {
+    const { data: saAuthData, error: saAuthErr } = await supabase.auth.signInWithPassword({
+      email: emailToAuth,
+      password,
+    });
+
+    if (saAuthErr) {
+      return { error: saAuthErr.message };
+    }
+
+    if (saAuthData?.user) {
+      const { data: saProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', saAuthData.user.id)
+        .single();
+
+      if (saProfile?.role === 'super_admin') {
+        redirect('/super-admin');
+      } else {
+        await supabase.auth.signOut();
+        return { error: 'Access denied. Account is not a Super Administrator.' };
+      }
+    }
+  }
+
   const { data: tenant } = await adminSupabase
     .from('tenants')
     .select('id, name, slug, parent_id')
@@ -252,7 +287,6 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
     }
   }
 
-  const supabase = await createClient();
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
     email: emailToSignIn,
     password,
@@ -312,6 +346,7 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   }
 
   let rolePath = `/admin`;
+  if (profile.role === 'super_admin') rolePath = `/super-admin`;
   if (profile.role === 'teacher') rolePath = `/teacher`;
   if (profile.role === 'student') rolePath = `/student`;
   if (profile.role === 'parent') rolePath = `/parent`;
