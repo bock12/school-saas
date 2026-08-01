@@ -103,8 +103,8 @@ export default function HomePage() {
             <a href="#directory" className="px-4 py-2 text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] font-semibold transition-colors">Browse Schools</a>
             <a href="#features" className="px-4 py-2 text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] font-semibold transition-colors">Features</a>
             <a href="#pricing" className="px-4 py-2 text-sm text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] font-semibold transition-colors">Pricing</a>
-            <Link href={adminUrl} className="ml-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-bold hover:opacity-90 transition-all shadow-md shadow-[hsl(var(--accent)/0.2)] flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5" /> Admin Portal
+            <Link href="/login" className="ml-2 px-5 py-2 rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-bold hover:opacity-90 transition-all shadow-md shadow-[hsl(var(--accent)/0.2)] flex items-center gap-1.5">
+              <LogIn className="w-3.5 h-3.5" /> Login
             </Link>
           </div>
 
@@ -122,8 +122,8 @@ export default function HomePage() {
             <a href="#directory" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-sm text-[hsl(var(--text-secondary))] font-semibold">Browse Schools</a>
             <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-sm text-[hsl(var(--text-secondary))] font-semibold">Features</a>
             <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-sm text-[hsl(var(--text-secondary))] font-semibold">Pricing</a>
-            <Link href={adminUrl} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-bold">
-              <Shield className="w-4 h-4" /> Admin Portal
+            <Link href="/login" className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-bold">
+              <LogIn className="w-4 h-4" /> Login to Portal
             </Link>
           </div>
         )}
@@ -157,13 +157,13 @@ export default function HomePage() {
               href="#directory"
               className="flex items-center justify-center gap-2 w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-bold hover:opacity-90 transition-all shadow-xl shadow-[hsl(var(--accent)/0.25)] text-sm sm:text-base"
             >
-              <School className="w-4 h-4" /> Find Your School <ArrowRight className="w-4 h-4" />
+              <School className="w-4 h-4" /> Browse Schools <ArrowRight className="w-4 h-4" />
             </a>
             <Link
-              href={adminUrl}
+              href="/login"
               className="flex items-center justify-center gap-2 w-full sm:w-auto px-8 py-3.5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--text-primary))] font-bold hover:bg-[hsl(var(--bg-tertiary))] transition-all text-sm sm:text-base"
             >
-              <Shield className="w-4 h-4 text-[hsl(var(--accent))]" /> Admin Login
+              <LogIn className="w-4 h-4 text-[hsl(var(--accent))]" /> Login to Portal
             </Link>
           </div>
         </div>
