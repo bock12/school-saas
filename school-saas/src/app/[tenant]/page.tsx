@@ -7,26 +7,35 @@ import {
   Award, Users, ChevronRight, Shield, Sparkles, Star
 } from 'lucide-react';
 
+
+
 export default async function PublicTenantLanding({ params }: { params: Promise<{ tenant: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   const { tenant: tenantSlug } = await params;
 
-  // Fetch tenant via service role (anon can't read tenants by default)
-  const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
-  const supabaseAdmin = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  // Fetch tenant via direct REST API — avoids any SDK key-format or module-cache issues
+  const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const SUPA_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  const tenantRes = await fetch(
+    `${SUPA_URL}/rest/v1/tenants?slug=eq.${encodeURIComponent(tenantSlug)}&select=id,name,logo_url,domain,type,contact_email,address,city,country,primary_color&limit=1`,
+    {
+      headers: {
+        apikey: SUPA_KEY,
+        Authorization: `Bearer ${SUPA_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    }
   );
 
-  const { data: tenant } = await supabaseAdmin
-    .from('tenants')
-    .select('id, name, logo_url, domain, type, contact_email, address, city, country, primary_color, phone')
-    .eq('slug', tenantSlug)
-    .single();
+  const tenantRows: any[] = tenantRes.ok ? await tenantRes.json() : [];
+  const tenant = tenantRows[0] ?? null;
 
   if (!tenant) return notFound();
+
 
   const isOrg = tenant.type === 'organization';
   const accentColor = tenant.primary_color || '#6366f1';
@@ -45,13 +54,16 @@ export default async function PublicTenantLanding({ params }: { params: Promise<
   }> = [];
 
   if (isOrg) {
-    const { data: schools } = await supabaseAdmin
-      .from('tenants')
-      .select('id, name, slug, logo_url, address, city, country, contact_email, primary_color')
-      .eq('parent_id', tenant.id)
-      .order('name', { ascending: true });
-    childSchools = schools || [];
+    const schoolsRes = await fetch(
+      `${SUPA_URL}/rest/v1/tenants?parent_id=eq.${tenant.id}&select=id,name,slug,logo_url,address,city,country,contact_email,primary_color&order=name.asc`,
+      {
+        headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
+        cache: 'no-store',
+      }
+    );
+    childSchools = schoolsRes.ok ? await schoolsRes.json() : [];
   }
+
 
   // Build school URL helper (server-side best guess)
   const getSchoolUrl = (slug: string) => `/${slug}`;
@@ -372,10 +384,10 @@ export default async function PublicTenantLanding({ params }: { params: Promise<
                       <a href={`mailto:${tenant.contact_email}`} className="hover:underline">{tenant.contact_email}</a>
                     </div>
                   )}
-                  {(tenant as any).phone && (
+                  {tenant.phone && (
                     <div className="flex items-center gap-2">
                       <Phone className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" />
-                      <span>{(tenant as any).phone}</span>
+                      <span>{tenant.phone}</span>
                     </div>
                   )}
                   {(tenant.city || tenant.country) && (

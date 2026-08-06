@@ -1,23 +1,29 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
 // Public API — returns all active/publicly visible tenants for the landing page directory
 export async function GET() {
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const SUPA_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+    const res = await fetch(
+      `${SUPA_URL}/rest/v1/tenants?select=id,name,slug,type,logo_url,city,country,contact_email,primary_color&order=name.asc`,
+      {
+        headers: {
+          apikey: SUPA_KEY,
+          Authorization: `Bearer ${SUPA_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      }
     );
 
-    const { data: tenants, error } = await supabase
-      .from('tenants')
-      .select('id, name, slug, type, logo_url, city, country, contact_email, primary_color')
-      .order('name', { ascending: true });
-
-    if (error) {
-      console.error('Public tenants fetch error:', error);
+    if (!res.ok) {
+      console.error('Public tenants fetch error:', await res.text());
       return NextResponse.json({ tenants: [] }, { status: 200 });
     }
+
+    const tenants = await res.json();
 
     return NextResponse.json({ tenants: tenants || [] }, {
       status: 200,

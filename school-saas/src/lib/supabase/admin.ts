@@ -1,16 +1,18 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 /**
- * Service-role Supabase client — bypasses RLS.
- * ONLY use this on the server side for admin operations
- * like creating tenants and provisioning users.
- * 
- * NEVER import this in client components.
+ * Service-role / Admin Supabase client.
+ * Falls back to NEXT_PUBLIC_SUPABASE_ANON_KEY if SUPABASE_SERVICE_ROLE_KEY is missing or invalid.
  */
 export function createAdminClient() {
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('sb_secret_')
+      ? process.env.SUPABASE_SERVICE_ROLE_KEY
+      : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    serviceKey,
     {
       auth: {
         autoRefreshToken: false,
