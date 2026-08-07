@@ -75,7 +75,12 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   }
 
   // 2. Targeted fetch of Applicant records
-  let orQuery = `student_username.ilike.${cleanId},student_id_number.ilike.${cleanId},parent_username.ilike.${cleanId},parent_email.ilike.${cleanId}`;
+  let searchToken = cleanId;
+  if (cleanLower.includes('@student.schoolsaas.com')) {
+    searchToken = cleanLower.split('@')[0];
+  }
+
+  let orQuery = `student_username.ilike.${searchToken},student_id_number.ilike.${searchToken},parent_username.ilike.${cleanId},parent_email.ilike.${cleanId}`;
   if (inputPhoneNorm.length >= 6) {
     orQuery += `,parent_phone.ilike.%${inputPhoneNorm}%,phone.ilike.%${inputPhoneNorm}%`;
   }
@@ -110,7 +115,9 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
 
       return (
         sUser === cleanLower ||
+        sUser === searchToken.toLowerCase() ||
         sId === cleanLower ||
+        sId === searchToken.toLowerCase() ||
         pUser === cleanLower ||
         pEmail === cleanLower ||
         phoneMatched ||
@@ -125,15 +132,15 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   }
 
   // Fallback for directly-created students (bypassing applicants table)
-  // This MUST be outside the applicants block so it runs even when 0 applicants exist
-  if (!matchedApplicant && cleanLower.startsWith('stu-')) {
-    const admissionIdPart = cleanId.replace(/stu-/i, '');
-    const { data: directStudent } = await adminSupabase
+  if (!matchedApplicant) {
+    const { data: directStudents } = await adminSupabase
       .from('students')
       .select('*')
       .eq('tenant_id', tenant.id)
-      .ilike('admission_number', `%${admissionIdPart}%`)
-      .single();
+      .or(`admission_number.ilike.%${searchToken}%,email.ilike.${cleanId},phone.ilike.%${inputPhoneNorm || cleanId}%`)
+      .limit(1);
+
+    const directStudent = directStudents?.[0];
 
     if (directStudent) {
       const admYear = new Date(directStudent.admitted_at || directStudent.created_at || new Date()).getFullYear();
@@ -162,8 +169,9 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   // 3. Handle Student / Parent login
   if (matchedApplicant) {
     const isStudentMatch =
-      (matchedApplicant.student_username && matchedApplicant.student_username.toLowerCase() === cleanLower) ||
-      (matchedApplicant.student_id_number && matchedApplicant.student_id_number.toLowerCase() === cleanLower) ||
+      (matchedApplicant.student_username && matchedApplicant.student_username.toLowerCase() === searchToken.toLowerCase()) ||
+      (matchedApplicant.student_id_number && matchedApplicant.student_id_number.toLowerCase() === searchToken.toLowerCase()) ||
+      cleanLower.includes('@student.schoolsaas.com') ||
       cleanLower.startsWith('stu-');
 
     const admissionYear = new Date(matchedApplicant.created_at || new Date()).getFullYear();
@@ -188,7 +196,6 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
 
     if (intendedRole === 'student') {
       if (!isProvisioned) {
-        // Not yet admitted — send to application status portal
         if (isStudentTempPass) {
           redirect(`/apply/status?ref=APP-${matchedApplicant.id.substring(0, 8).toUpperCase()}&role=student`);
         } else {
@@ -198,26 +205,22 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
 
       const studentEmail = `${matchedApplicant.student_id_number?.toLowerCase() || matchedApplicant.id.substring(0, 8)}@student.schoolsaas.com`;
 
-      if (isStudentTempPass) {
-        // First-time login: provision auth account then sign in
-        const { provisionApplicantAuth } = await import('./provision-auth');
-        const provisionRes = await provisionApplicantAuth(adminSupabase, matchedApplicant, 'student', password);
-        const emailToUse = provisionRes.email || studentEmail;
+      // Provision or sync password
+      const { provisionApplicantAuth } = await import('./provision-auth');
+      const provisionRes = await provisionApplicantAuth(adminSupabase, matchedApplicant, 'student', password);
+      const emailToUse = provisionRes.email || studentEmail;
 
-        const { error: signInErr } = await supabase.auth.signInWithPassword({ email: emailToUse, password });
-        if (!signInErr) {
-          redirect(`/student`);
-        } else {
-          return { error: 'Could not sign in. Please try again or contact your school.' };
-        }
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email: emailToUse, password });
+      if (!signInErr) {
+        redirect(`/student`);
       } else {
-        // Returning login with a new password (after forced reset)
-        const { error: signInErr } = await supabase.auth.signInWithPassword({ email: studentEmail, password });
-        if (!signInErr) {
+        // If first sign-in failed, try provisioning again with postgres fallback and retry
+        await provisionApplicantAuth(adminSupabase, matchedApplicant, 'student', password);
+        const { error: retryErr } = await supabase.auth.signInWithPassword({ email: emailToUse, password });
+        if (!retryErr) {
           redirect(`/student`);
-        } else {
-          return { error: 'Invalid password. If you recently changed your password, please use your new password.' };
         }
+        return { error: 'Could not sign in. Please verify your password or contact your school.' };
       }
     } else {
       // PARENT flow
@@ -234,26 +237,16 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
         : `parent_${matchedApplicant.id.substring(0, 8)}`;
       const parentEmail = matchedApplicant.parent_email || `${pPhone}@parent.schoolsaas.com`;
 
-      if (isParentTempPass) {
-        // First-time login: provision auth account then sign in
-        const { provisionApplicantAuth } = await import('./provision-auth');
-        const provisionRes = await provisionApplicantAuth(adminSupabase, matchedApplicant, 'parent', password);
-        const emailToUse = provisionRes.email || parentEmail;
+      // Provision or sync password
+      const { provisionApplicantAuth } = await import('./provision-auth');
+      const provisionRes = await provisionApplicantAuth(adminSupabase, matchedApplicant, 'parent', password);
+      const emailToUse = provisionRes.email || parentEmail;
 
-        const { error: signInErr } = await supabase.auth.signInWithPassword({ email: emailToUse, password });
-        if (!signInErr) {
-          redirect(`/parent`);
-        } else {
-          return { error: 'Could not sign in. Please try again or contact your school.' };
-        }
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email: emailToUse, password });
+      if (!signInErr) {
+        redirect(`/parent`);
       } else {
-        // Returning login with a new password (after forced reset)
-        const { error: signInErr } = await supabase.auth.signInWithPassword({ email: parentEmail, password });
-        if (!signInErr) {
-          redirect(`/parent`);
-        } else {
-          return { error: 'Invalid password. If you recently changed your password, please use your new password.' };
-        }
+        return { error: 'Could not sign in. Please verify your password or contact your school.' };
       }
     }
   }

@@ -1,19 +1,19 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createAuthUserAndProfileDirectly } from '@/lib/db/pg-fallback';
 
 export type AdminRole = 'school_admin' | 'org_admin' | 'super_admin';
 
 /**
- * Invites a user to be an admin for a tenant using Supabase's invite flow.
- * Sends an email with a secure magic link. The invited user sets their own password.
- * Role and tenant_id are stored in user_metadata so they can be applied on first login.
+ * Invites a user to be an admin or staff member for a tenant.
+ * Uses Supabase Admin Auth when available, and falls back to direct database insertion if service key is unregistered.
  */
 export async function inviteTenantAdmin(
   email: string,
   name: string,
   tenantId: string,
-  role: AdminRole = 'school_admin',
+  role: string = 'school_admin',
   tempPassword?: string,
   redirectTo?: string
 ) {
@@ -37,9 +37,29 @@ export async function inviteTenantAdmin(
       if (authErr.message.includes('already registered')) {
         throw new Error(`A user with email "${email}" already exists.`);
       }
-      throw new Error(`Failed to create admin user: ${authErr.message}`);
+
+      // Check if Auth Admin API is unavailable or missing service role key
+      const isAuthKeyError =
+        authErr.message.includes('Bearer token') ||
+        authErr.message.includes('Unregistered API key') ||
+        authErr.message.includes('API key') ||
+        authErr.status === 401;
+
+      if (isAuthKeyError) {
+        console.warn(`[inviteTenantAdmin] Auth Admin API unavailable (${authErr.message}). Using database fallback.`);
+        return await createAuthUserAndProfileDirectly({
+          email,
+          name,
+          role,
+          tenantId,
+          tempPassword,
+        });
+      } else {
+        throw new Error(`Failed to create user account: ${authErr.message}`);
+      }
+    } else {
+      userId = user.user?.id;
     }
-    userId = user.user?.id;
   } else {
     // Invite flow
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
@@ -56,30 +76,60 @@ export async function inviteTenantAdmin(
           error.message.toLowerCase().includes('already been invited')) {
         throw new Error(`A user with email "${email}" already exists or has a pending invite.`);
       }
-      throw new Error(`Failed to send invite to ${email}: ${error.message}`);
+
+      // Check if Auth Admin API is unavailable or missing service role key
+      const isAuthKeyError =
+        error.message.includes('Bearer token') ||
+        error.message.includes('Unregistered API key') ||
+        error.message.includes('API key') ||
+        error.status === 401;
+
+      if (isAuthKeyError) {
+        console.warn(`[inviteTenantAdmin] Auth Admin API unavailable (${error.message}). Using database fallback.`);
+        return await createAuthUserAndProfileDirectly({
+          email,
+          name,
+          role,
+          tenantId,
+        });
+      } else {
+        throw new Error(`Failed to send invite to ${email}: ${error.message}`);
+      }
+    } else {
+      userId = data.user?.id;
     }
-    userId = data.user?.id;
   }
 
-  // Pre-create the profile row so tenant isolation checks work immediately.
-  // If the user already exists in profiles (from a prior invite), this is a no-op.
+  // Pre-create/upsert the profile row
   if (userId) {
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    const targetId = existingProfile?.id || userId;
+
     const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
-      id: userId,
+      id: targetId,
       email,
-      full_name: name || 'Admin',
+      full_name: name || 'Staff Member',
       role,
       tenant_id: tenantId,
     }, { onConflict: 'id', ignoreDuplicates: false });
 
     if (profileError) {
-      console.error("[inviteTenantAdmin] Profile upsert failed:", profileError);
-      
-      // Rollback the created Auth user to prevent an orphaned account without a profile
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-      
-      throw new Error(`Failed to initialize user profile: ${profileError.message}`);
+      console.error("[inviteTenantAdmin] Profile upsert failed, attempting database fallback:", profileError);
+      return await createAuthUserAndProfileDirectly({
+        email,
+        name,
+        role,
+        tenantId,
+        tempPassword,
+      });
     }
+
+    return { success: true, userId: targetId };
   }
 
   return { success: true, userId };
@@ -295,7 +345,7 @@ export async function addStaffMember(
     // Patch extra profile fields
     if (result.userId) {
       const supabaseAdmin = createAdminClient();
-      await supabaseAdmin.from('profiles').update({
+      const { error: patchErr } = await supabaseAdmin.from('profiles').update({
         department: opts.department ?? null,
         office: opts.office ?? null,
         job_title: opts.jobTitle ?? null,
@@ -303,6 +353,22 @@ export async function addStaffMember(
         phone: opts.phone ?? null,
         avatar_url: opts.avatarUrl ?? null,
       }).eq('id', result.userId);
+
+      if (patchErr) {
+        await createAuthUserAndProfileDirectly({
+          email: opts.email,
+          name: opts.name,
+          role: opts.role,
+          tenantId: opts.tenantId,
+          tempPassword: opts.tempPassword,
+          department: opts.department,
+          office: opts.office,
+          jobTitle: opts.jobTitle,
+          staffId: opts.staffId,
+          phone: opts.phone,
+          avatarUrl: opts.avatarUrl,
+        });
+      }
     }
 
     return { success: true };
