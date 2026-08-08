@@ -29,6 +29,7 @@ import {
   CalendarTab,
   NotificationsTab,
   SettingsTab,
+  CommunicationsTab,
 } from './tabs';
 
 export type OfficerData = {
@@ -44,6 +45,7 @@ export type OfficerData = {
 
 const TAB_MAP: Record<string, React.ComponentType<{ officer: OfficerData }>> = {
   dashboard: ExamDashboardTab,
+  communications: CommunicationsTab,
   sessions: SessionsTab,
   'grading-systems': GradingSystemsTab,
   'question-bank': QuestionBankTab,

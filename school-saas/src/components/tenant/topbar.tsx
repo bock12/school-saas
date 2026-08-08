@@ -118,15 +118,17 @@ export function TenantTopbar({
             {showNotifications && (
               <div className="absolute right-0 top-12 w-80 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] shadow-lg animate-fade-in-scale overflow-hidden z-50">
                 <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center justify-between">
-                  <p className="text-sm font-semibold text-[hsl(var(--text-primary))]">Notifications</p>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[hsl(var(--accent))] text-white font-bold">
-                    {demoNotifications.length}
+                  <p className="text-sm font-semibold text-[hsl(var(--text-primary))]">In-App Notifications</p>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-600 text-white font-bold">
+                    {demoNotifications.length} New
                   </span>
                 </div>
-                <div className="divide-y divide-[hsl(var(--border)/0.5)]">
+                <div className="divide-y divide-[hsl(var(--border)/0.5)] max-h-80 overflow-y-auto">
                   {demoNotifications.map((n) => (
-                    <div
+                    <Link
                       key={n.id}
+                      href={`/${tenantSlug}/exam-office?tab=notifications`}
+                      onClick={() => setShowNotifications(false)}
                       className="flex items-start gap-3 px-4 py-3 hover:bg-[hsl(var(--bg-tertiary)/0.5)] transition-colors cursor-pointer"
                     >
                       <div
@@ -139,16 +141,20 @@ export function TenantTopbar({
                         }`}
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-[hsl(var(--text-primary))] leading-relaxed">{n.title}</p>
+                        <p className="text-xs font-semibold text-[hsl(var(--text-primary))] leading-relaxed">{n.title}</p>
                         <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-0.5">{n.time}</p>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
-                <div className="px-4 py-2.5 border-t border-[hsl(var(--border))]">
-                  <button className="text-xs text-[hsl(var(--accent))] hover:underline w-full text-center">
-                    View all notifications
-                  </button>
+                <div className="p-2 border-t border-[hsl(var(--border))] text-center bg-[hsl(var(--bg-tertiary)/0.4)]">
+                  <Link
+                    href={`/${tenantSlug}/exam-office?tab=communications`}
+                    onClick={() => setShowNotifications(false)}
+                    className="text-xs font-bold text-violet-400 hover:underline"
+                  >
+                    Open Exam Communication Center →
+                  </Link>
                 </div>
               </div>
             )}

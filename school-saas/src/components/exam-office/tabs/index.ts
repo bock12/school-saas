@@ -25,3 +25,4 @@ export { AuditTab } from './AuditTab';
 export { CalendarTab } from './CalendarTab';
 export { NotificationsTab } from './NotificationsTab';
 export { SettingsTab } from './SettingsTab';
+export { CommunicationsTab } from './CommunicationsTab';
