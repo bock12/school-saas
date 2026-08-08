@@ -77,6 +77,7 @@ function StatCard({
 
 export function DashboardTab({ teacher }: { teacher: TeacherData }) {
   const router = useRouter();
+  const [roleMode, setRoleMode] = useState<'all' | 'subject' | 'form_master' | 'hod'>('all');
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -106,7 +107,7 @@ export function DashboardTab({ teacher }: { teacher: TeacherData }) {
                 {teacher.role.replace('_', ' ')}
               </span>
               {teacher.department && (
-                <span className="text-xs text-[hsl(var(--text-tertiary))]">• {teacher.department}</span>
+                <span className="text-xs text-[hsl(var(--text-tertiary))]">• {teacher.department} Department</span>
               )}
               <span className="text-xs text-[hsl(var(--text-tertiary))]">• {teacher.tenantName}</span>
             </div>
@@ -128,6 +129,59 @@ export function DashboardTab({ teacher }: { teacher: TeacherData }) {
         <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full opacity-10" style={{ background: teacher.primaryColor }} />
         <div className="absolute -bottom-6 -left-6 w-24 h-24 rounded-full opacity-10" style={{ background: teacher.primaryColor }} />
       </div>
+
+      {/* ── Role Focus Mode Switcher ────────────────────────────── */}
+      <div className="flex items-center justify-between gap-3 p-2 rounded-2xl glass-card border border-[hsl(var(--border))]">
+        <div className="flex items-center gap-2 px-2">
+          <Award className="w-4 h-4 text-[hsl(var(--accent))]" />
+          <span className="text-xs font-bold text-[hsl(var(--text-primary))]">Workspace Focus:</span>
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 scrollbar-none">
+          {[
+            { id: 'all', label: 'All Roles (Unified)' },
+            { id: 'subject', label: '📖 Subject Teacher View' },
+            { id: 'form_master', label: '🏫 Class Master (Form) View' },
+            { id: 'hod', label: '👑 HOD (Dept. Head) View' },
+          ].map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setRoleMode(m.id as any)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                roleMode === m.id
+                  ? 'bg-[hsl(var(--accent))] text-white shadow-sm'
+                  : 'text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))]'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Role-Specific Focus Notice ────────────────────────── */}
+      {roleMode === 'form_master' && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <span><strong>Class Master View Active:</strong> Focused on Form Class SS2A Attendance, Conduct & Broadsheet Reports.</span>
+          </div>
+          <button onClick={() => navigate('attendance')} className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold transition-colors">
+            Take Form Attendance →
+          </button>
+        </div>
+      )}
+
+      {roleMode === 'hod' && (
+        <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Award className="w-4 h-4 text-purple-400 flex-shrink-0" />
+            <span><strong>Head of Department (HOD) View Active:</strong> Focused on Department Lesson Plan Approvals & Curriculum Coverage.</span>
+          </div>
+          <button onClick={() => navigate('lesson-plans')} className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 font-bold transition-colors">
+            Review 4 Pending Plans →
+          </button>
+        </div>
+      )}
 
       {/* ── Quick Stats ────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">

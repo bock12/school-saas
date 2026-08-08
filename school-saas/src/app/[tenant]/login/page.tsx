@@ -17,7 +17,7 @@ export default async function TenantLoginPage({
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('tenant_id')
+      .select('tenant_id, requires_password_change')
       .eq('id', user.id)
       .single();
 
@@ -27,7 +27,7 @@ export default async function TenantLoginPage({
       .eq('slug', tenant)
       .single();
 
-    if (profile && school && profile.tenant_id === school.id) {
+    if (profile && school && profile.tenant_id === school.id && !profile.requires_password_change) {
       redirect('/dashboard');
     }
   }

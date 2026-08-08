@@ -43,7 +43,8 @@ export function SetPasswordForm({ tenantSlug, tenantName }: SetPasswordFormProps
     setError(null);
 
     const { error: updateError, data: authData } = await supabase.auth.updateUser({
-      password
+      password,
+      data: { requires_password_change: false }
     });
 
     if (updateError) {
@@ -52,8 +53,17 @@ export function SetPasswordForm({ tenantSlug, tenantName }: SetPasswordFormProps
       return;
     }
 
+    let targetPath = '/admin';
     if (authData.user) {
+      const { data: prof } = await supabase.from('profiles').select('role').eq('id', authData.user.id).single();
       await supabase.from('profiles').update({ requires_password_change: false }).eq('id', authData.user.id);
+
+      if (prof?.role === 'super_admin') targetPath = '/super-admin';
+      else if (prof?.role === 'teacher') targetPath = '/teacher';
+      else if (prof?.role === 'student') targetPath = '/student';
+      else if (prof?.role === 'parent') targetPath = '/parent';
+      else targetPath = '/admin';
+
       const userIdent = authData.user.email || authData.user.phone || '';
       if (userIdent) {
         await supabase.from('applicants').update({ student_password_changed: true }).or(`student_username.eq.${userIdent},student_id_number.eq.${userIdent},email.eq.${userIdent}`);
@@ -63,9 +73,8 @@ export function SetPasswordForm({ tenantSlug, tenantName }: SetPasswordFormProps
 
     setSuccess(true);
     setTimeout(() => {
-      // Root-relative redirect — subdomain routing provides tenant context
-      router.replace('/dashboard');
-    }, 2000);
+      router.replace(targetPath);
+    }, 1800);
   };
 
   return (

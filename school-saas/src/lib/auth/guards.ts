@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-export type TenantRole = 'super_admin' | 'org_admin' | 'school_admin' | 'teacher' | 'student' | 'parent';
+export type TenantRole = 'super_admin' | 'org_admin' | 'school_admin' | 'teacher' | 'student' | 'parent' | 'exam_officer';
 
 // ---------------------------------------------------------------------------
 // Super Admin Guard
@@ -160,4 +160,12 @@ export async function requireStudent(tenantSlug: string) {
  */
 export async function requireParent(tenantSlug: string) {
   return requireTenantRole(tenantSlug, ['parent']);
+}
+
+/**
+ * Restricts access to exam officers and school admins (and super admins/org admins).
+ * Exam officers manage the full examination lifecycle.
+ */
+export async function requireExamOfficer(tenantSlug: string) {
+  return requireTenantRole(tenantSlug, ['exam_officer', 'school_admin']);
 }

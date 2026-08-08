@@ -75,10 +75,14 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
   if (user && checkPath === '/login') {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    // If the account does not require a password change, redirect to dashboard.
+    // If it DOES require password change, let them view /login so they can sign in or switch accounts.
+    if (!user.user_metadata?.requires_password_change) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
   }
 
-  if (user && user.user_metadata?.requires_password_change && checkPath !== '/set-password') {
+  if (user && user.user_metadata?.requires_password_change && checkPath !== '/set-password' && checkPath !== '/login') {
     return NextResponse.redirect(new URL('/set-password', request.url));
   }
 

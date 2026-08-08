@@ -265,7 +265,7 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
 
   const { data: staffProfiles } = await adminSupabase
     .from('profiles')
-    .select('id, email, role, tenant_id, full_name')
+    .select('id, email, role, tenant_id, full_name, requires_password_change')
     .or(staffOrQuery)
     .limit(5);
 
@@ -280,12 +280,49 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
     }
   }
 
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+  let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
     email: emailToSignIn,
     password,
   });
 
-  if (authError || !authData.user) {
+  if ((authError || !authData?.user) && matchedStaffProfile) {
+    // If sign in fails for a staff member (e.g. initial temp password setup or fallback hash sync)
+    try {
+      const { Pool } = await import('pg');
+      if (process.env.DATABASE_URL) {
+        const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+        await pool.query(
+          `UPDATE auth.users
+           SET encrypted_password = crypt($1, gen_salt('bf')),
+               confirmation_token = '',
+               recovery_token = '',
+               email_change_token_new = '',
+               email_change = '',
+               email_change_token_current = '',
+               reauthentication_token = '',
+               phone_change = '',
+               phone_change_token = '',
+               email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+               updated_at = NOW()
+           WHERE email = $2`,
+          [password, emailToSignIn]
+        );
+        await pool.end();
+
+        // Retry sign in after password sync
+        const retryRes = await supabase.auth.signInWithPassword({
+          email: emailToSignIn,
+          password,
+        });
+        authData = retryRes.data;
+        authError = retryRes.error;
+      }
+    } catch (e) {
+      console.error("[loginToTenant] Staff password sync error:", e);
+    }
+  }
+
+  if (authError || !authData?.user) {
     if (matchedStaffProfile) {
       return { error: 'Invalid password. If you received an invite email, please check your inbox or set your password.' };
     }
@@ -295,13 +332,18 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   // Verify profile belongs to this tenant or organization
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, tenant_id')
+    .select('role, tenant_id, requires_password_change')
     .eq('id', authData.user.id)
     .single();
 
   if (!profile) {
     await supabase.auth.signOut();
     return { error: 'User profile not found. Please contact administrator.' };
+  }
+
+  // Force password change pipeline for first-time logins
+  if (profile.requires_password_change) {
+    redirect(`/set-password`);
   }
 
   if (profile.role !== 'super_admin' && profile.tenant_id !== tenant.id) {

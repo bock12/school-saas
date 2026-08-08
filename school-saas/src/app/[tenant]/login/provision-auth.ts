@@ -144,49 +144,57 @@ export async function provisionApplicantAuth(
   if (authData?.user) {
     authUserId = authData.user.id;
 
-    await adminSupabase.from('profiles').insert({
-      id: authUserId,
-      tenant_id: applicant.tenant_id,
-      role: role,
-      full_name: fullName,
-      email: email,
-      phone: role === 'student' ? applicant.phone : applicant.parent_phone,
-      requires_password_change: true
-    }).catch(() => {});
+    try {
+      await adminSupabase.from('profiles').insert({
+        id: authUserId,
+        tenant_id: applicant.tenant_id,
+        role: role,
+        full_name: fullName,
+        email: email,
+        phone: role === 'student' ? applicant.phone : applicant.parent_phone,
+        requires_password_change: true
+      });
+    } catch (_) {}
 
     if (role === 'student') {
       if (applicant.is_direct_student) {
-        await adminSupabase.from('students')
-          .update({ profile_id: authUserId, email })
-          .eq('id', applicant.id).catch(() => {});
+        try {
+          await adminSupabase.from('students')
+            .update({ profile_id: authUserId, email })
+            .eq('id', applicant.id);
+        } catch (_) {}
       } else {
-        await adminSupabase.from('students').insert({
-          tenant_id: applicant.tenant_id,
-          profile_id: authUserId,
-          admission_number: applicant.student_id_number,
-          first_name: applicant.first_name || 'Student',
-          last_name: applicant.last_name || 'Name',
-          date_of_birth: applicant.dob,
-          email: email,
-          phone: applicant.phone,
-          address: applicant.address,
-          guardian_name: applicant.parent_name,
-          guardian_phone: applicant.parent_phone,
-          guardian_email: applicant.parent_email,
-          is_active: true
-        }).catch(() => {});
+        try {
+          await adminSupabase.from('students').insert({
+            tenant_id: applicant.tenant_id,
+            profile_id: authUserId,
+            admission_number: applicant.student_id_number,
+            first_name: applicant.first_name || 'Student',
+            last_name: applicant.last_name || 'Name',
+            date_of_birth: applicant.dob,
+            email: email,
+            phone: applicant.phone,
+            address: applicant.address,
+            guardian_name: applicant.parent_name,
+            guardian_phone: applicant.parent_phone,
+            guardian_email: applicant.parent_email,
+            is_active: true
+          });
+        } catch (_) {}
       }
     } else {
-      await adminSupabase.from('parents').insert({
-        tenant_id: applicant.tenant_id,
-        profile_id: authUserId,
-        first_name: fullName.split(' ')[0] || 'Parent',
-        last_name: fullName.split(' ').slice(1).join(' ') || 'Guardian',
-        email: email,
-        phone: applicant.parent_phone,
-        address: applicant.address,
-        is_active: true
-      }).catch(() => {});
+      try {
+        await adminSupabase.from('parents').insert({
+          tenant_id: applicant.tenant_id,
+          profile_id: authUserId,
+          first_name: fullName.split(' ')[0] || 'Parent',
+          last_name: fullName.split(' ').slice(1).join(' ') || 'Guardian',
+          email: email,
+          phone: applicant.parent_phone,
+          address: applicant.address,
+          is_active: true
+        });
+      } catch (_) {}
     }
   }
 

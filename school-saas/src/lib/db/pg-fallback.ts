@@ -43,22 +43,64 @@ export async function createAuthUserAndProfileDirectly(opts: {
 
   if (existingRes.rows.length > 0) {
     targetId = existingRes.rows[0].id;
+    if (opts.tempPassword) {
+      await dbPool.query(
+        `UPDATE auth.users
+         SET encrypted_password = crypt($1, gen_salt('bf')),
+             confirmation_token = '',
+             recovery_token = '',
+             email_change_token_new = '',
+             email_change = '',
+             email_change_token_current = '',
+             reauthentication_token = '',
+             phone_change = '',
+             phone_change_token = '',
+             email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+             updated_at = NOW()
+         WHERE id = $2`,
+        [opts.tempPassword, targetId]
+      );
+    }
   } else {
     // Insert into auth.users (Supabase Auth schema)
-    const dummyPasswordHash = '$2a$10$abcdefghijklmnopqrstuvwxyz012345';
-    await dbPool.query(
-      `INSERT INTO auth.users (
-        id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
-        raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-      ) VALUES (
-        $1, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', $2,
-        $3, NOW(),
-        '{"provider":"email","providers":["email"]}'::jsonb,
-        jsonb_build_object('full_name', $4::text, 'role', $5::text, 'tenant_id', $6::text, 'requires_password_change', true),
-        NOW(), NOW()
-      ) ON CONFLICT (id) DO NOTHING`,
-      [targetId, opts.email, dummyPasswordHash, opts.name, opts.role, opts.tenantId]
-    );
+    if (opts.tempPassword) {
+      await dbPool.query(
+        `INSERT INTO auth.users (
+          id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+          confirmation_token, recovery_token, email_change_token_new, email_change,
+          email_change_token_current, reauthentication_token, phone_change, phone_change_token,
+          raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+        ) VALUES (
+          $1, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', $2,
+          crypt($3, gen_salt('bf')), NOW(),
+          '', '', '', '', '', '', '', '',
+          '{"provider":"email","providers":["email"]}'::jsonb,
+          jsonb_build_object('full_name', $4::text, 'role', $5::text, 'tenant_id', $6::text, 'requires_password_change', true),
+          NOW(), NOW()
+        ) ON CONFLICT (id) DO UPDATE SET
+          encrypted_password = crypt($3, gen_salt('bf')),
+          updated_at = NOW()`,
+        [targetId, opts.email, opts.tempPassword, opts.name, opts.role, opts.tenantId]
+      );
+    } else {
+      const dummyPasswordHash = '$2a$10$abcdefghijklmnopqrstuvwxyz012345';
+      await dbPool.query(
+        `INSERT INTO auth.users (
+          id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+          confirmation_token, recovery_token, email_change_token_new, email_change,
+          email_change_token_current, reauthentication_token, phone_change, phone_change_token,
+          raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+        ) VALUES (
+          $1, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', $2,
+          $3, NOW(),
+          '', '', '', '', '', '', '', '',
+          '{"provider":"email","providers":["email"]}'::jsonb,
+          jsonb_build_object('full_name', $4::text, 'role', $5::text, 'tenant_id', $6::text, 'requires_password_change', true),
+          NOW(), NOW()
+        ) ON CONFLICT (id) DO NOTHING`,
+        [targetId, opts.email, dummyPasswordHash, opts.name, opts.role, opts.tenantId]
+      );
+    }
   }
 
   // Insert or Update public.profiles

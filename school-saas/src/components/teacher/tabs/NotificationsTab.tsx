@@ -64,7 +64,7 @@ export function NotificationsTab({ teacher }: { teacher: TeacherData }) {
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         {(['all', 'unread', ...Object.keys(typeConfig)] as const).map((f) => {
-          const cfg = f !== 'all' && f !== 'unread' ? typeConfig[f] : null;
+          const cfg = f !== 'all' && f !== 'unread' ? typeConfig[f as NotifType] : null;
           const Icon = cfg?.icon || Bell;
           return (
             <button
