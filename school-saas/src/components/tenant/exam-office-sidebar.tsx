@@ -11,11 +11,11 @@ import {
   Send, Archive, ScrollText, Stamp,
   MessageSquare, Settings, FlaskConical,
   ChevronDown, ChevronRight, ChevronLeft, Fingerprint,
-  UserCheck, BookMarked, Sparkles
+  UserCheck, BookMarked, Sparkles, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './sidebar-provider';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 type NavGroup = {
   label: string;
@@ -120,7 +120,6 @@ const navGroups: NavGroup[] = [
 ];
 
 export function ExamOfficeSidebar({
-  tenantSlug,
   tenantName,
   primaryColor,
 }: {
@@ -134,6 +133,10 @@ export function ExamOfficeSidebar({
   const { isCollapsed, isMobileOpen, toggleCollapsed, closeMobile } = useSidebar();
   const basePath = `/exam-office`;
 
+  useEffect(() => {
+    closeMobile();
+  }, [pathname, searchParams, closeMobile]);
+
   const activeGroupLabel =
     navGroups.find((g) => g.items.some((i) => i.id === currentTab))?.label ?? 'Overview';
   const [openGroups, setOpenGroups] = useState<string[]>([activeGroupLabel]);
@@ -144,157 +147,192 @@ export function ExamOfficeSidebar({
     );
   };
 
+  const accentColor = primaryColor || '#7c3aed';
+
+  const sidebarContent = (
+    <div className="flex flex-col h-full bg-[hsl(var(--bg-secondary))]">
+      {/* Brand Header — Styled identically to OrgSidebar */}
+      <div className="flex items-center h-16 px-4 border-b border-[hsl(var(--border))] flex-shrink-0 justify-between">
+        <div className="flex items-center gap-3 overflow-hidden min-w-0">
+          <div
+            className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center shadow-md relative group"
+            style={{
+              background: `linear-gradient(135deg, ${accentColor}, #4f46e5)`,
+            }}
+          >
+            <Sparkles className="w-4 h-4 text-white animate-pulse" />
+            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-[hsl(var(--bg-secondary))]" />
+          </div>
+          {!isCollapsed && (
+            <div className="animate-fade-in min-w-0 flex-1">
+              <h2 className="text-sm font-bold text-[hsl(var(--text-primary))] truncate">
+                {tenantName}
+              </h2>
+              <p
+                className="text-[10px] font-semibold uppercase tracking-wider text-violet-400"
+              >
+                Exam Office Portal
+              </p>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={closeMobile}
+          className="lg:hidden p-1 rounded-lg hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-tertiary))] flex-shrink-0"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Navigation Groups */}
+      <nav className="flex-1 py-3 px-2.5 overflow-y-auto space-y-1 scrollbar-thin">
+        {navGroups.map((group) => {
+          const isGroupOpen = isCollapsed || openGroups.includes(group.label);
+          const hasActive = group.items.some((i) => i.id === currentTab);
+
+          return (
+            <div key={group.label} className="mb-1">
+              {!isCollapsed && (
+                <button
+                  onClick={() => toggleGroup(group.label)}
+                  className={cn(
+                    'w-full flex items-center justify-between px-3 mb-1 mt-2.5 text-[10px] font-semibold uppercase tracking-widest transition-colors rounded-md py-1 hover:bg-[hsl(var(--bg-tertiary)/0.4)]',
+                    hasActive
+                      ? 'text-violet-400 font-bold'
+                      : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))]'
+                  )}
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    <span>{group.emoji}</span>
+                    <span>{group.label}</span>
+                  </span>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {hasActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping" />
+                    )}
+                    {isGroupOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                  </div>
+                </button>
+              )}
+
+              {isCollapsed && (
+                <div className="my-2 mx-3 border-t border-[hsl(var(--border)/0.4)]" />
+              )}
+
+              {isGroupOpen && (
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const targetHref = `${basePath}?tab=${item.id}`;
+                    const isActive =
+                      pathname.includes('/exam-office') &&
+                      (currentTab === item.id ||
+                        (!searchParams.get('tab') && item.id === 'dashboard'));
+                    const Icon = item.icon;
+
+                    return (
+                      <Link
+                        key={item.id}
+                        href={targetHref}
+                        onClick={closeMobile}
+                        title={isCollapsed ? item.label : undefined}
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative',
+                          isActive
+                            ? 'bg-violet-600/15 text-violet-400 font-bold'
+                            : 'text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))]'
+                        )}
+                      >
+                        <Icon
+                          className={cn(
+                            'w-[18px] h-[18px] flex-shrink-0 transition-all duration-200 group-hover:scale-110',
+                            isActive
+                              ? 'text-violet-400'
+                              : 'text-[hsl(var(--text-tertiary))] group-hover:text-[hsl(var(--text-secondary))]'
+                          )}
+                        />
+
+                        {!isCollapsed && (
+                          <>
+                            <span className="truncate flex-1 text-xs font-semibold">{item.label}</span>
+                            {item.badge && (
+                              <span className={cn(
+                                'ml-auto flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                                isActive
+                                  ? 'bg-violet-500 text-white'
+                                  : 'bg-violet-500/15 text-violet-400'
+                              )}>
+                                {item.badge}
+                              </span>
+                            )}
+                            {isActive && !item.badge && (
+                              <div className="ml-auto w-1.5 h-1.5 rounded-full bg-violet-400" />
+                            )}
+                          </>
+                        )}
+
+                        {/* Hover Tooltip in Collapsed Rail Mode */}
+                        {isCollapsed && (
+                          <span className="pointer-events-none absolute left-full ml-3 hidden group-hover:flex items-center px-2.5 py-1.5 rounded-lg bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] text-xs font-medium text-[hsl(var(--text-primary))] whitespace-nowrap shadow-lg z-50">
+                            {item.label}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* Collapse Toggle Footer — Styled identically to OrgSidebar */}
+      <div className="border-t border-[hsl(var(--border))] p-2.5 flex-shrink-0 hidden lg:block">
+        <button
+          onClick={toggleCollapsed}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all duration-200 text-xs font-semibold"
+        >
+          {isCollapsed ? (
+            <ChevronRight className="w-4 h-4" />
+          ) : (
+            <>
+              <ChevronLeft className="w-4 h-4" />
+              <span>Collapse Sidebar</span>
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <>
-      {/* Mobile Backdrop */}
+      {/* Mobile Backdrop Overlay */}
       {isMobileOpen && (
         <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden animate-fade-in"
           onClick={closeMobile}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden transition-opacity"
         />
       )}
 
+      {/* Desktop Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 bg-[hsl(var(--bg-secondary))] border-r border-[hsl(var(--border)/0.8)] transition-all duration-300 overflow-y-auto scrollbar-none flex flex-col shadow-xl',
-          isCollapsed ? 'w-16' : 'w-64',
-          isMobileOpen ? 'translate-x-0 w-64' : '-translate-x-full lg:translate-x-0'
+          'fixed left-0 top-0 bottom-0 z-40 hidden lg:flex flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] transition-all duration-300 ease-in-out',
+          isCollapsed ? 'w-[68px]' : 'w-[240px]'
         )}
       >
-        {/* Brand header */}
-        <div className="h-16 flex items-center justify-between px-3 border-b border-[hsl(var(--border)/0.8)] sticky top-0 bg-[hsl(var(--bg-secondary))] z-10 flex-shrink-0 backdrop-blur-md">
-          <div className="flex items-center min-w-0">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-white text-sm flex-shrink-0 shadow-lg shadow-violet-500/25 relative group"
-              style={{ background: `linear-gradient(135deg, #7c3aed, #4f46e5)` }}
-            >
-              <Sparkles className="w-4 h-4 text-white animate-pulse" />
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[hsl(var(--bg-secondary))]" />
-            </div>
-            {!isCollapsed && (
-              <div className="ml-3 min-w-0">
-                <p className="font-bold text-xs text-[hsl(var(--text-primary))] truncate leading-tight">{tenantName}</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[10px] font-bold text-violet-400 bg-violet-500/15 px-1.5 py-0.2 rounded-md">Exam Office</span>
-                </div>
-              </div>
-            )}
-          </div>
+        {sidebarContent}
+      </aside>
 
-          {/* Desktop collapse toggle button in header */}
-          <button
-            onClick={toggleCollapsed}
-            className="hidden lg:flex p-1.5 rounded-lg text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
-            title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-          >
-            <ChevronLeft className={cn('w-4 h-4 transition-transform duration-300', isCollapsed && 'rotate-180')} />
-          </button>
-        </div>
-
-        {/* Nav groups */}
-        <nav className="flex-1 py-3 space-y-1">
-          {navGroups.map((group) => {
-            const isGroupOpen = isCollapsed || openGroups.includes(group.label);
-            const hasActive = group.items.some((i) => i.id === currentTab);
-
-            return (
-              <div key={group.label} className="px-2">
-                {!isCollapsed && (
-                  <button
-                    onClick={() => toggleGroup(group.label)}
-                    className={cn(
-                      'w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors rounded-lg hover:bg-[hsl(var(--bg-tertiary)/0.4)]',
-                      hasActive
-                        ? group.color
-                        : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))]'
-                    )}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <span>{group.emoji}</span>
-                      <span>{group.label}</span>
-                    </span>
-                    <div className="flex items-center gap-1">
-                      {hasActive && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping" />
-                      )}
-                      {isGroupOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    </div>
-                  </button>
-                )}
-
-                {isGroupOpen && (
-                  <div className={cn('space-y-0.5 mt-0.5', !isCollapsed && 'pb-1')}>
-                    {group.items.map((item) => {
-                      const targetHref = `${basePath}?tab=${item.id}`;
-                      const isActive =
-                        pathname.includes('/exam-office') &&
-                        (currentTab === item.id ||
-                          (!searchParams.get('tab') && item.id === 'dashboard'));
-                      const Icon = item.icon;
-
-                      return (
-                        <Link
-                          key={item.id}
-                          href={targetHref}
-                          onClick={closeMobile}
-                          title={isCollapsed ? item.label : undefined}
-                          className={cn(
-                            'flex items-center rounded-xl text-xs font-semibold transition-all group relative',
-                            isCollapsed ? 'justify-center w-10 h-10 mx-auto my-0.5' : 'px-3 py-2.5',
-                            isActive
-                              ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 font-bold'
-                              : 'text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))]'
-                          )}
-                        >
-                          <Icon
-                            className={cn(
-                              'flex-shrink-0 transition-transform duration-200 group-hover:scale-110',
-                              isCollapsed ? 'w-4 h-4' : 'w-4 h-4',
-                              isActive ? 'text-white' : 'text-[hsl(var(--text-tertiary))] group-hover:text-[hsl(var(--text-primary))]'
-                            )}
-                          />
-                          {!isCollapsed && (
-                            <span className="ml-2.5 truncate flex-1">{item.label}</span>
-                          )}
-                          {!isCollapsed && item.badge && (
-                            <span className={cn(
-                              'ml-auto text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase tracking-tighter',
-                              isActive ? 'bg-white/20 text-white' : 'bg-violet-500/15 text-violet-400'
-                            )}>
-                              {item.badge}
-                            </span>
-                          )}
-
-                          {/* Hover Tooltip in Collapsed Rail Mode */}
-                          {isCollapsed && (
-                            <span className="pointer-events-none absolute left-full ml-3 hidden group-hover:flex items-center px-2.5 py-1.5 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-primary))] whitespace-nowrap shadow-2xl z-50">
-                              {item.label}
-                            </span>
-                          )}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-
-        {/* Footer Collapse Toggle (desktop only) */}
-        <div className="border-t border-[hsl(var(--border)/0.8)] p-2 flex-shrink-0 hidden lg:block bg-[hsl(var(--bg-secondary))]">
-          <button
-            onClick={toggleCollapsed}
-            className={cn(
-              'w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all',
-              isCollapsed && 'px-0'
-            )}
-            title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-          >
-            <ChevronLeft className={cn('w-4 h-4 transition-transform duration-300', isCollapsed && 'rotate-180')} />
-            {!isCollapsed && <span>Collapse Sidebar</span>}
-          </button>
-        </div>
+      {/* Mobile Drawer */}
+      <aside
+        className={cn(
+          'fixed left-0 top-0 bottom-0 z-50 flex flex-col w-[260px] border-r border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] transition-transform duration-300 ease-in-out lg:hidden',
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        {sidebarContent}
       </aside>
     </>
   );

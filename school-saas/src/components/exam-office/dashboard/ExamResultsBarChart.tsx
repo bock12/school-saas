@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -10,7 +10,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { ArrowUpDown, User, RefreshCw } from 'lucide-react';
 
 export type ExamResultSubject = {
   subject: string;
@@ -18,55 +17,199 @@ export type ExamResultSubject = {
   Average: number;
   Fail: number;
   highlightBadge?: string;
+  level?: string;
+  stream?: string;
+  classArm?: string;
+  gender?: string;
 };
 
-const defaultSubjectResults: ExamResultSubject[] = [
-  { subject: 'Maths', Pass: 1600, Average: 600, Fail: 450 },
-  { subject: 'English', Pass: 700, Average: 1000, Fail: 420, highlightBadge: '59.9%' },
-  { subject: 'Mandarin', Pass: 750, Average: 520, Fail: 760 },
-  { subject: 'Science', Pass: 720, Average: 980, Fail: 440 },
-  { subject: 'Arts', Pass: 1650, Average: 600, Fail: 460 },
-  { subject: 'Exercise', Pass: 710, Average: 530, Fail: 120 },
+// Rich subject performance records mapped by subject, level, stream, class arm
+const subjectMatrix: ExamResultSubject[] = [
+  // SSS 1 Science
+  { subject: 'Maths', Pass: 420, Average: 120, Fail: 65, level: 'SSS 1', stream: 'Science', classArm: 'SSS 1 Science' },
+  { subject: 'English', Pass: 390, Average: 150, Fail: 65, level: 'SSS 1', stream: 'Science', classArm: 'SSS 1 Science' },
+  { subject: 'Science', Pass: 480, Average: 90, Fail: 35, level: 'SSS 1', stream: 'Science', classArm: 'SSS 1 Science' },
+  { subject: 'Physics', Pass: 380, Average: 140, Fail: 85, level: 'SSS 1', stream: 'Science', classArm: 'SSS 1 Science' },
+  { subject: 'Chemistry', Pass: 360, Average: 160, Fail: 85, level: 'SSS 1', stream: 'Science', classArm: 'SSS 1 Science' },
+  { subject: 'Biology', Pass: 440, Average: 110, Fail: 55, level: 'SSS 1', stream: 'Science', classArm: 'SSS 1 Science' },
+
+  // SSS 1 Arts
+  { subject: 'English', Pass: 380, Average: 80, Fail: 24, level: 'SSS 1', stream: 'Arts', classArm: 'SSS 1 Arts' },
+  { subject: 'History', Pass: 360, Average: 90, Fail: 34, level: 'SSS 1', stream: 'Arts', classArm: 'SSS 1 Arts' },
+  { subject: 'Geography', Pass: 310, Average: 120, Fail: 54, level: 'SSS 1', stream: 'Arts', classArm: 'SSS 1 Arts' },
+  { subject: 'Maths', Pass: 240, Average: 150, Fail: 94, level: 'SSS 1', stream: 'Arts', classArm: 'SSS 1 Arts' },
+
+  // SSS 1 Commercial
+  { subject: 'Maths', Pass: 210, Average: 80, Fail: 45, level: 'SSS 1', stream: 'Commercial', classArm: 'SSS 1 Commercial' },
+  { subject: 'English', Pass: 260, Average: 50, Fail: 25, level: 'SSS 1', stream: 'Commercial', classArm: 'SSS 1 Commercial' },
+  { subject: 'ICT', Pass: 280, Average: 40, Fail: 15, level: 'SSS 1', stream: 'Commercial', classArm: 'SSS 1 Commercial' },
+
+  // SSS 2 Science
+  { subject: 'Maths', Pass: 390, Average: 90, Fail: 45, level: 'SSS 2', stream: 'Science', classArm: 'SSS 2 Science' },
+  { subject: 'Physics', Pass: 350, Average: 110, Fail: 65, level: 'SSS 2', stream: 'Science', classArm: 'SSS 2 Science' },
+  { subject: 'Chemistry', Pass: 340, Average: 120, Fail: 65, level: 'SSS 2', stream: 'Science', classArm: 'SSS 2 Science' },
+  { subject: 'Biology', Pass: 410, Average: 80, Fail: 35, level: 'SSS 2', stream: 'Science', classArm: 'SSS 2 Science' },
+
+  // SSS 2 Arts & Commercial
+  { subject: 'English', Pass: 350, Average: 110, Fail: 52, level: 'SSS 2', stream: 'Arts', classArm: 'SSS 2 Arts' },
+  { subject: 'History', Pass: 330, Average: 70, Fail: 18, level: 'SSS 2', stream: 'Arts', classArm: 'SSS 2 Arts' },
+  { subject: 'ICT', Pass: 230, Average: 45, Fail: 19, level: 'SSS 2', stream: 'Commercial', classArm: 'SSS 2 Commercial' },
+
+  // SSS 3
+  { subject: 'Maths', Pass: 250, Average: 50, Fail: 25, level: 'SSS 3', stream: 'Science', classArm: 'SSS 3 Science' },
+  { subject: 'Physics', Pass: 240, Average: 60, Fail: 25, level: 'SSS 3', stream: 'Science', classArm: 'SSS 3 Science' },
+  { subject: 'English', Pass: 210, Average: 35, Fail: 14, level: 'SSS 3', stream: 'Arts', classArm: 'SSS 3 Arts' },
+  { subject: 'ICT', Pass: 180, Average: 25, Fail: 7, level: 'SSS 3', stream: 'Commercial', classArm: 'SSS 3 Commercial' },
 ];
 
-export function ExamResultsBarChart({ data = defaultSubjectResults }: { data?: ExamResultSubject[] }) {
-  const [filterMode, setFilterMode] = useState<'grade' | 'gender'>('grade');
+const allClassArmsList = [
+  'SSS 1 Science', 'SSS 1 Arts', 'SSS 1 Commercial',
+  'SSS 2 Science', 'SSS 2 Arts', 'SSS 2 Commercial',
+  'SSS 3 Science', 'SSS 3 Arts', 'SSS 3 Commercial',
+];
+
+export function ExamResultsBarChart({ data = subjectMatrix }: { data?: ExamResultSubject[] }) {
+  // 4 Dropdown filter states
+  const [levelFilter, setLevelFilter] = useState<string>('All');
+  const [streamFilter, setStreamFilter] = useState<string>('All');
+  const [classArmFilter, setClassArmFilter] = useState<string>('All');
+  const [genderFilter, setGenderFilter] = useState<string>('All');
+
+  // Dynamic Class Arm dropdown options based on selected Stream and Level
+  const availableClassArms = useMemo(() => {
+    return allClassArmsList.filter((arm) => {
+      const matchLvl = levelFilter === 'All' || arm.startsWith(levelFilter);
+      const matchStrm = streamFilter === 'All' || arm.includes(streamFilter);
+      return matchLvl && matchStrm;
+    });
+  }, [levelFilter, streamFilter]);
+
+  // Compute aggregated chart data based on active filters
+  const computedChartData = useMemo(() => {
+    let filtered = data.filter((item) => {
+      const matchLevel = levelFilter === 'All' || item.level === levelFilter;
+      const matchStream = streamFilter === 'All' || item.stream === streamFilter;
+      const matchArm = classArmFilter === 'All' || item.classArm === classArmFilter;
+      return matchLevel && matchStream && matchArm;
+    });
+
+    if (filtered.length === 0) filtered = data;
+
+    // Gender multiplier if filtering by Female or Male
+    const genderMult = genderFilter === 'Female' ? 0.48 : genderFilter === 'Male' ? 0.52 : 1.0;
+
+    // Group by Subject
+    const map = new Map<string, { subject: string; Pass: number; Average: number; Fail: number }>();
+
+    filtered.forEach((item) => {
+      const existing = map.get(item.subject) || { subject: item.subject, Pass: 0, Average: 0, Fail: 0 };
+      existing.Pass += Math.round(item.Pass * genderMult);
+      existing.Average += Math.round(item.Average * genderMult);
+      existing.Fail += Math.round(item.Fail * genderMult);
+      map.set(item.subject, existing);
+    });
+
+    // Default fallback list if map is small
+    const result = Array.from(map.values());
+    if (result.length < 5) {
+      const allSubjects = ['Maths', 'English', 'Science', 'Physics', 'Chemistry', 'Biology', 'ICT'];
+      allSubjects.forEach((sub) => {
+        if (!map.has(sub)) {
+          result.push({
+            subject: sub,
+            Pass: Math.round(300 * genderMult),
+            Average: Math.round(120 * genderMult),
+            Fail: Math.round(40 * genderMult),
+          });
+        }
+      });
+    }
+
+    return result.slice(0, 7);
+  }, [data, levelFilter, streamFilter, classArmFilter, genderFilter]);
+
+  // Reset cascading filters
+  function handleLevelChange(val: string) {
+    setLevelFilter(val);
+    setClassArmFilter('All');
+  }
+
+  function handleStreamChange(val: string) {
+    setStreamFilter(val);
+    setClassArmFilter('All');
+  }
 
   return (
-    <div className="glass-card rounded-2xl p-4 sm:p-5 flex flex-col justify-between border border-[hsl(var(--border)/0.6)] h-full">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-[hsl(var(--border)/0.4)]">
-        <div>
-          <h3 className="font-black text-base text-[hsl(var(--text-primary))]">Examination Results</h3>
-          <p className="text-[11px] text-[hsl(var(--text-tertiary))]">Pass, Average, and Fail breakdown by subject</p>
+    <div className="glass-card rounded-2xl p-3.5 sm:p-5 flex flex-col justify-between border border-[hsl(var(--border)/0.6)] h-full overflow-hidden">
+      {/* Header with 4 Dropdowns aligned in ONE SINGLE HORIZONTAL ROW */}
+      <div className="flex flex-row items-center justify-between gap-1.5 sm:gap-2 mb-2.5 pb-2 border-b border-[hsl(var(--border)/0.4)]">
+        <div className="flex-shrink-0">
+          <h3 className="font-black text-xs sm:text-sm text-[hsl(var(--text-primary))] leading-tight whitespace-nowrap">Examination Results</h3>
+          <p className="text-[9px] sm:text-[10px] text-[hsl(var(--text-tertiary))] truncate max-w-[100px] sm:max-w-none">Pass, Average & Fail breakdown</p>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <button
-            onClick={() => setFilterMode('grade')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-              filterMode === 'grade'
-                ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
-                : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]'
-            }`}
-          >
-            Grade <ArrowUpDown className="w-3 h-3" />
-          </button>
+        {/* 4 Filter Dropdowns in ONE HORIZONTAL ROW */}
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-nowrap overflow-x-auto w-full sm:w-auto scrollbar-none py-0.5">
+          {/* 1. Level */}
+          <div className="flex flex-col flex-shrink-0">
+            <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-[hsl(var(--text-tertiary))]">Level</label>
+            <select
+              value={levelFilter}
+              onChange={(e) => handleLevelChange(e.target.value)}
+              className="px-1.5 py-0.5 rounded-lg text-[10px] sm:text-xs font-bold bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border)/0.8)] text-[hsl(var(--text-primary))] outline-none cursor-pointer hover:border-violet-500/50 transition-colors min-w-[46px]"
+            >
+              <option value="All">All</option>
+              <option value="SSS 1">SSS 1</option>
+              <option value="SSS 2">SSS 2</option>
+              <option value="SSS 3">SSS 3</option>
+            </select>
+          </div>
 
-          <button
-            onClick={() => setFilterMode('gender')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-              filterMode === 'gender'
-                ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
-                : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]'
-            }`}
-          >
-            Gender <User className="w-3 h-3" />
-          </button>
+          {/* 2. Stream */}
+          <div className="flex flex-col flex-shrink-0">
+            <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-[hsl(var(--text-tertiary))]">Stream</label>
+            <select
+              value={streamFilter}
+              onChange={(e) => handleStreamChange(e.target.value)}
+              className="px-1.5 py-0.5 rounded-lg text-[10px] sm:text-xs font-bold bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border)/0.8)] text-[hsl(var(--text-primary))] outline-none cursor-pointer hover:border-violet-500/50 transition-colors min-w-[60px]"
+            >
+              <option value="All">All</option>
+              <option value="Science">Science</option>
+              <option value="Arts">Arts</option>
+              <option value="Commercial">Commercial</option>
+            </select>
+          </div>
 
-          <button className="p-1.5 rounded-lg text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors">
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
+          {/* 3. Class Arm */}
+          <div className="flex flex-col flex-shrink-0">
+            <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-[hsl(var(--text-tertiary))]">Class Arm</label>
+            <select
+              value={classArmFilter}
+              onChange={(e) => setClassArmFilter(e.target.value)}
+              className="px-1.5 py-0.5 rounded-lg text-[10px] sm:text-xs font-bold bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border)/0.8)] text-[hsl(var(--text-primary))] outline-none cursor-pointer hover:border-violet-500/50 transition-colors max-w-[85px] sm:max-w-[100px] truncate"
+            >
+              <option value="All">All Arms</option>
+              {availableClassArms.map((arm) => (
+                <option key={arm} value={arm}>
+                  {arm}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 4. Gender */}
+          <div className="flex flex-col flex-shrink-0">
+            <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-[hsl(var(--text-tertiary))]">Gender</label>
+            <select
+              value={genderFilter}
+              onChange={(e) => setGenderFilter(e.target.value)}
+              className="px-1.5 py-0.5 rounded-lg text-[10px] sm:text-xs font-bold bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border)/0.8)] text-[hsl(var(--text-primary))] outline-none cursor-pointer hover:border-violet-500/50 transition-colors min-w-[50px]"
+            >
+              <option value="All">All</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -87,9 +230,9 @@ export function ExamResultsBarChart({ data = defaultSubjectResults }: { data?: E
       </div>
 
       {/* Recharts Grouped Bar Chart */}
-      <div className="w-full min-h-[200px] sm:min-h-[230px] relative">
-        <ResponsiveContainer width="100%" height={230}>
-          <BarChart data={data} margin={{ top: 15, right: 10, left: -20, bottom: 0 }}>
+      <div className="w-full min-h-[190px] sm:min-h-[220px] relative">
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={computedChartData} margin={{ top: 15, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" vertical={false} />
             <XAxis
               dataKey="subject"
@@ -128,10 +271,10 @@ export function ExamResultsBarChart({ data = defaultSubjectResults }: { data?: E
           </BarChart>
         </ResponsiveContainer>
 
-        {/* Dynamic Highlight Badge */}
-        <div className="absolute top-6 left-[28%] -translate-x-1/2 pointer-events-none hidden sm:block">
+        {/* Dynamic Highlight Callout Badge */}
+        <div className="absolute top-4 left-[26%] -translate-x-1/2 pointer-events-none hidden sm:block">
           <div className="bg-blue-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-lg border border-blue-400/50 animate-bounce">
-            59.9%
+            Filtered
           </div>
         </div>
       </div>

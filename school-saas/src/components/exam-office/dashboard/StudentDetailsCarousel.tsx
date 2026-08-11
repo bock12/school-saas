@@ -184,10 +184,10 @@ export function StudentDetailsCarousel({ students = defaultStudents }: { student
   return (
     <div className="glass-card rounded-2xl p-3.5 sm:p-5 flex flex-col justify-between border border-[hsl(var(--border)/0.6)] h-full overflow-hidden">
       {/* Responsive Header with Single-Row Dropdowns */}
-      <div className="flex flex-row items-center justify-between gap-2 mb-2.5 pb-2 border-b border-[hsl(var(--border)/0.4)]">
-        <div className="flex-shrink-0 hidden lg:hidden 2xl:block">
-          <h3 className="font-black text-sm sm:text-base text-[hsl(var(--text-primary))] leading-tight">Top 3 Performers</h3>
-          <p className="text-[10px] sm:text-[11px] text-[hsl(var(--text-tertiary))] truncate">Filter by level & stream</p>
+      <div className="flex flex-row items-center justify-between gap-1.5 sm:gap-2 mb-2.5 pb-2 border-b border-[hsl(var(--border)/0.4)]">
+        <div className="flex-shrink-0">
+          <h3 className="font-black text-xs sm:text-sm text-[hsl(var(--text-primary))] leading-tight whitespace-nowrap">Top 3 Performers</h3>
+          <p className="text-[9px] sm:text-[10px] text-[hsl(var(--text-tertiary))] truncate max-w-[100px] sm:max-w-none">Filter by level & stream</p>
         </div>
 
         {/* 4 Filter Dropdowns aligned in ONE HORIZONTAL ROW */}
