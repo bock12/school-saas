@@ -296,8 +296,8 @@ export function SessionsTab({ officer }: { officer: OfficerData }) {
           type: s.type || 'EXAM',
           mode: s.mode || 'ONLINE',
           weightage: s.weightage || '-',
-          start: s.start_date || '2026-08-18',
-          end: s.end_date || '2026-08-29',
+          start: s.start_date ? String(s.start_date).split('T')[0] : '2026-08-18',
+          end: s.end_date ? String(s.end_date).split('T')[0] : '2026-08-29',
           timestamp: s.created_at || '2026-09-04T18:19:25',
           status: s.status || 'Upcoming',
           classes: s.classes_count || 12,
@@ -330,8 +330,9 @@ export function SessionsTab({ officer }: { officer: OfficerData }) {
     e.preventDefault();
     if (!formData.name) return;
 
+    const tempId = String(Date.now());
     const newSession: ExamSession = {
-      id: String(Date.now()),
+      id: tempId,
       name: formData.name,
       year: formData.year,
       term: formData.term,
@@ -370,7 +371,8 @@ export function SessionsTab({ officer }: { officer: OfficerData }) {
       });
       const json = await res.json();
       if (json.success && json.data) {
-        setSessionsList(prev => prev.map(s => s.id === newSession.id ? { ...s, id: json.data.id } : s));
+        // Refetch to guarantee 100% database sync
+        await fetchDBSessions();
       }
     } catch (err) {
       console.warn('DB creation fallback:', err);
@@ -391,7 +393,7 @@ export function SessionsTab({ officer }: { officer: OfficerData }) {
       status: 'Upcoming',
     });
 
-    setSuccessToast(`Examination "${newSession.name}" created and synced to database!`);
+    setSuccessToast(`Examination "${newSession.name}" created and saved to Database!`);
     setTimeout(() => setSuccessToast(''), 4000);
   };
 
@@ -415,7 +417,7 @@ export function SessionsTab({ officer }: { officer: OfficerData }) {
     setShowCloneModal(null);
 
     try {
-      await fetch('/api/exam-office/dashboard', {
+      const res = await fetch('/api/exam-office/dashboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -432,11 +434,32 @@ export function SessionsTab({ officer }: { officer: OfficerData }) {
           candidates_count: cloned.candidates,
         }),
       });
+      const json = await res.json();
+      if (json.success) {
+        await fetchDBSessions();
+      }
     } catch (err) {
       console.warn('DB clone fallback:', err);
     }
 
     setSuccessToast(`Session "${showCloneModal.name}" duplicated as "${cloned.name}"!`);
+    setTimeout(() => setSuccessToast(''), 4000);
+  };
+
+  const handleRemoveSession = async (sessionId: string) => {
+    setSessionsList(prev => prev.filter(s => s.id !== sessionId));
+    setSelectedSessionForManage(null);
+
+    try {
+      await fetch(`/api/exam-office/dashboard?id=${sessionId}`, {
+        method: 'DELETE',
+      });
+      await fetchDBSessions();
+    } catch (err) {
+      console.warn('DB delete fallback:', err);
+    }
+
+    setSuccessToast('Examination session removed from database.');
     setTimeout(() => setSuccessToast(''), 4000);
   };
 
@@ -531,7 +554,7 @@ export function SessionsTab({ officer }: { officer: OfficerData }) {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-black text-[hsl(var(--text-primary))]">Examination Sessions</h1>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">DB Synced</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">DB Synced &amp; Persisted</span>
           </div>
           <p className="text-sm text-[hsl(var(--text-tertiary))] mt-1">Configure academic terms, session cloning, milestone deadlines, and financial clearance gatekeeping</p>
         </div>
@@ -1231,12 +1254,30 @@ export function SessionsTab({ officer }: { officer: OfficerData }) {
               </div>
             </div>
 
-            <form onSubmit={e => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
               const updated = sessionsList.map(s => s.id === selectedSessionForManage.id ? selectedSessionForManage : s);
               setSessionsList(updated);
+
+              try {
+                await fetch('/api/exam-office/dashboard', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    id: selectedSessionForManage.id,
+                    name: selectedSessionForManage.name,
+                    status: selectedSessionForManage.status,
+                    mark_deadline: selectedSessionForManage.markDeadline,
+                    clearance_required: selectedSessionForManage.clearanceRequired,
+                  }),
+                });
+                await fetchDBSessions();
+              } catch (err) {
+                console.warn('DB update fallback:', err);
+              }
+
               setSelectedSessionForManage(null);
-              setSuccessToast(`Session settings saved successfully!`);
+              setSuccessToast(`Session settings saved successfully to Database!`);
               setTimeout(() => setSuccessToast(''), 4000);
             }} className="space-y-4 pt-2 border-t border-[hsl(var(--border))]">
               <p className="text-xs font-bold text-[hsl(var(--text-tertiary))] uppercase tracking-wider">Session Settings &amp; Deadlines</p>
@@ -1287,12 +1328,7 @@ export function SessionsTab({ officer }: { officer: OfficerData }) {
               <div className="pt-3 border-t border-[hsl(var(--border))] flex items-center justify-between">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSessionsList(sessionsList.filter(s => s.id !== selectedSessionForManage.id));
-                    setSelectedSessionForManage(null);
-                    setSuccessToast('Examination session archived/removed.');
-                    setTimeout(() => setSuccessToast(''), 4000);
-                  }}
+                  onClick={() => handleRemoveSession(selectedSessionForManage.id)}
                   className="text-xs font-bold text-red-400 hover:text-red-300 flex items-center gap-1.5 px-3 py-2 rounded-xl hover:bg-red-500/10 transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Remove Session

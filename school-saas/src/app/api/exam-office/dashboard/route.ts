@@ -69,6 +69,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, academic_year, term, type, mode, weightage, start_date, end_date, status, classes_count, candidates_count } = body;
 
+    const parseDate = (d: any, fallbackDays: number) => {
+      if (d && typeof d === 'string' && d.trim() !== '') {
+        const dateObj = new Date(d);
+        if (!isNaN(dateObj.getTime())) return dateObj.toISOString();
+      }
+      return new Date(Date.now() + fallbackDays * 86400000).toISOString();
+    };
+
     const { data: newSession, error } = await supabase
       .from('exam_sessions')
       .insert({
@@ -78,19 +86,23 @@ export async function POST(req: NextRequest) {
         type: type || 'EXAM',
         mode: mode || 'ONLINE',
         weightage: weightage || '-',
-        start_date,
-        end_date,
+        start_date: parseDate(start_date, 0),
+        end_date: parseDate(end_date, 14),
         status: status || 'Upcoming',
-        classes_count: classes_count || 12,
-        candidates_count: candidates_count || 1248,
+        classes_count: Number(classes_count) || 12,
+        candidates_count: Number(candidates_count) || 1248,
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Database POST Insert Error:', error);
+      throw error;
+    }
 
     return NextResponse.json({ success: true, data: newSession });
   } catch (error: any) {
+    console.error('POST Handler Catch Error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
@@ -124,6 +136,28 @@ export async function PATCH(req: NextRequest) {
     if (error) throw error;
 
     return NextResponse.json({ success: true, data: updated });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'Session ID is required' }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from('exam_sessions')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
