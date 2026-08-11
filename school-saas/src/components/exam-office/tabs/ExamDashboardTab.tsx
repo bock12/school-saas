@@ -1,14 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { OfficerData } from '../ExamOfficeDashboardContent';
 import {
-  Activity, Users, BookOpen, AlertTriangle, Scale, CheckCircle2,
-  Send, UserX, Shield, MessageSquare, Clock, TrendingUp, TrendingDown,
-  ChevronRight, Plus, Upload, BarChart3, ScrollText, Zap,
-  FileText, Stamp, Award, RefreshCw
+  Activity, Users, BookOpen, Scale, CheckCircle2,
+  Send, UserX, Shield, MessageSquare, Clock, ChevronRight, Plus,
+  Upload, BarChart3, ScrollText, Zap, RefreshCw
 } from 'lucide-react';
+
+import { ControlCenterFilters } from '../dashboard/ControlCenterFilters';
+import { TopPerformersWall, StudentSpotlight } from '../dashboard/TopPerformersWall';
+import { GradeDistributionChart, GradeDataItem, ClassGenderMatrixItem } from '../dashboard/GradeDistributionChart';
+import { StudentDetailsCarousel, StudentDetailCard } from '../dashboard/StudentDetailsCarousel';
+import { ExamResultsBarChart, ExamResultSubject } from '../dashboard/ExamResultsBarChart';
+import { AverageScoreRings, SubjectScoreGauge } from '../dashboard/AverageScoreRings';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -16,6 +22,22 @@ function getGreeting() {
   if (h < 17) return 'Good Afternoon';
   return 'Good Evening';
 }
+
+export type DashboardApiResponseData = {
+  summary?: {
+    activeCount?: number;
+    totalSessions?: number;
+    pendingModerationCount?: number;
+    malpracticeCount?: number;
+    appealsCount?: number;
+  };
+  spotlights?: StudentSpotlight[];
+  gradeDistribution?: GradeDataItem[];
+  classGenderMatrix?: ClassGenderMatrixItem[];
+  studentDetails?: StudentDetailCard[];
+  subjectResults?: ExamResultSubject[];
+  subjectAverages?: SubjectScoreGauge[];
+};
 
 const defaultKpis = [
   { id: 'sessions', label: 'Active Exams', value: 2, sub: 'Running now', icon: Activity, color: 'bg-emerald-500', urgency: 'normal' },
@@ -30,48 +52,11 @@ const defaultKpis = [
   { id: 'appeals', label: 'Pending Appeals', value: 5, sub: 'Awaiting review', icon: MessageSquare, color: 'bg-rose-500', urgency: 'warn' },
 ];
 
-const actionRequired = [
-  { icon: '🔴', label: '7 Missing marks — 3 subjects haven\'t submitted scores', tab: 'missing-marks', severity: 'critical' },
-  { icon: '🟠', label: '3 Moderation pending — HOD approval outstanding', tab: 'moderation', severity: 'warn' },
-  { icon: '🟠', label: '2 Timetable conflicts detected — requires resolution', tab: 'timetables', severity: 'warn' },
-  { icon: '🔴', label: '1 Active malpractice investigation — Physics Hall A', tab: 'malpractice', severity: 'critical' },
-  { icon: '🟡', label: '5 Result appeals awaiting review', tab: 'appeals', severity: 'info' },
-  { icon: '🟢', label: '12 Results ready for publication — click to publish', tab: 'publication', severity: 'ready' },
-];
-
-const todayExams = [
-  { subject: 'Mathematics', class: 'SSS 2A/B/C', room: 'Hall A', time: '09:00 – 11:00', candidates: 92, invigilators: 3, status: 'ongoing' },
-  { subject: 'English Language', class: 'SSS 1A/B', room: 'Hall B', time: '11:30 – 13:30', candidates: 64, invigilators: 2, status: 'upcoming' },
-  { subject: 'Physics', class: 'SSS 3A', room: 'Lab 2', time: '14:00 – 16:00', candidates: 38, invigilators: 2, status: 'upcoming' },
-];
-
-const approvalQueue = [
-  { class: 'SSS 1A', status: 'complete', marks: true, moderated: true, approved: false },
-  { class: 'SSS 1B', status: 'complete', marks: true, moderated: true, approved: false },
-  { class: 'SSS 2A', status: 'pending', marks: true, moderated: false, approved: false },
-  { class: 'SSS 2B', status: 'pending', marks: false, moderated: false, approved: false },
-];
-
-const performanceStats = [
-  { label: 'School Average', value: '74%', trend: 'up', prev: '71%' },
-  { label: 'Pass Rate', value: '87%', trend: 'up', prev: '83%' },
-  { label: 'Highest Score', value: '96%', trend: 'stable', prev: '96%' },
-  { label: 'Lowest Score', value: '31%', trend: 'down', prev: '28%' },
-];
-
-const marksProgress = [
-  { subject: 'Mathematics', teacher: 'Mr. Conteh', class: 'SSS 2A', pct: 100, status: 'submitted' },
-  { subject: 'Physics', teacher: 'Mrs. Bangura', class: 'SSS 2A', pct: 82, status: 'partial' },
-  { subject: 'Chemistry', teacher: 'Mr. Koroma', class: 'SSS 2A', pct: 63, status: 'partial' },
-  { subject: 'Biology', teacher: 'Dr. Cole', class: 'SSS 2A', pct: 0, status: 'pending' },
-  { subject: 'English Language', teacher: 'Mrs. Mansaray', class: 'SSS 2A', pct: 100, status: 'submitted' },
-];
-
 const quickActions = [
   { label: '+ New Exam', icon: Plus, color: 'from-violet-600 to-indigo-600', tab: 'sessions' },
   { label: 'Import Marks', icon: Upload, color: 'from-amber-500 to-orange-600', tab: 'score-entry' },
-  { label: 'Generate Results', icon: Zap, color: 'from-teal-500 to-emerald-600', tab: 'validation' },
-  { label: 'Publish Results', icon: Send, color: 'from-green-500 to-teal-600', tab: 'publication' },
+  { label: 'Results', icon: Zap, color: 'from-teal-500 to-emerald-600', tab: 'validation' },
+  { label: 'Publish', icon: Send, color: 'from-green-500 to-teal-600', tab: 'publication' },
   { label: 'Reports', icon: BarChart3, color: 'from-blue-500 to-indigo-600', tab: 'reports' },
   { label: 'Broadsheets', icon: ScrollText, color: 'from-rose-500 to-pink-600', tab: 'broadsheets' },
 ];
@@ -94,51 +79,86 @@ export function ExamDashboardTab({ officer }: { officer: OfficerData }) {
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+  const [selectedYear, setSelectedYear] = useState('2025/2026');
+  const [selectedGrade, setSelectedGrade] = useState('All');
   const [kpisList, setKpisList] = useState(defaultKpis);
-  const [isDbSynced, setIsDbSynced] = useState(false);
+  const [spotlightsList, setSpotlightsList] = useState<StudentSpotlight[] | undefined>(undefined);
+  const [gradeDistList, setGradeDistList] = useState<GradeDataItem[] | undefined>(undefined);
+  const [classGenderMatrixList, setClassGenderMatrixList] = useState<ClassGenderMatrixItem[] | undefined>(undefined);
+  const [studentDetailsList, setStudentDetailsList] = useState<StudentDetailCard[] | undefined>(undefined);
+  const [subjectResultsList, setSubjectResultsList] = useState<ExamResultSubject[] | undefined>(undefined);
+  const [subjectAveragesList, setSubjectAveragesList] = useState<SubjectScoreGauge[] | undefined>(undefined);
   const [isLoadingDb, setIsLoadingDb] = useState(false);
 
-  useEffect(() => {
-    syncExamDatabase();
-  }, [officer.tenantSlug]);
+  const applyDataFromResponse = useCallback((data: DashboardApiResponseData) => {
+    if (!data) return;
+    if (data.summary) {
+      const { activeCount, totalSessions, pendingModerationCount, malpracticeCount, appealsCount } = data.summary;
+      setKpisList([
+        { id: 'sessions', label: 'Active Exams', value: activeCount || 2, sub: 'Running now in DB', icon: Activity, color: 'bg-emerald-500', urgency: 'normal' },
+        { id: 'sessions', label: 'Total Sessions', value: totalSessions || 4, sub: 'Configured in DB', icon: Clock, color: 'bg-blue-500', urgency: 'normal' },
+        { id: 'eligibility', label: 'Candidates', value: '1,248', sub: 'Registered', icon: Users, color: 'bg-indigo-500', urgency: 'normal' },
+        { id: 'missing-marks', label: 'Pending Marks', value: 32, sub: 'Subjects incomplete', icon: BookOpen, color: 'bg-amber-500', urgency: 'warn' },
+        { id: 'moderation', label: 'Pending Moderation', value: pendingModerationCount || 0, sub: 'Awaiting review', icon: Scale, color: 'bg-purple-500', urgency: 'warn' },
+        { id: 'validation', label: 'Results Ready', value: 6, sub: '4 classes', icon: CheckCircle2, color: 'bg-teal-500', urgency: 'normal' },
+        { id: 'publication', label: 'Published Results', value: 3, sub: 'Classes released', icon: Send, color: 'bg-green-500', urgency: 'normal' },
+        { id: 'hall-attendance', label: 'Absent Candidates', value: 17, sub: 'Requiring action', icon: UserX, color: 'bg-orange-500', urgency: 'warn' },
+        { id: 'malpractice', label: 'Malpractice Cases', value: malpracticeCount || 0, sub: 'Open incidents in DB', icon: Shield, color: 'bg-red-500', urgency: 'critical' },
+        { id: 'appeals', label: 'Pending Appeals', value: appealsCount || 0, sub: 'Awaiting review in DB', icon: MessageSquare, color: 'bg-rose-500', urgency: 'warn' },
+      ]);
+    }
+    if (data.spotlights && data.spotlights.length > 0) setSpotlightsList(data.spotlights);
+    if (data.gradeDistribution && data.gradeDistribution.length > 0) setGradeDistList(data.gradeDistribution);
+    if (data.classGenderMatrix && data.classGenderMatrix.length > 0) setClassGenderMatrixList(data.classGenderMatrix);
+    if (data.studentDetails && data.studentDetails.length > 0) setStudentDetailsList(data.studentDetails);
+    if (data.subjectResults && data.subjectResults.length > 0) setSubjectResultsList(data.subjectResults);
+    if (data.subjectAverages && data.subjectAverages.length > 0) setSubjectAveragesList(data.subjectAverages);
+  }, []);
 
-  async function syncExamDatabase() {
+  const syncExamDatabase = useCallback(async () => {
     setIsLoadingDb(true);
     try {
       const res = await fetch(`/api/exam-office/dashboard?tenantSlug=${officer.tenantSlug}`);
       const json = await res.json();
-      if (json.success && json.data.summary) {
-        const { activeCount, totalSessions, pendingModerationCount, malpracticeCount, appealsCount } = json.data.summary;
-        setKpisList([
-          { id: 'sessions', label: 'Active Exams', value: activeCount || 2, sub: 'Running now in DB', icon: Activity, color: 'bg-emerald-500', urgency: 'normal' },
-          { id: 'sessions', label: 'Total Sessions', value: totalSessions || 4, sub: 'Configured in DB', icon: Clock, color: 'bg-blue-500', urgency: 'normal' },
-          { id: 'eligibility', label: 'Candidates', value: '1,248', sub: 'Registered', icon: Users, color: 'bg-indigo-500', urgency: 'normal' },
-          { id: 'missing-marks', label: 'Pending Marks', value: 32, sub: 'Subjects incomplete', icon: BookOpen, color: 'bg-amber-500', urgency: 'warn' },
-          { id: 'moderation', label: 'Pending Moderation', value: pendingModerationCount || 0, sub: 'Awaiting review', icon: Scale, color: 'bg-purple-500', urgency: 'warn' },
-          { id: 'validation', label: 'Results Ready', value: 6, sub: '4 classes', icon: CheckCircle2, color: 'bg-teal-500', urgency: 'normal' },
-          { id: 'publication', label: 'Published Results', value: 3, sub: 'Classes released', icon: Send, color: 'bg-green-500', urgency: 'normal' },
-          { id: 'hall-attendance', label: 'Absent Candidates', value: 17, sub: 'Requiring action', icon: UserX, color: 'bg-orange-500', urgency: 'warn' },
-          { id: 'malpractice', label: 'Malpractice Cases', value: malpracticeCount || 0, sub: 'Open incidents in DB', icon: Shield, color: 'bg-red-500', urgency: 'critical' },
-          { id: 'appeals', label: 'Pending Appeals', value: appealsCount || 0, sub: 'Awaiting review in DB', icon: MessageSquare, color: 'bg-rose-500', urgency: 'warn' },
-        ]);
-        setIsDbSynced(true);
+      if (json.success && json.data) {
+        applyDataFromResponse(json.data);
       }
     } catch (err) {
       console.warn('DB Sync fallback:', err);
     } finally {
       setIsLoadingDb(false);
     }
-  }
+  }, [officer.tenantSlug, applyDataFromResponse]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function initFetch() {
+      setIsLoadingDb(true);
+      try {
+        const res = await fetch(`/api/exam-office/dashboard?tenantSlug=${officer.tenantSlug}`);
+        const json = await res.json();
+        if (isMounted && json.success && json.data) {
+          applyDataFromResponse(json.data);
+        }
+      } catch (err) {
+        console.warn('DB Sync fallback:', err);
+      } finally {
+        if (isMounted) setIsLoadingDb(false);
+      }
+    }
+    initFetch();
+    return () => {
+      isMounted = false;
+    };
+  }, [officer.tenantSlug, applyDataFromResponse]);
 
   function nav(tab: string) {
     router.push(`/${officer.tenantSlug}/exam-office?tab=${tab}`);
   }
 
-  const marksOverall = Math.round(marksProgress.reduce((s, m) => s + m.pct, 0) / marksProgress.length);
-
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* ── Header Banner ─────────────────────────────────────────── */}
+      {/* ── 1. Top Header Banner ──────────────────────────────────── */}
       <div className="rounded-2xl p-4 sm:p-6 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #7c3aed22, #4f46e508)', border: '1px solid #7c3aed30' }}>
         <div className="relative z-10 flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -147,7 +167,7 @@ export function ExamDashboardTab({ officer }: { officer: OfficerData }) {
               <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-[hsl(var(--text-primary))] mt-0.5">{officer.name}</h1>
               <div className="flex flex-wrap items-center gap-2 mt-2.5">
                 <span className="inline-flex items-center text-xs px-2.5 py-1 rounded-full bg-violet-500/15 text-violet-400 font-semibold border border-violet-500/20">
-                  Examination Office
+                  Examination Control Center
                 </span>
                 <span className="inline-flex items-center text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30 gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Admin DB Synced
@@ -163,38 +183,60 @@ export function ExamDashboardTab({ officer }: { officer: OfficerData }) {
             <button
               onClick={syncExamDatabase}
               disabled={isLoadingDb}
-              className="px-3 py-1.5 rounded-xl bg-violet-600/15 hover:bg-violet-600 text-violet-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-center"
+              className="px-3.5 py-2 rounded-xl bg-violet-600/15 hover:bg-violet-600 text-violet-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-center"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDb ? 'animate-spin' : ''}`} /> Refresh Admin Sync
             </button>
-          </div>
-
-          {/* Dedicated full-width single-row quick actions container */}
-          <div className="w-full flex flex-nowrap items-center gap-2 overflow-x-auto pt-3 border-t border-[hsl(var(--border)/0.3)] scrollbar-none min-w-0">
-            {quickActions.map((a) => (
-              <button
-                key={a.tab}
-                onClick={() => nav(a.tab)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r ${a.color} hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-sm whitespace-nowrap flex-shrink-0`}
-              >
-                <a.icon className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>{a.label}</span>
-              </button>
-            ))}
           </div>
         </div>
         <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full opacity-10 bg-violet-600 pointer-events-none" />
         <div className="absolute -bottom-6 -left-6 w-28 h-28 rounded-full opacity-10 bg-indigo-600 pointer-events-none" />
       </div>
 
-      {/* ── Examination Lifecycle Pipeline ────────────────────────── */}
+      {/* ── 2. Top Control Toolbar & Spotlight Cards Grid ─────────── */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        {/* Left Column: Control Filters & Quick Action launcher */}
+        <div className="xl:col-span-7 space-y-4">
+          <ControlCenterFilters
+            selectedYear={selectedYear}
+            selectedGrade={selectedGrade}
+            onYearChange={setSelectedYear}
+            onGradeChange={setSelectedGrade}
+          />
+
+          {/* Dedicated Quick Actions launcher strip */}
+          <div className="glass-card rounded-2xl p-2.5 sm:p-3 flex flex-col gap-2">
+            <span className="text-[10px] font-black uppercase text-[hsl(var(--text-tertiary))] tracking-wider">Quick Actions</span>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2 w-full">
+              {quickActions.map((a) => (
+                <button
+                  key={a.tab}
+                  onClick={() => nav(a.tab)}
+                  title={a.label}
+                  className={`px-1.5 sm:px-2 py-1.5 rounded-xl text-[10px] sm:text-xs font-bold text-white bg-gradient-to-r ${a.color} hover:opacity-90 transition-opacity flex items-center justify-center gap-1 shadow-sm w-full min-w-0`}
+                >
+                  <a.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+                  <span className="truncate">{a.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Top Performers Wall */}
+        <div className="xl:col-span-5">
+          <TopPerformersWall spotlights={spotlightsList} />
+        </div>
+      </div>
+
+      {/* ── 3. Examination Lifecycle Progress ────────────────────── */}
       <div className="glass-card rounded-2xl p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-violet-400 flex-shrink-0" />
             <h2 className="font-black text-[hsl(var(--text-primary))] text-xs sm:text-sm">End-of-Term Examination — Lifecycle Progress</h2>
           </div>
-          <span className="text-[10px] sm:text-xs text-[hsl(var(--text-tertiary))]">Academic Year 2026</span>
+          <span className="text-[10px] sm:text-xs text-[hsl(var(--text-tertiary))] font-bold">Academic Year {selectedYear}</span>
         </div>
         <div className="flex items-center gap-0 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-violet-500/20">
           {lifecycleStages.map((s, i) => (
@@ -213,27 +255,52 @@ export function ExamDashboardTab({ officer }: { officer: OfficerData }) {
         </div>
       </div>
 
-      {/* ── KPI Grid ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-3">
-        {kpisList.map((k) => (
-          <button
-            key={k.label}
-            onClick={() => nav(k.id)}
-            className="glass-card rounded-2xl p-3 sm:p-4 flex items-center gap-2.5 sm:gap-3 group hover:scale-[1.02] active:scale-[0.98] transition-transform text-left"
-          >
-            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${k.color} ${k.urgency === 'critical' ? 'animate-pulse' : ''}`}>
-              <k.icon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-lg sm:text-xl font-black text-[hsl(var(--text-primary))] leading-none">{k.value}</p>
-              <p className="text-[11px] sm:text-xs font-semibold text-[hsl(var(--text-secondary))] mt-0.5 truncate">{k.label}</p>
-              <p className="text-[9px] sm:text-[10px] text-[hsl(var(--text-tertiary))] truncate">{k.sub}</p>
-            </div>
-          </button>
-        ))}
+      {/* ── 4. Main Analytics Charts Grid: Donut Breakdown & Student Details ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        <div className="xl:col-span-7">
+          <GradeDistributionChart data={gradeDistList} matrix={classGenderMatrixList} />
+        </div>
+        <div className="xl:col-span-5">
+          <StudentDetailsCarousel students={studentDetailsList} />
+        </div>
       </div>
 
-      {/* ── EXAM COMMUNICATION CENTER WIDGET ───────────────────── */}
+      {/* ── 5. Results & Averages Section: Grouped Bar & Radial Rings ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        <div className="xl:col-span-7">
+          <ExamResultsBarChart data={subjectResultsList} />
+        </div>
+        <div className="xl:col-span-5">
+          <AverageScoreRings gauges={subjectAveragesList} />
+        </div>
+      </div>
+
+      {/* ── 6. Operational KPI Grid ───────────────────────────────── */}
+      <div>
+        <h3 className="text-xs font-black uppercase text-[hsl(var(--text-tertiary))] tracking-wider mb-2.5">
+          Exam Operations Monitor
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-3">
+          {kpisList.map((k) => (
+            <button
+              key={k.label}
+              onClick={() => nav(k.id)}
+              className="glass-card rounded-2xl p-3 sm:p-4 flex items-center gap-2.5 sm:gap-3 group hover:scale-[1.02] active:scale-[0.98] transition-transform text-left"
+            >
+              <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${k.color} ${k.urgency === 'critical' ? 'animate-pulse' : ''}`}>
+                <k.icon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-lg sm:text-xl font-black text-[hsl(var(--text-primary))] leading-none">{k.value}</p>
+                <p className="text-[11px] sm:text-xs font-semibold text-[hsl(var(--text-secondary))] mt-0.5 truncate">{k.label}</p>
+                <p className="text-[9px] sm:text-[10px] text-[hsl(var(--text-tertiary))] truncate">{k.sub}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 7. Exam Communication Center & Action Required Widget ── */}
       <div className="glass-card rounded-2xl p-5 border border-violet-500/30 bg-gradient-to-r from-violet-500/5 to-indigo-500/5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-[hsl(var(--border))] pb-3">
           <div className="flex items-center gap-2">

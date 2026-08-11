@@ -2,8 +2,8 @@
 
 import type { OfficerData } from '../ExamOfficeDashboardContent';
 import {
-  ScrollText, Download, Printer, Search, RefreshCw, CheckCircle2, AlertTriangle,
-  Award, Sparkles, Filter, FileSpreadsheet, Eye, ChevronRight, X
+  ScrollText, Printer, Search, CheckCircle2,
+  FileSpreadsheet, X
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -50,8 +50,9 @@ const initialBroadsheets: Record<string, BroadsheetStudent[]> = {
 };
 
 export function BroadsheetsTab({ officer }: { officer: OfficerData }) {
+  void officer;
   const [selectedClass, setSelectedClass] = useState<string>('SSS 1A');
-  const [broadsheetData, setBroadsheetData] = useState(initialBroadsheets);
+  const [broadsheetData] = useState(initialBroadsheets);
   const [isGenerating, setIsGenerating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [successToast, setSuccessToast] = useState('');
@@ -141,10 +142,13 @@ export function BroadsheetsTab({ officer }: { officer: OfficerData }) {
           <p className="text-xs font-black text-[hsl(var(--text-tertiary))] uppercase tracking-wider">Select Class</p>
           <div className="space-y-2">
             {availableClasses.map(c => (
-              <button
+              <div
                 key={c.class}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedClass(c.class)}
-                className={`w-full p-3.5 rounded-2xl text-left border transition-all ${
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelectedClass(c.class); }}
+                className={`w-full p-3.5 rounded-2xl text-left border transition-all cursor-pointer ${
                   selectedClass === c.class
                     ? 'border-violet-500 bg-violet-500/10 shadow-lg shadow-violet-500/10'
                     : 'glass-card border-[hsl(var(--border))] hover:border-violet-500/30'
@@ -156,16 +160,17 @@ export function BroadsheetsTab({ officer }: { officer: OfficerData }) {
                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">✓ Generated</span>
                   ) : (
                     <button
+                      type="button"
                       onClick={(e) => { e.stopPropagation(); handleGenerateBroadsheet(c.class); }}
                       disabled={isGenerating}
-                      className="text-[10px] font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/20"
+                      className="text-[10px] font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/20 cursor-pointer"
                     >
                       {isGenerating ? 'Calculating...' : '⚡ Auto-Generate'}
                     </button>
                   )}
                 </div>
                 <p className="text-[10px] text-[hsl(var(--text-tertiary))] mt-1">{c.students} Candidates • {c.subjects} Core Subjects</p>
-              </button>
+              </div>
             ))}
           </div>
         </div>
