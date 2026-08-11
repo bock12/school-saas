@@ -30,6 +30,7 @@ import {
   NotificationsTab,
   SettingsTab,
   CommunicationsTab,
+  AdmissionsTab,
 } from './tabs';
 
 export type OfficerData = {
@@ -72,6 +73,7 @@ const TAB_MAP: Record<string, React.ComponentType<{ officer: OfficerData }>> = {
   calendar: CalendarTab,
   notifications: NotificationsTab,
   settings: SettingsTab,
+  admissions: AdmissionsTab,
 };
 
 function TabLoadingFallback() {

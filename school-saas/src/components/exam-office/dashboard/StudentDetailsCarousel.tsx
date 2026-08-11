@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Award, Trophy, Medal } from 'lucide-react';
+import { Award, Trophy, Medal, RotateCcw } from 'lucide-react';
 
 export type StudentDetailCard = {
   id: string;
@@ -181,17 +181,25 @@ export function StudentDetailsCarousel({ students = defaultStudents }: { student
     setClassArmFilter('All');
   }
 
+  // Reset all filters to default
+  function resetFilters() {
+    setLevelFilter('All');
+    setStreamFilter('All');
+    setClassArmFilter('All');
+    setGenderFilter('All');
+  }
+
   return (
     <div className="glass-card rounded-2xl p-3.5 sm:p-5 flex flex-col justify-between border border-[hsl(var(--border)/0.6)] h-full overflow-hidden">
-      {/* Responsive Header with Single-Row Dropdowns */}
+      {/* Responsive Header */}
       <div className="flex flex-row items-center justify-between gap-1.5 sm:gap-2 mb-2.5 pb-2 border-b border-[hsl(var(--border)/0.4)]">
         <div className="flex-shrink-0">
           <h3 className="font-black text-xs sm:text-sm text-[hsl(var(--text-primary))] leading-tight whitespace-nowrap">Top 3 Performers</h3>
-          <p className="text-[9px] sm:text-[10px] text-[hsl(var(--text-tertiary))] truncate max-w-[100px] sm:max-w-none">Filter by level & stream</p>
+          <p className="text-[9px] sm:text-[10px] text-[hsl(var(--text-tertiary))] truncate max-w-[90px] sm:max-w-none">Filter by level & stream</p>
         </div>
 
-        {/* 4 Filter Dropdowns aligned in ONE HORIZONTAL ROW */}
-        <div className="flex items-center gap-1 sm:gap-1.5 flex-nowrap overflow-x-auto w-full sm:w-auto scrollbar-none py-0.5">
+        {/* 4 Filter Dropdowns + Circle Arrow Reset Button */}
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-nowrap overflow-x-auto w-full lg:w-auto scrollbar-none py-0.5 justify-end">
           {/* 1. Level */}
           <div className="flex flex-col flex-shrink-0">
             <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-[hsl(var(--text-tertiary))]">Level</label>
@@ -252,10 +260,22 @@ export function StudentDetailsCarousel({ students = defaultStudents }: { student
               <option value="Female">Female</option>
             </select>
           </div>
+
+          {/* Circle Arrow Reset Button */}
+          <div className="flex flex-col flex-shrink-0 justify-end">
+            <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-transparent select-none">Reset</label>
+            <button
+              onClick={resetFilters}
+              title="Reset Filters"
+              className="p-1 sm:p-1.5 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border)/0.8)] text-[hsl(var(--text-tertiary))] hover:text-violet-400 hover:border-violet-500/50 transition-colors flex items-center justify-center"
+            >
+              <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Top 3 Student Cards Grid — Responsive for Sidebar Expand / Collapse */}
+      {/* Top 3 Student Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 my-auto">
         {topPerformers.map((student, idx) => {
           const badge = rankBadges[idx] || rankBadges[0];

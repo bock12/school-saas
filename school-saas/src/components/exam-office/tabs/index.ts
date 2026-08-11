@@ -26,3 +26,4 @@ export { CalendarTab } from './CalendarTab';
 export { NotificationsTab } from './NotificationsTab';
 export { SettingsTab } from './SettingsTab';
 export { CommunicationsTab } from './CommunicationsTab';
+export { AdmissionsTab } from './AdmissionsTab';

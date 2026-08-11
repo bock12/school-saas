@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { RotateCcw } from 'lucide-react';
 
 export type GradeDataItem = {
   name: string;
@@ -232,6 +233,24 @@ export function GradeDistributionChart({
               <option value="Male">Male</option>
               <option value="Female">Female</option>
             </select>
+          </div>
+
+          {/* Circle Arrow Reset Button */}
+          <div className="flex flex-col flex-shrink-0 justify-end">
+            <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-transparent select-none">Reset</label>
+            <button
+              onClick={() => {
+                setLevelFilter('All');
+                setStreamFilter('All');
+                setClassArmFilter('All');
+                setGenderFilter('All');
+                setActiveIndex(0);
+              }}
+              title="Reset Filters"
+              className="p-1 sm:p-1.5 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border)/0.8)] text-[hsl(var(--text-tertiary))] hover:text-violet-400 hover:border-violet-500/50 transition-colors flex items-center justify-center"
+            >
+              <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            </button>
           </div>
         </div>
       </div>

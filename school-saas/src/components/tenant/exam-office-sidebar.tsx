@@ -11,7 +11,7 @@ import {
   Send, Archive, ScrollText, Stamp,
   MessageSquare, Settings, FlaskConical,
   ChevronDown, ChevronRight, ChevronLeft, Fingerprint,
-  UserCheck, BookMarked, Sparkles, X
+  UserCheck, BookMarked, Sparkles, X, GraduationCap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './sidebar-provider';
@@ -53,6 +53,7 @@ const navGroups: NavGroup[] = [
     emoji: '👥',
     color: 'text-emerald-400',
     items: [
+      { id: 'admissions', label: 'National Admissions', icon: GraduationCap, badge: 'SL' },
       { id: 'eligibility', label: 'Eligibility & Clearance', icon: UserCheck },
       { id: 'admit-cards', label: 'Admit Cards & Roll Nos.', icon: Fingerprint },
     ],
