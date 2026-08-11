@@ -12,7 +12,7 @@ import {
   TrendingUp, BarChart3,
   MessageSquare, Megaphone,
   Brain, CalendarX, BookMarked, Settings,
-  ChevronDown, ChevronRight
+  ChevronDown, ChevronRight, ChevronLeft, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './sidebar-provider';
@@ -22,7 +22,7 @@ type NavGroup = {
   label: string;
   emoji: string;
   color: string;
-  items: { id: string; label: string; icon: React.ElementType }[];
+  items: { id: string; label: string; icon: React.ElementType; badge?: string }[];
 };
 
 const navGroups: NavGroup[] = [
@@ -71,7 +71,7 @@ const navGroups: NavGroup[] = [
     emoji: '✅',
     color: 'text-teal-400',
     items: [
-      { id: 'attendance', label: 'Take Attendance', icon: CheckSquare },
+      { id: 'attendance', label: 'Take Attendance', icon: CheckSquare, badge: 'Daily' },
       { id: 'attendance-history', label: 'Attendance History', icon: RotateCcw },
     ],
   },
@@ -81,7 +81,7 @@ const navGroups: NavGroup[] = [
     color: 'text-purple-400',
     items: [
       { id: 'gradebook', label: 'Gradebook', icon: Award },
-      { id: 'scores', label: 'Enter Scores', icon: ClipboardList },
+      { id: 'scores', label: 'Enter Scores', icon: ClipboardList, badge: 'Exam' },
       { id: 'behaviour', label: 'Behaviour', icon: AlertTriangle },
     ],
   },
@@ -108,7 +108,7 @@ const navGroups: NavGroup[] = [
     emoji: '⚙️',
     color: 'text-slate-400',
     items: [
-      { id: 'ai-assistant', label: 'AI Teaching Assistant', icon: Brain },
+      { id: 'ai-assistant', label: 'AI Teaching Assistant', icon: Brain, badge: 'AI' },
       { id: 'leave', label: 'Leave Requests', icon: CalendarX },
       { id: 'resources', label: 'Resources & Library', icon: BookMarked },
       { id: 'settings', label: 'Settings', icon: Settings },
@@ -128,7 +128,7 @@ export function TeacherSidebar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams.get('tab') || 'dashboard';
-  const { isCollapsed } = useSidebar();
+  const { isCollapsed, isMobileOpen, toggleCollapsed, closeMobile } = useSidebar();
   const basePath = `/teacher`;
 
   const activeGroupLabel =
@@ -142,103 +142,166 @@ export function TeacherSidebar({
   };
 
   return (
-    <aside
-      className={cn(
-        'fixed inset-y-0 left-0 z-40 bg-[hsl(var(--bg-secondary))] border-r border-[hsl(var(--border))] transition-all duration-300 overflow-y-auto scrollbar-none flex flex-col',
-        isCollapsed ? 'w-16' : 'w-60'
-      )}
-    >
-      {/* Brand header */}
-      <div className="h-16 flex items-center px-3 border-b border-[hsl(var(--border))] sticky top-0 bg-[hsl(var(--bg-secondary))] z-10 flex-shrink-0">
+    <>
+      {/* Mobile Backdrop */}
+      {isMobileOpen && (
         <div
-          className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-white text-sm flex-shrink-0 shadow-md"
-          style={{ background: `linear-gradient(135deg, ${primaryColor || '#6366f1'}, ${primaryColor || '#6366f1'}99)` }}
-        >
-          {tenantName ? tenantName.substring(0, 1).toUpperCase() : 'T'}
-        </div>
-        {!isCollapsed && (
-          <div className="ml-2.5 min-w-0">
-            <p className="font-bold text-xs text-[hsl(var(--text-primary))] truncate">{tenantName}</p>
-            <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Teacher Portal</p>
-          </div>
+          onClick={closeMobile}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden transition-opacity"
+        />
+      )}
+
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 bg-[hsl(var(--bg-secondary))] border-r border-[hsl(var(--border)/0.8)] transition-all duration-300 overflow-y-auto scrollbar-none flex flex-col shadow-xl',
+          isCollapsed ? 'w-16' : 'w-64',
+          isMobileOpen ? 'translate-x-0 w-64' : '-translate-x-full lg:translate-x-0'
         )}
-      </div>
-
-      {/* Nav groups */}
-      <nav className="flex-1 py-3 space-y-0.5">
-        {navGroups.map((group) => {
-          const isGroupOpen = isCollapsed || openGroups.includes(group.label);
-          const hasActive = group.items.some((i) => i.id === currentTab);
-
-          return (
-            <div key={group.label}>
-              {/* Group header */}
-              {!isCollapsed && (
-                <button
-                  onClick={() => toggleGroup(group.label)}
-                  className={cn(
-                    'w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors',
-                    hasActive
-                      ? group.color
-                      : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))]'
-                  )}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span>{group.emoji}</span>
-                    <span>{group.label}</span>
-                  </span>
-                  {isGroupOpen ? (
-                    <ChevronDown className="w-3 h-3" />
-                  ) : (
-                    <ChevronRight className="w-3 h-3" />
-                  )}
-                </button>
-              )}
-
-              {/* Group items */}
-              {isGroupOpen && (
-                <div className={cn('space-y-0.5', !isCollapsed && 'px-2 pb-1')}>
-                  {group.items.map((item) => {
-                    const isPathMode = pathname.startsWith(`/${tenantSlug}`);
-                    const targetHref = isPathMode
-                      ? `/${tenantSlug}${basePath}?tab=${item.id}`
-                      : `${basePath}?tab=${item.id}`;
-                    const isActive =
-                      pathname.includes('/teacher') &&
-                      (currentTab === item.id ||
-                        (!searchParams.get('tab') && item.id === 'dashboard'));
-                    const Icon = item.icon;
-
-                    return (
-                      <Link
-                        key={item.id}
-                        href={targetHref}
-                        title={isCollapsed ? item.label : undefined}
-                        className={cn(
-                          'flex items-center rounded-xl text-xs font-semibold transition-all group',
-                          isCollapsed ? 'justify-center w-10 h-10 mx-auto' : 'px-3 py-2',
-                          isActive
-                            ? 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white shadow-md shadow-[hsl(var(--accent)/0.2)]'
-                            : 'text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))]'
-                        )}
-                      >
-                        <Icon
-                          className={cn(
-                            'flex-shrink-0',
-                            isCollapsed ? 'w-4 h-4' : 'w-4 h-4',
-                            isActive ? 'text-white' : 'text-[hsl(var(--text-tertiary))]'
-                          )}
-                        />
-                        {!isCollapsed && <span className="ml-2.5 truncate">{item.label}</span>}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
+      >
+        {/* Brand header */}
+        <div className="h-16 flex items-center justify-between px-3 border-b border-[hsl(var(--border)/0.8)] sticky top-0 bg-[hsl(var(--bg-secondary))] z-10 flex-shrink-0 backdrop-blur-md">
+          <div className="flex items-center min-w-0">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-white text-sm flex-shrink-0 shadow-lg relative group"
+              style={{ background: `linear-gradient(135deg, ${primaryColor || '#6366f1'}, #4f46e5)` }}
+            >
+              <GraduationCap className="w-5 h-5 text-white" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[hsl(var(--bg-secondary))]" />
             </div>
-          );
-        })}
-      </nav>
-    </aside>
+            {!isCollapsed && (
+              <div className="ml-3 min-w-0">
+                <p className="font-bold text-xs text-[hsl(var(--text-primary))] truncate leading-tight">{tenantName}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/15 px-1.5 py-0.2 rounded-md">Teacher Portal</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Desktop collapse toggle button in header */}
+          <button
+            onClick={toggleCollapsed}
+            className="hidden lg:flex p-1.5 rounded-lg text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+            title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+          >
+            <ChevronLeft className={cn('w-4 h-4 transition-transform duration-300', isCollapsed && 'rotate-180')} />
+          </button>
+        </div>
+
+        {/* Nav groups */}
+        <nav className="flex-1 py-3 space-y-1">
+          {navGroups.map((group) => {
+            const isGroupOpen = isCollapsed || openGroups.includes(group.label);
+            const hasActive = group.items.some((i) => i.id === currentTab);
+
+            return (
+              <div key={group.label} className="px-2">
+                {/* Group header */}
+                {!isCollapsed && (
+                  <button
+                    onClick={() => toggleGroup(group.label)}
+                    className={cn(
+                      'w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors rounded-lg hover:bg-[hsl(var(--bg-tertiary)/0.4)]',
+                      hasActive
+                        ? group.color
+                        : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))]'
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span>{group.emoji}</span>
+                      <span>{group.label}</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {hasActive && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
+                      )}
+                      {isGroupOpen ? (
+                        <ChevronDown className="w-3 h-3" />
+                      ) : (
+                        <ChevronRight className="w-3 h-3" />
+                      )}
+                    </div>
+                  </button>
+                )}
+
+                {/* Group items */}
+                {isGroupOpen && (
+                  <div className={cn('space-y-0.5 mt-0.5', !isCollapsed && 'pb-1')}>
+                    {group.items.map((item) => {
+                      const isPathMode = pathname.startsWith(`/${tenantSlug}`);
+                      const targetHref = isPathMode
+                        ? `/${tenantSlug}${basePath}?tab=${item.id}`
+                        : `${basePath}?tab=${item.id}`;
+                      const isActive =
+                        pathname.includes('/teacher') &&
+                        (currentTab === item.id ||
+                          (!searchParams.get('tab') && item.id === 'dashboard'));
+                      const Icon = item.icon;
+
+                      return (
+                        <Link
+                          key={item.id}
+                          href={targetHref}
+                          onClick={closeMobile}
+                          title={isCollapsed ? item.label : undefined}
+                          className={cn(
+                            'flex items-center rounded-xl text-xs font-semibold transition-all group relative',
+                            isCollapsed ? 'justify-center w-10 h-10 mx-auto my-0.5' : 'px-3 py-2.5',
+                            isActive
+                              ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-500/25 font-bold'
+                              : 'text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))]'
+                          )}
+                        >
+                          <Icon
+                            className={cn(
+                              'flex-shrink-0 transition-transform duration-200 group-hover:scale-110',
+                              isCollapsed ? 'w-4 h-4' : 'w-4 h-4',
+                              isActive ? 'text-white' : 'text-[hsl(var(--text-tertiary))] group-hover:text-[hsl(var(--text-primary))]'
+                            )}
+                          />
+                          {!isCollapsed && (
+                            <span className="ml-2.5 truncate flex-1">{item.label}</span>
+                          )}
+                          {!isCollapsed && item.badge && (
+                            <span className={cn(
+                              'ml-auto text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase tracking-tighter',
+                              isActive ? 'bg-white/20 text-white' : 'bg-indigo-500/15 text-indigo-400'
+                            )}>
+                              {item.badge}
+                            </span>
+                          )}
+
+                          {/* Hover Tooltip in Collapsed Rail Mode */}
+                          {isCollapsed && (
+                            <span className="pointer-events-none absolute left-full ml-3 hidden group-hover:flex items-center px-2.5 py-1.5 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-primary))] whitespace-nowrap shadow-2xl z-50">
+                              {item.label}
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* Footer Collapse Toggle (desktop only) */}
+        <div className="border-t border-[hsl(var(--border)/0.8)] p-2 flex-shrink-0 hidden lg:block bg-[hsl(var(--bg-secondary))]">
+          <button
+            onClick={toggleCollapsed}
+            className={cn(
+              'w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all',
+              isCollapsed && 'px-0'
+            )}
+            title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+          >
+            <ChevronLeft className={cn('w-4 h-4 transition-transform duration-300', isCollapsed && 'rotate-180')} />
+            {!isCollapsed && <span>Collapse Sidebar</span>}
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

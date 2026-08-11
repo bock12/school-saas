@@ -11,7 +11,7 @@ import {
   Send, Archive, ScrollText, Stamp,
   MessageSquare, Settings, FlaskConical,
   ChevronDown, ChevronRight, ChevronLeft, Fingerprint,
-  UserCheck, BookMarked,
+  UserCheck, BookMarked, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './sidebar-provider';
@@ -21,7 +21,8 @@ type NavGroup = {
   label: string;
   emoji: string;
   color: string;
-  items: { id: string; label: string; icon: React.ElementType }[];
+  badge?: string;
+  items: { id: string; label: string; icon: React.ElementType; badge?: string }[];
 };
 
 const navGroups: NavGroup[] = [
@@ -31,7 +32,7 @@ const navGroups: NavGroup[] = [
     color: 'text-violet-400',
     items: [
       { id: 'dashboard', label: 'Control Center', icon: LayoutDashboard },
-      { id: 'communications', label: 'Communication Center', icon: MessageSquare },
+      { id: 'communications', label: 'Communication Center', icon: MessageSquare, badge: 'New' },
       { id: 'notifications', label: 'Notifications', icon: Bell },
       { id: 'calendar', label: 'Exam Calendar', icon: Calendar },
       { id: 'audit', label: 'Audit & Security Log', icon: Shield },
@@ -73,7 +74,7 @@ const navGroups: NavGroup[] = [
     color: 'text-teal-400',
     items: [
       { id: 'hall-attendance', label: 'Hall Attendance', icon: CheckSquare },
-      { id: 'malpractice', label: 'Malpractice & Incidents', icon: AlertTriangle },
+      { id: 'malpractice', label: 'Malpractice & Incidents', icon: AlertTriangle, badge: 'Live' },
     ],
   },
   {
@@ -149,30 +150,33 @@ export function ExamOfficeSidebar({
       {isMobileOpen && (
         <div
           onClick={closeMobile}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 lg:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden transition-opacity"
         />
       )}
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 bg-[hsl(var(--bg-secondary))] border-r border-[hsl(var(--border))] transition-all duration-300 overflow-y-auto scrollbar-none flex flex-col',
-          isCollapsed ? 'w-16' : 'w-60',
-          isMobileOpen ? 'translate-x-0 w-60' : '-translate-x-full lg:translate-x-0'
+          'fixed inset-y-0 left-0 z-40 bg-[hsl(var(--bg-secondary))] border-r border-[hsl(var(--border)/0.8)] transition-all duration-300 overflow-y-auto scrollbar-none flex flex-col shadow-xl',
+          isCollapsed ? 'w-16' : 'w-64',
+          isMobileOpen ? 'translate-x-0 w-64' : '-translate-x-full lg:translate-x-0'
         )}
       >
         {/* Brand header */}
-        <div className="h-16 flex items-center justify-between px-3 border-b border-[hsl(var(--border))] sticky top-0 bg-[hsl(var(--bg-secondary))] z-10 flex-shrink-0">
+        <div className="h-16 flex items-center justify-between px-3 border-b border-[hsl(var(--border)/0.8)] sticky top-0 bg-[hsl(var(--bg-secondary))] z-10 flex-shrink-0 backdrop-blur-md">
           <div className="flex items-center min-w-0">
             <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-white text-sm flex-shrink-0 shadow-md"
+              className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-white text-sm flex-shrink-0 shadow-lg shadow-violet-500/25 relative group"
               style={{ background: `linear-gradient(135deg, #7c3aed, #4f46e5)` }}
             >
-              E
+              <Sparkles className="w-4 h-4 text-white animate-pulse" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[hsl(var(--bg-secondary))]" />
             </div>
             {!isCollapsed && (
-              <div className="ml-2.5 min-w-0">
-                <p className="font-bold text-xs text-[hsl(var(--text-primary))] truncate">{tenantName}</p>
-                <p className="text-[10px] text-violet-400 font-semibold">Exam Office</p>
+              <div className="ml-3 min-w-0">
+                <p className="font-bold text-xs text-[hsl(var(--text-primary))] truncate leading-tight">{tenantName}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] font-bold text-violet-400 bg-violet-500/15 px-1.5 py-0.2 rounded-md">Exam Office</span>
+                </div>
               </div>
             )}
           </div>
@@ -183,23 +187,23 @@ export function ExamOfficeSidebar({
             className="hidden lg:flex p-1.5 rounded-lg text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
             title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
-            <ChevronLeft className={cn('w-4 h-4 transition-transform duration-200', isCollapsed && 'rotate-180')} />
+            <ChevronLeft className={cn('w-4 h-4 transition-transform duration-300', isCollapsed && 'rotate-180')} />
           </button>
         </div>
 
         {/* Nav groups */}
-        <nav className="flex-1 py-3 space-y-0.5">
+        <nav className="flex-1 py-3 space-y-1">
           {navGroups.map((group) => {
             const isGroupOpen = isCollapsed || openGroups.includes(group.label);
             const hasActive = group.items.some((i) => i.id === currentTab);
 
             return (
-              <div key={group.label}>
+              <div key={group.label} className="px-2">
                 {!isCollapsed && (
                   <button
                     onClick={() => toggleGroup(group.label)}
                     className={cn(
-                      'w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors',
+                      'w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors rounded-lg hover:bg-[hsl(var(--bg-tertiary)/0.4)]',
                       hasActive
                         ? group.color
                         : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))]'
@@ -209,12 +213,17 @@ export function ExamOfficeSidebar({
                       <span>{group.emoji}</span>
                       <span>{group.label}</span>
                     </span>
-                    {isGroupOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    <div className="flex items-center gap-1">
+                      {hasActive && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping" />
+                      )}
+                      {isGroupOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    </div>
                   </button>
                 )}
 
                 {isGroupOpen && (
-                  <div className={cn('space-y-0.5', !isCollapsed && 'px-2 pb-1')}>
+                  <div className={cn('space-y-0.5 mt-0.5', !isCollapsed && 'pb-1')}>
                     {group.items.map((item) => {
                       const targetHref = `${basePath}?tab=${item.id}`;
                       const isActive =
@@ -230,20 +239,38 @@ export function ExamOfficeSidebar({
                           onClick={closeMobile}
                           title={isCollapsed ? item.label : undefined}
                           className={cn(
-                            'flex items-center rounded-xl text-xs font-semibold transition-all group',
-                            isCollapsed ? 'justify-center w-10 h-10 mx-auto' : 'px-3 py-2',
+                            'flex items-center rounded-xl text-xs font-semibold transition-all group relative',
+                            isCollapsed ? 'justify-center w-10 h-10 mx-auto my-0.5' : 'px-3 py-2.5',
                             isActive
-                              ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-500/20'
+                              ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 font-bold'
                               : 'text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))]'
                           )}
                         >
                           <Icon
                             className={cn(
-                              'flex-shrink-0 w-4 h-4',
-                              isActive ? 'text-white' : 'text-[hsl(var(--text-tertiary))]'
+                              'flex-shrink-0 transition-transform duration-200 group-hover:scale-110',
+                              isCollapsed ? 'w-4 h-4' : 'w-4 h-4',
+                              isActive ? 'text-white' : 'text-[hsl(var(--text-tertiary))] group-hover:text-[hsl(var(--text-primary))]'
                             )}
                           />
-                          {!isCollapsed && <span className="ml-2.5 truncate">{item.label}</span>}
+                          {!isCollapsed && (
+                            <span className="ml-2.5 truncate flex-1">{item.label}</span>
+                          )}
+                          {!isCollapsed && item.badge && (
+                            <span className={cn(
+                              'ml-auto text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase tracking-tighter',
+                              isActive ? 'bg-white/20 text-white' : 'bg-violet-500/15 text-violet-400'
+                            )}>
+                              {item.badge}
+                            </span>
+                          )}
+
+                          {/* Hover Tooltip in Collapsed Rail Mode */}
+                          {isCollapsed && (
+                            <span className="pointer-events-none absolute left-full ml-3 hidden group-hover:flex items-center px-2.5 py-1.5 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-primary))] whitespace-nowrap shadow-2xl z-50">
+                              {item.label}
+                            </span>
+                          )}
                         </Link>
                       );
                     })}
@@ -255,16 +282,16 @@ export function ExamOfficeSidebar({
         </nav>
 
         {/* Footer Collapse Toggle (desktop only) */}
-        <div className="border-t border-[hsl(var(--border))] p-2.5 flex-shrink-0 hidden lg:block">
+        <div className="border-t border-[hsl(var(--border)/0.8)] p-2 flex-shrink-0 hidden lg:block bg-[hsl(var(--bg-secondary))]">
           <button
             onClick={toggleCollapsed}
             className={cn(
-              'w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors',
+              'w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all',
               isCollapsed && 'px-0'
             )}
             title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
-            <ChevronLeft className={cn('w-4 h-4 transition-transform duration-200', isCollapsed && 'rotate-180')} />
+            <ChevronLeft className={cn('w-4 h-4 transition-transform duration-300', isCollapsed && 'rotate-180')} />
             {!isCollapsed && <span>Collapse Sidebar</span>}
           </button>
         </div>
