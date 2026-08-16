@@ -85,8 +85,10 @@ export default function MessagingClient({
   const [callState, setCallState] = useState<CallState | null>(null);
   const [dmError, setDmError] = useState<string | null>(null);
   const [groupError, setGroupError] = useState<string | null>(null);
+  const [callingToast, setCallingToast] = useState<string | null>(null);
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
+  const callStateRef = useRef<CallState | null>(null);
   const myRule = MESSAGING_RULES[currentUserRole] || MESSAGING_RULES.student;
 
   // ── Realtime: active channel messages ─────────────────────────────────────
@@ -153,12 +155,18 @@ export default function MessagingClient({
     return () => { supabase.removeChannel(channelSub); };
   }, [currentUserId, tenantId, tenantSlug]);
 
+  // Keep callStateRef in sync so the incoming call listener is always current
+  // without needing to re-subscribe to the Supabase channel.
+  useEffect(() => { callStateRef.current = callState; }, [callState]);
+
   // ── Realtime: incoming call signals ───────────────────────────────────────
+  // Subscribe ONCE (no callState in deps). Use callStateRef inside the handler
+  // to read the latest value without triggering re-subscription churn.
   useEffect(() => {
     const callSub = supabase
-      .channel(`call-signal:${currentUserId}`)
+      .channel(`call-signal:${currentUserId}`, { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'call-invite' }, ({ payload }) => {
-        if (payload.to === currentUserId && !callState) {
+        if (payload.to === currentUserId && !callStateRef.current) {
           setCallState({
             channelId: payload.channelId,
             peerId: payload.from,
@@ -171,7 +179,8 @@ export default function MessagingClient({
       })
       .subscribe();
     return () => { supabase.removeChannel(callSub); };
-  }, [currentUserId, callState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId]);
 
   // ── Enrich channels with participant profiles ──────────────────────────────
   useEffect(() => {
@@ -266,13 +275,30 @@ export default function MessagingClient({
 
   // ── Start a call ───────────────────────────────────────────────────────────
   const handleStartCall = useCallback(async (channelId: string, type: 'voice' | 'video') => {
+    if (callStateRef.current) return; // already in a call
     const channel = channels.find(c => c.id === channelId);
     if (!channel) return;
     const peer = channel.participants?.find(p => p.id !== currentUserId);
     if (!peer) return;
 
-    // Signal the peer via Supabase broadcast
-    await supabase.channel(`call-signal:${peer.id}`).send({
+    setCallingToast(`📞 Calling ${peer.full_name}...`);
+
+    // Must subscribe to the peer's personal signal channel before sending.
+    // Supabase broadcast only delivers to subscribed members, so we subscribe,
+    // wait for the SUBSCRIBED status, then send the invite.
+    const peerSigCh = supabase.channel(`call-signal:${peer.id}`, {
+      config: { broadcast: { self: false } },
+    });
+
+    await new Promise<void>((resolve) => {
+      peerSigCh.subscribe((status) => {
+        if (status === 'SUBSCRIBED') resolve();
+      });
+      // Fallback timeout
+      setTimeout(resolve, 2000);
+    });
+
+    await peerSigCh.send({
       type: 'broadcast',
       event: 'call-invite',
       payload: {
@@ -285,6 +311,10 @@ export default function MessagingClient({
       },
     });
 
+    // Don't remove peerSigCh immediately — the call-end signal may come on it
+    // The CallModal manages the dedicated WebRTC signaling channel separately.
+
+    setCallingToast(null);
     setCallState({
       channelId, peerId: peer.id, peerName: peer.full_name,
       peerAvatar: peer.avatar_url, type, direction: 'outgoing',
@@ -312,6 +342,14 @@ export default function MessagingClient({
           <span className="shrink-0">⚠️</span>
           <span>{dmError || groupError}</span>
           <button onClick={() => { setDmError(null); setGroupError(null); }} className="ml-2 opacity-70 hover:opacity-100">✕</button>
+        </div>
+      )}
+
+      {/* Calling toast */}
+      {callingToast && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-emerald-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 max-w-sm animate-fade-in">
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse shrink-0" />
+          <span>{callingToast}</span>
         </div>
       )}
 

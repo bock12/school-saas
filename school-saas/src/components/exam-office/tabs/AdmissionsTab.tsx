@@ -431,7 +431,7 @@ export function AdmissionsTab({ officer }: { officer: OfficerData }) {
             <button onClick={resetFilters} className="p-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors" title="Reset filters">
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
-            <button onClick={fetchData} disabled={isLoading} className="p-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-tertiary))] hover:text-violet-400 transition-colors">
+            <button onClick={() => setRefreshKey(k => k + 1)} disabled={isLoading} className="p-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-tertiary))] hover:text-violet-400 transition-colors">
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-violet-400' : ''}`} />
             </button>
             <span className="text-xs text-[hsl(var(--text-tertiary))] font-semibold ml-auto">{total} applicant{total !== 1 ? 's' : ''}</span>

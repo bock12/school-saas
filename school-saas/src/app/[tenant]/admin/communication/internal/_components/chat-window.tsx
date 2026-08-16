@@ -6,7 +6,7 @@ import {
   Smile, X, Reply, Edit2, Trash2, CheckCheck, Check, Download,
   FileText, Image as ImageIcon, Users,
   Mic, Camera, Music, Zap, BarChart2, Calendar, MapPin, Play,
-  Pause, Plus, Volume2
+  Pause, Plus
 } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatUser } from './actions';
 import { sendMessage, editMessage, deleteMessage, toggleReaction, markChannelRead } from './actions';
@@ -84,6 +84,46 @@ function isSameDay(a: string, b: string) {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
+function parseDurationSec(durationStr?: string): number {
+  if (!durationStr) return 5;
+  const parts = durationStr.split(':').map(Number);
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return Math.max(1, parts[0] * 60 + parts[1]);
+  }
+  const s = parseFloat(durationStr);
+  return !isNaN(s) && s > 0 ? s : 5;
+}
+
+// Convert Base64 data URL to an in-memory playable Blob URL
+function getPlayableAudioUrl(url?: string): string | null {
+  if (!url || url === '#' || url.length < 10) return null;
+  if (url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  if (url.startsWith('data:audio/')) {
+    try {
+      const parts = url.split(';base64,');
+      const contentType = parts[0]?.replace('data:', '') || 'audio/webm';
+      const byteCharacters = atob(parts[1] || parts[0]);
+      const byteArrays = [];
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        byteArrays.push(new Uint8Array(byteNumbers));
+      }
+      const blob = new Blob(byteArrays, { type: contentType });
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn('Could not parse base64 audio, returning raw url:', e);
+      return url;
+    }
+  }
+  return url;
+}
+
 const AVATAR_COLORS = ['bg-violet-600', 'bg-emerald-600', 'bg-amber-600', 'bg-rose-600', 'bg-sky-600', 'bg-fuchsia-600'];
 function avatarColor(id: string) {
   return AVATAR_COLORS[(id.charCodeAt(0) || 0) % AVATAR_COLORS.length];
@@ -122,7 +162,23 @@ export default function ChatWindow({
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [liveVolumeBars, setLiveVolumeBars] = useState<number[]>([25, 45, 70, 35, 80, 50, 90, 40, 75, 55, 65, 30]);
+
+  // Audio playback state
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const playProgressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [playingAudioMsgId, setPlayingAudioMsgId] = useState<string | null>(null);
+  const [audioProgressMap, setAudioProgressMap] = useState<Record<string, number>>({});
+  const [audioCurrentTimeMap, setAudioCurrentTimeMap] = useState<Record<string, string>>({});
+  const [playbackRateMap, setPlaybackRateMap] = useState<Record<string, number>>({});
+
+  // Real MediaRecorder & Audio visualizer refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
 
   // Modals for Extra Attachments
   const [showQuickReplyModal, setShowQuickReplyModal] = useState(false);
@@ -168,6 +224,17 @@ export default function ChatWindow({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showAttachMenu]);
+
+  // Cleanup audio player interval on unmount
+  useEffect(() => {
+    return () => {
+      if (playProgressIntervalRef.current) clearInterval(playProgressIntervalRef.current);
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+        activeAudioRef.current = null;
+      }
+    };
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -316,45 +383,320 @@ export default function ChatWindow({
     reader.readAsDataURL(file);
   };
 
-  // Send Voice Note Action
-  const handleSendVoiceNote = useCallback(async () => {
+  // ── REAL VOICE RECORDING ENGINE (MediaRecorder + AudioContext) ─────────────
+  const startVoiceRecording = async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Microphone access is not supported by your browser.');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true }
+      });
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      // Connect Analyser for real-time waveform animation
+      try {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const source = ctx.createMediaStreamSource(stream);
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 64;
+          source.connect(analyser);
+          audioContextRef.current = ctx;
+          analyserRef.current = analyser;
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          const updateWaveform = () => {
+            if (!analyserRef.current) return;
+            analyserRef.current.getByteFrequencyData(dataArray);
+            const bars: number[] = [];
+            const step = Math.max(1, Math.floor(dataArray.length / 12));
+            for (let i = 0; i < 12; i++) {
+              const val = dataArray[i * step] || 0;
+              bars.push(Math.max(15, Math.min(100, Math.round((val / 255) * 100))));
+            }
+            setLiveVolumeBars(bars);
+            animFrameRef.current = requestAnimationFrame(updateWaveform);
+          };
+          animFrameRef.current = requestAnimationFrame(updateWaveform);
+        }
+      } catch (err) {
+        console.warn('AudioContext visualizer not available:', err);
+      }
+
+      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+      const supportedMime = mimeTypes.find(m => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) || '';
+
+      const recorder = supportedMime ? new MediaRecorder(stream, { mimeType: supportedMime }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.start(100);
+      setIsRecordingVoice(true);
+      setRecordingSeconds(0);
+    } catch (err) {
+      console.error('Error starting audio recording:', err);
+      alert('Could not access microphone. Please enable microphone permissions in your browser.');
+    }
+  };
+
+  const cancelVoiceRecording = () => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(track => track.stop());
+      audioStreamRef.current = null;
+    }
+    audioChunksRef.current = [];
+    setIsRecordingVoice(false);
+    setRecordingSeconds(0);
+  };
+
+  const stopAndSendVoiceRecording = async () => {
     if (!channel) return;
-    const durationStr = `${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')}`;
+    const finalSeconds = Math.max(1, recordingSeconds);
+    const durationStr = `${Math.floor(finalSeconds / 60)}:${String(finalSeconds % 60).padStart(2, '0')}`;
+
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') {
+      cancelVoiceRecording();
+      return;
+    }
+
+    // Flush any pending data before stopping
+    try {
+      if (recorder.state === 'recording') {
+        recorder.requestData();
+      }
+    } catch {}
+
+    const stopPromise = new Promise<Blob>((resolve) => {
+      recorder.onstop = () => {
+        const mimeType = recorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        audioChunksRef.current = [];
+        resolve(audioBlob);
+      };
+      recorder.stop();
+    });
+
+    const audioBlob = await stopPromise;
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(track => track.stop());
+      audioStreamRef.current = null;
+    }
+
     setIsRecordingVoice(false);
     setRecordingSeconds(0);
 
-    const fd = new FormData();
-    fd.append('channel_id', channel.id);
-    fd.append('attachment', JSON.stringify({
-      type: 'audio',
-      name: `Voice Memo (${durationStr || '0:05'})`,
-      url: '#',
-      duration: durationStr || '0:05',
-    }));
+    if (audioBlob.size === 0) {
+      console.warn('Recorded audio blob is empty');
+      return;
+    }
 
-    const optimistic: ChatMessage = {
-      id: `temp-${Math.random().toString(36).substring(2, 9)}`,
-      channel_id: channel.id,
-      sender_id: currentUserId,
-      content: null,
-      attachment: {
+    const localBlobUrl = URL.createObjectURL(audioBlob);
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64Audio = (reader.result as string) || '';
+      const attachObj: RichAttachPayload = {
         type: 'audio',
-        name: `Voice Memo (${durationStr || '0:05'})`,
-        url: '#',
-        size: 24500,
-      },
-      reply_to_id: null,
-      reply_to_snapshot: null,
-      reactions: {},
-      is_edited: false,
-      is_deleted: false,
-      read_by: [],
-      created_at: new Date().toISOString(),
-      sender: currentUser,
+        name: `Voice Memo (${durationStr})`,
+        url: base64Audio || localBlobUrl,
+        size: audioBlob.size,
+        duration: durationStr,
+      };
+
+      const fd = new FormData();
+      fd.append('channel_id', channel.id);
+      fd.append('attachment', JSON.stringify(attachObj));
+
+      const optimistic: ChatMessage = {
+        id: `temp-${Math.random().toString(36).substring(2, 9)}`,
+        channel_id: channel.id,
+        sender_id: currentUserId,
+        content: null,
+        attachment: {
+          ...attachObj,
+          url: localBlobUrl, // Use instant blob url for local client playback
+        },
+        reply_to_id: null,
+        reply_to_snapshot: null,
+        reactions: {},
+        is_edited: false,
+        is_deleted: false,
+        read_by: [],
+        created_at: new Date().toISOString(),
+        sender: currentUser,
+      };
+
+      onMessagesChange([...messages, optimistic]);
+      await sendMessage(fd);
     };
-    onMessagesChange([...messages, optimistic]);
-    await sendMessage(fd);
-  }, [channel, recordingSeconds, currentUserId, currentUser, messages, onMessagesChange]);
+
+    reader.readAsDataURL(audioBlob);
+  };
+
+  // ── ENHANCED AUDIO PLAYBACK ENGINE (HTML5 Audio + Web Audio fallback) ──────
+  const togglePlayAudio = (msgId: string, url?: string, durationStr?: string) => {
+    // 1. If this message is currently playing -> pause it
+    if (playingAudioMsgId === msgId) {
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+        activeAudioRef.current = null;
+      }
+      if (playProgressIntervalRef.current) {
+        clearInterval(playProgressIntervalRef.current);
+        playProgressIntervalRef.current = null;
+      }
+      setPlayingAudioMsgId(null);
+      return;
+    }
+
+    // 2. Stop any existing playing audio
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+    if (playProgressIntervalRef.current) {
+      clearInterval(playProgressIntervalRef.current);
+      playProgressIntervalRef.current = null;
+    }
+
+    const playableUrl = getPlayableAudioUrl(url);
+    const targetSeconds = parseDurationSec(durationStr);
+
+    // Fallback: Synthesized Audio Melodic Chime if URL is missing or mock
+    if (!playableUrl) {
+      try {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + targetSeconds);
+          gain.gain.setValueAtTime(0.12, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + targetSeconds);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + targetSeconds);
+        }
+      } catch {}
+
+      setPlayingAudioMsgId(msgId);
+      let elapsed = 0;
+      playProgressIntervalRef.current = setInterval(() => {
+        elapsed += 0.1;
+        const pct = Math.min(100, (elapsed / targetSeconds) * 100);
+        setAudioProgressMap(prev => ({ ...prev, [msgId]: pct }));
+        const curSec = Math.floor(elapsed);
+        setAudioCurrentTimeMap(prev => ({ ...prev, [msgId]: `${Math.floor(curSec / 60)}:${String(curSec % 60).padStart(2, '0')}` }));
+
+        if (elapsed >= targetSeconds) {
+          if (playProgressIntervalRef.current) clearInterval(playProgressIntervalRef.current);
+          setPlayingAudioMsgId(null);
+          setAudioProgressMap(prev => ({ ...prev, [msgId]: 0 }));
+        }
+      }, 100);
+      return;
+    }
+
+    // Real HTML5 Audio Playback
+    try {
+      const audio = new Audio(playableUrl);
+      const speed = playbackRateMap[msgId] || 1;
+      audio.playbackRate = speed;
+      audio.volume = 1.0;
+      activeAudioRef.current = audio;
+      setPlayingAudioMsgId(msgId);
+
+      // Interval ticker guarantees smooth scrubbing even with Chromium WebM Infinity duration bug
+      playProgressIntervalRef.current = setInterval(() => {
+        if (!audio || audio.paused || audio.ended) {
+          if (playProgressIntervalRef.current) clearInterval(playProgressIntervalRef.current);
+          return;
+        }
+        const effectiveDur = (Number.isFinite(audio.duration) && audio.duration > 0 && audio.duration !== Infinity)
+          ? audio.duration
+          : targetSeconds;
+
+        const cur = audio.currentTime;
+        const pct = Math.min(100, (cur / effectiveDur) * 100);
+        setAudioProgressMap(prev => ({ ...prev, [msgId]: pct }));
+        const curSec = Math.floor(cur);
+        const timeStr = `${Math.floor(curSec / 60)}:${String(curSec % 60).padStart(2, '0')}`;
+        setAudioCurrentTimeMap(prev => ({ ...prev, [msgId]: timeStr }));
+      }, 50);
+
+      audio.onended = () => {
+        if (playProgressIntervalRef.current) clearInterval(playProgressIntervalRef.current);
+        setPlayingAudioMsgId(null);
+        setAudioProgressMap(prev => ({ ...prev, [msgId]: 0 }));
+        activeAudioRef.current = null;
+      };
+
+      audio.onerror = (e) => {
+        console.warn('HTML5 Audio playback error:', e);
+        if (playProgressIntervalRef.current) clearInterval(playProgressIntervalRef.current);
+        setPlayingAudioMsgId(null);
+        activeAudioRef.current = null;
+      };
+
+      audio.play().catch(err => {
+        console.warn('Audio play call rejected:', err);
+        if (playProgressIntervalRef.current) clearInterval(playProgressIntervalRef.current);
+        setPlayingAudioMsgId(null);
+        activeAudioRef.current = null;
+      });
+    } catch (err) {
+      console.error('Failed to instantiate Audio element:', err);
+      setPlayingAudioMsgId(null);
+    }
+  };
+
+  const cyclePlaybackRate = (msgId: string) => {
+    const currentRate = playbackRateMap[msgId] || 1;
+    const nextRate = currentRate === 1 ? 1.5 : currentRate === 1.5 ? 2 : 1;
+    setPlaybackRateMap(prev => ({ ...prev, [msgId]: nextRate }));
+    if (activeAudioRef.current && playingAudioMsgId === msgId) {
+      activeAudioRef.current.playbackRate = nextRate;
+    }
+  };
+
+  const seekAudio = (msgId: string, percent: number, durationStr?: string) => {
+    const targetSeconds = parseDurationSec(durationStr);
+    const audio = activeAudioRef.current;
+    if (audio && playingAudioMsgId === msgId) {
+      const dur = (Number.isFinite(audio.duration) && audio.duration > 0 && audio.duration !== Infinity)
+        ? audio.duration
+        : targetSeconds;
+      audio.currentTime = (percent / 100) * dur;
+      setAudioProgressMap(prev => ({ ...prev, [msgId]: percent }));
+    }
+  };
 
   // Send Custom Rich Card (Quick Reply, Poll, Event, Location)
   const handleSendRichMessage = useCallback(async (type: 'quick_reply' | 'poll' | 'event' | 'location', data: QuickReplyItem | LocationItem | PollData | EventData) => {
@@ -408,7 +750,7 @@ export default function ChatWindow({
     };
     onMessagesChange([...messages, optimistic]);
     await sendMessage(fd);
-  }, [channel, currentUserId, currentUser, messages, onMessagesChange]);
+  }, [channel, currentUserId, currentUser, messages, onMessagesChange, setShowQuickReplyModal, setShowPollModal, setShowEventModal, setShowLocationModal]);
 
   const filteredMessages = searchQuery.trim()
     ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -622,33 +964,63 @@ export default function ChatWindow({
                           <p className="text-[10px] opacity-70 truncate">{msg.attachment.name}</p>
                         </div>
                       ) : msg.attachment.type === 'audio' ? (
-                        <div className="flex items-center gap-3 py-1 min-w-[190px]">
+                        <div className="flex items-center gap-3 py-1 min-w-[220px] max-w-[280px]">
+                          {/* Play / Pause Toggle Button */}
                           <button
+                            type="button"
                             onClick={e => {
                               e.stopPropagation();
-                              setPlayingAudioMsgId(playingAudioMsgId === msg.id ? null : msg.id);
+                              togglePlayAudio(msg.id, msg.attachment?.url, msg.attachment?.duration);
                             }}
-                            className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-md ${
+                            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-md transition-transform hover:scale-105 active:scale-95 ${
                               isMe ? 'bg-white text-[hsl(var(--accent))]' : 'bg-[hsl(var(--accent))] text-white'
                             }`}
+                            title={playingAudioMsgId === msg.id ? 'Pause Voice Note' : 'Play Voice Note'}
                           >
-                            {playingAudioMsgId === msg.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                            {playingAudioMsgId === msg.id ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
                           </button>
+
+                          {/* Interactive Scrubber Waveform */}
                           <div className="flex-1 space-y-1">
-                            <div className="flex items-center gap-0.5 h-4">
-                              {[35, 60, 85, 45, 95, 70, 50, 80, 65, 40, 90, 75, 55, 30].map((h, i) => (
-                                <div
-                                  key={i}
-                                  className={`w-1 rounded-full ${
-                                    isMe ? 'bg-white/80' : 'bg-[hsl(var(--accent))]'
-                                  } ${playingAudioMsgId === msg.id ? 'animate-pulse' : ''}`}
-                                  style={{ height: `${h}%` }}
-                                />
-                              ))}
+                            <div className="flex items-center gap-0.5 h-6 cursor-pointer">
+                              {[25, 45, 80, 50, 95, 65, 40, 85, 60, 35, 90, 70, 45, 80, 55, 30].map((h, i) => {
+                                const barPercent = (i / 16) * 100;
+                                const isPlayed = (audioProgressMap[msg.id] || 0) >= barPercent;
+                                return (
+                                  <div
+                                    key={i}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      seekAudio(msg.id, barPercent, msg.attachment?.duration);
+                                    }}
+                                    className={`w-1 rounded-full transition-all duration-150 hover:opacity-100 ${
+                                      isPlayed
+                                        ? isMe ? 'bg-white' : 'bg-[hsl(var(--accent))]'
+                                        : isMe ? 'bg-white/40' : 'bg-[hsl(var(--text-tertiary)/0.4)]'
+                                    } ${playingAudioMsgId === msg.id ? 'animate-pulse' : ''}`}
+                                    style={{ height: `${h}%` }}
+                                  />
+                                );
+                              })}
                             </div>
+
+                            {/* Time and Speed Controls */}
                             <div className="flex items-center justify-between text-[9px] opacity-80 font-mono">
-                              <span>{msg.attachment.name}</span>
-                              <Volume2 className="w-3 h-3" />
+                              <span>{audioCurrentTimeMap[msg.id] || msg.attachment.duration || '0:05'}</span>
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  cyclePlaybackRate(msg.id);
+                                }}
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
+                                  isMe
+                                    ? 'border-white/30 hover:bg-white/20 text-white'
+                                    : 'border-[hsl(var(--border))] hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-primary))]'
+                                }`}
+                              >
+                                {playbackRateMap[msg.id] ? `${playbackRateMap[msg.id]}x` : '1x'}
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1137,23 +1509,28 @@ export default function ChatWindow({
           <Paperclip className="w-4.5 h-4.5" />
         </button>
 
-        {/* Dynamic Voice Recording Bar or Input Field */}
+        {/* Dynamic Voice Recording Bar with Real Audio Equalizer or Input Field */}
         {isRecordingVoice ? (
           <div className="flex-1 h-10 px-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between animate-fade-in">
             <div className="flex items-center gap-3">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping shrink-0" />
               <span className="text-xs font-bold text-rose-500">
-                Recording Voice Note... {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}
+                Recording... ${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')}
               </span>
-              <div className="hidden sm:flex items-center gap-0.5 h-4">
-                {[40, 80, 55, 90, 65, 35, 95, 70, 50, 85].map((h, i) => (
-                  <div key={i} className="w-1 bg-rose-500/60 rounded-full animate-pulse" style={{ height: `${h}%` }} />
+              {/* Real-time live audio frequency wave bars */}
+              <div className="hidden sm:flex items-center gap-0.5 h-5">
+                {liveVolumeBars.map((h, i) => (
+                  <div
+                    key={i}
+                    className="w-1 bg-rose-500 rounded-full transition-all duration-75"
+                    style={{ height: `${h}%` }}
+                  />
                 ))}
               </div>
             </div>
             <button
               type="button"
-              onClick={() => { setIsRecordingVoice(false); setRecordingSeconds(0); }}
+              onClick={cancelVoiceRecording}
               className="text-xs font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1"
             >
               <Trash2 className="w-3.5 h-3.5" /> Cancel
@@ -1174,8 +1551,8 @@ export default function ChatWindow({
         {isRecordingVoice ? (
           <button
             type="button"
-            onClick={handleSendVoiceNote}
-            className="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all shadow-md shrink-0 animate-in zoom-in-90"
+            onClick={stopAndSendVoiceRecording}
+            className="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all shadow-md shrink-0 animate-in zoom-in-90 active:scale-95"
             title="Send Voice Memo"
           >
             <Send className="w-4 h-4" />
@@ -1193,10 +1570,7 @@ export default function ChatWindow({
         ) : (
           <button
             type="button"
-            onClick={() => {
-              setIsRecordingVoice(true);
-              setRecordingSeconds(0);
-            }}
+            onClick={startVoiceRecording}
             className="w-10 h-10 rounded-xl bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.15)] flex items-center justify-center transition-all shrink-0 active:scale-95 border border-[hsl(var(--border))]"
             title="Record Voice Note"
           >
