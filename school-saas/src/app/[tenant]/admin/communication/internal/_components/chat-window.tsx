@@ -2,14 +2,65 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Send, ArrowLeft, Phone, Video, MoreVertical, Search, Paperclip,
+  Send, ArrowLeft, Phone, Video, Search, Paperclip,
   Smile, X, Reply, Edit2, Trash2, CheckCheck, Check, Download,
-  FileText, Image as ImageIcon, ChevronDown, Pin, Users, Info
+  FileText, Image as ImageIcon, Users,
+  Mic, Camera, Music, Zap, BarChart2, Calendar, MapPin, Play,
+  Pause, Plus, Volume2
 } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatUser } from './actions';
 import { sendMessage, editMessage, deleteMessage, toggleReaction, markChannelRead } from './actions';
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅', '👏', '🎉'];
+
+const QUICK_REPLIES = [
+  { label: 'Exam Office Verification', text: '✅ Verified with Sierra Leone MBSSE & WAEC guidelines. Marks are validated.' },
+  { label: 'Broadsheet Review', text: '📊 Broadsheet review completed. A1–F9 grades and CASS 30% are locked.' },
+  { label: 'Invigilation Update', text: '📝 Invigilation hall arrangement is ready. Desks and candidate index cards in place.' },
+  { label: 'In Class Teaching', text: '📚 Currently in class. I will review and reply as soon as the lesson ends.' },
+  { label: 'Under Review', text: '⏳ Received. Checking the details and will revert shortly.' },
+  { label: 'Approved', text: '👍 Approved by Academic Committee. Please proceed with the submission.' },
+];
+
+const PRESET_LOCATIONS = [
+  { name: 'Central Examination Hall (Memorial Wing)', sub: 'Main Hall • 180 Seating Capacity' },
+  { name: 'Senior Science Laboratory', sub: 'Block B • Physics & Chemistry Practicals' },
+  { name: 'Academic Registry & Exam Office', sub: 'Administrative Wing • Room 104' },
+  { name: 'School Main Auditorium', sub: 'Auditorium • General Assembly & BECE Sittings' },
+];
+
+type RichAttachPayload = {
+  type: string;
+  name: string;
+  url?: string;
+  size?: number;
+  duration?: string;
+  options?: string[];
+  date?: string;
+  venue?: string;
+  sub?: string;
+};
+
+type QuickReplyItem = {
+  label: string;
+  text: string;
+};
+
+type LocationItem = {
+  name: string;
+  sub: string;
+};
+
+type PollData = {
+  question: string;
+  options: string[];
+};
+
+type EventData = {
+  title: string;
+  date: string;
+  venue: string;
+};
 
 function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
@@ -66,9 +117,57 @@ export default function ChatWindow({
   const [contextMenu, setContextMenu] = useState<{ msgId: string; x: number; y: number } | null>(null);
   const [searchMode, setSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Attachment Menu Popup & Voice Record States
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [playingAudioMsgId, setPlayingAudioMsgId] = useState<string | null>(null);
+
+  // Modals for Extra Attachments
+  const [showQuickReplyModal, setShowQuickReplyModal] = useState(false);
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['Yes, confirmed', 'No, need adjustment']);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [eventTitle, setEventTitle] = useState('WASSCE Practical Exam Sitting');
+  const [eventDate, setEventDate] = useState('Tomorrow, 08:30 AM');
+  const [eventVenue, setEventVenue] = useState('Main Science Lab (Block B)');
+  const [showLocationModal, setShowLocationModal] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
+
+  // Dedicated file input refs
+  const docFileInputRef = useRef<HTMLInputElement>(null);
+  const cameraFileInputRef = useRef<HTMLInputElement>(null);
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);
+  const audioFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Voice recording timer
+  useEffect(() => {
+    if (!isRecordingVoice) return;
+    const timer = setInterval(() => {
+      setRecordingSeconds(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isRecordingVoice]);
+
+  // Click outside to close attachment menu
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(event.target as Node)) {
+        setShowAttachMenu(false);
+      }
+    }
+    if (showAttachMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showAttachMenu]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -109,7 +208,7 @@ export default function ChatWindow({
 
     // Optimistic update
     const optimistic: ChatMessage = {
-      id: `temp-${Date.now()}`,
+      id: `temp-${Math.random().toString(36).substring(2, 9)}`,
       channel_id: channel.id,
       sender_id: currentUserId,
       content: input.trim(),
@@ -142,6 +241,7 @@ export default function ChatWindow({
     if (e.key === 'Escape') {
       setReplyTo(null);
       setEditingMsg(null);
+      setShowAttachMenu(false);
     }
   };
 
@@ -165,19 +265,19 @@ export default function ChatWindow({
   const handleDelete = async (msg: ChatMessage) => {
     setContextMenu(null);
     await deleteMessage(msg.id);
-    onMessagesChange(messages.map(m => m.id === msg.id ? { ...m, is_deleted: true, content: null } : m));
+    onMessagesChange(messages.map(m => m.id === msg.id ? { ...m, is_deleted: true, content: null, attachment: null } : m));
   };
 
   const handleFileUpload = async (file: File) => {
     if (!channel) return;
+    setShowAttachMenu(false);
     const reader = new FileReader();
-    reader.onload = async (e) => {
-      const dataUrl = e.target?.result as string;
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
       const fd = new FormData();
       fd.append('channel_id', channel.id);
-      fd.append('content', '');
       fd.append('attachment', JSON.stringify({
-        type: file.type.startsWith('image/') ? 'image' : 'file',
+        type: file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'file',
         name: file.name,
         url: dataUrl,
         size: file.size,
@@ -190,11 +290,16 @@ export default function ChatWindow({
         }));
       }
       const optimistic: ChatMessage = {
-        id: `temp-${Date.now()}`,
+        id: `temp-${Math.random().toString(36).substring(2, 9)}`,
         channel_id: channel.id,
         sender_id: currentUserId,
         content: null,
-        attachment: { type: file.type.startsWith('image/') ? 'image' : 'file', name: file.name, url: dataUrl },
+        attachment: {
+          type: file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'file',
+          name: file.name,
+          url: dataUrl,
+          size: file.size,
+        },
         reply_to_id: replyTo?.id || null,
         reply_to_snapshot: null,
         reactions: {},
@@ -211,6 +316,100 @@ export default function ChatWindow({
     reader.readAsDataURL(file);
   };
 
+  // Send Voice Note Action
+  const handleSendVoiceNote = useCallback(async () => {
+    if (!channel) return;
+    const durationStr = `${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')}`;
+    setIsRecordingVoice(false);
+    setRecordingSeconds(0);
+
+    const fd = new FormData();
+    fd.append('channel_id', channel.id);
+    fd.append('attachment', JSON.stringify({
+      type: 'audio',
+      name: `Voice Memo (${durationStr || '0:05'})`,
+      url: '#',
+      duration: durationStr || '0:05',
+    }));
+
+    const optimistic: ChatMessage = {
+      id: `temp-${Math.random().toString(36).substring(2, 9)}`,
+      channel_id: channel.id,
+      sender_id: currentUserId,
+      content: null,
+      attachment: {
+        type: 'audio',
+        name: `Voice Memo (${durationStr || '0:05'})`,
+        url: '#',
+        size: 24500,
+      },
+      reply_to_id: null,
+      reply_to_snapshot: null,
+      reactions: {},
+      is_edited: false,
+      is_deleted: false,
+      read_by: [],
+      created_at: new Date().toISOString(),
+      sender: currentUser,
+    };
+    onMessagesChange([...messages, optimistic]);
+    await sendMessage(fd);
+  }, [channel, recordingSeconds, currentUserId, currentUser, messages, onMessagesChange]);
+
+  // Send Custom Rich Card (Quick Reply, Poll, Event, Location)
+  const handleSendRichMessage = useCallback(async (type: 'quick_reply' | 'poll' | 'event' | 'location', data: QuickReplyItem | LocationItem | PollData | EventData) => {
+    if (!channel) return;
+    setShowQuickReplyModal(false);
+    setShowPollModal(false);
+    setShowEventModal(false);
+    setShowLocationModal(false);
+
+    let contentText = '';
+    let attachObj: RichAttachPayload | null = null;
+
+    if (type === 'quick_reply') {
+      const item = data as QuickReplyItem;
+      contentText = item.text;
+    } else if (type === 'poll') {
+      const item = data as PollData;
+      contentText = `📊 Poll: ${item.question}\n${item.options.map((o: string, idx: number) => `• [${idx + 1}] ${o}`).join('\n')}`;
+      attachObj = { type: 'poll', name: item.question, options: item.options };
+    } else if (type === 'event') {
+      const item = data as EventData;
+      contentText = `📅 Event: ${item.title}\n⏰ When: ${item.date}\n📍 Venue: ${item.venue}`;
+      attachObj = { type: 'event', name: item.title, date: item.date, venue: item.venue };
+    } else if (type === 'location') {
+      const item = data as LocationItem;
+      contentText = `📍 Campus Location: ${item.name}\n${item.sub}`;
+      attachObj = { type: 'location', name: item.name, sub: item.sub };
+    }
+
+    const fd = new FormData();
+    fd.append('channel_id', channel.id);
+    fd.append('content', contentText);
+    if (attachObj) {
+      fd.append('attachment', JSON.stringify(attachObj));
+    }
+
+    const optimistic: ChatMessage = {
+      id: `temp-${Math.random().toString(36).substring(2, 9)}`,
+      channel_id: channel.id,
+      sender_id: currentUserId,
+      content: contentText,
+      attachment: attachObj,
+      reply_to_id: null,
+      reply_to_snapshot: null,
+      reactions: {},
+      is_edited: false,
+      is_deleted: false,
+      read_by: [],
+      created_at: new Date().toISOString(),
+      sender: currentUser,
+    };
+    onMessagesChange([...messages, optimistic]);
+    await sendMessage(fd);
+  }, [channel, currentUserId, currentUser, messages, onMessagesChange]);
+
   const filteredMessages = searchQuery.trim()
     ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
     : messages;
@@ -221,6 +420,8 @@ export default function ChatWindow({
   const channelName = channel?.type === 'group'
     ? (channel.name || 'Group Chat')
     : (otherParticipant?.full_name || 'Direct Message');
+
+  const hasTypedContent = Boolean(editingMsg ? editContent.trim() : input.trim());
 
   if (!channel) {
     return (
@@ -237,123 +438,150 @@ export default function ChatWindow({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 bg-[hsl(var(--bg-primary))]" onClick={() => { setContextMenu(null); setShowEmojiBar(null); }}>
+    <div
+      className="flex-1 flex flex-col h-full min-w-0 bg-[hsl(var(--bg-primary))] relative"
+      onClick={() => {
+        setContextMenu(null);
+        setShowEmojiBar(null);
+      }}
+    >
+      {/* Hidden file pickers */}
+      <input
+        type="file"
+        ref={docFileInputRef}
+        className="hidden"
+        accept=".pdf,.doc,.docx,.xlsx,.xls,.ppt,.pptx,.txt,.csv"
+        onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }}
+      />
+      <input
+        type="file"
+        ref={cameraFileInputRef}
+        className="hidden"
+        accept="image/*"
+        capture="environment"
+        onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }}
+      />
+      <input
+        type="file"
+        ref={galleryFileInputRef}
+        className="hidden"
+        accept="image/*"
+        onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }}
+      />
+      <input
+        type="file"
+        ref={audioFileInputRef}
+        className="hidden"
+        accept="audio/*"
+        onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }}
+      />
 
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] shrink-0">
-        <button onClick={onBack} className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+      <div className="h-16 px-4 border-b border-[hsl(var(--border))] flex items-center justify-between bg-[hsl(var(--bg-secondary))] shrink-0 z-10">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={onBack} className="md:hidden text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] mr-1">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="relative shrink-0">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${avatarColor(channel.id)}`}>
+              {channel.type === 'group' ? <Users className="w-5 h-5" /> : getInitials(channelName)}
+            </div>
+            {channel.type === 'direct' && otherParticipant?.online && (
+              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[hsl(var(--bg-secondary))]" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <h2 className="font-bold text-sm text-[hsl(var(--text-primary))] truncate">{channelName}</h2>
+            <p className="text-[11px] text-[hsl(var(--text-tertiary))] truncate">
+              {channel.type === 'group'
+                ? `${channel.participants?.length || 0} members`
+                : otherParticipant?.online
+                  ? 'Online'
+                  : otherParticipant?.last_seen
+                    ? `Last seen ${formatTimestamp(otherParticipant.last_seen)}`
+                    : otherParticipant?.role || 'Staff'}
+            </p>
+          </div>
+        </div>
 
-        {/* Avatar */}
-        <div className="relative shrink-0">
-          {channel.type === 'group' ? (
-            <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm overflow-hidden">
-              {channel.avatar_url
-                ? <img src={channel.avatar_url} alt="" className="w-full h-full object-cover" />
-                : <Users className="w-5 h-5" />}
+        {/* Actions */}
+        <div className="flex items-center gap-1 text-[hsl(var(--text-secondary))]">
+          {searchMode ? (
+            <div className="flex items-center gap-2 bg-[hsl(var(--bg-tertiary))] px-3 py-1.5 rounded-xl border border-[hsl(var(--border))] animate-fade-in">
+              <Search className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" />
+              <input
+                autoFocus
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search in chat..."
+                className="bg-transparent text-xs text-[hsl(var(--text-primary))] focus:outline-none w-32 md:w-48"
+              />
+              <button onClick={() => { setSearchMode(false); setSearchQuery(''); }}>
+                <X className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]" />
+              </button>
             </div>
           ) : (
-            <div className={`w-10 h-10 rounded-full ${avatarColor(otherParticipant?.id || '')} text-white flex items-center justify-center font-bold text-sm overflow-hidden`}>
-              {otherParticipant?.avatar_url
-                ? <img src={otherParticipant.avatar_url} alt="" className="w-full h-full object-cover" />
-                : getInitials(otherParticipant?.full_name || 'U')}
-            </div>
+            <button onClick={() => setSearchMode(true)} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors">
+              <Search className="w-4 h-4" />
+            </button>
           )}
-        </div>
-
-        {/* Name + status */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-[hsl(var(--text-primary))] truncate">{channelName}</p>
-          <p className="text-[10px] text-[hsl(var(--text-tertiary))] truncate">
-            {channel.type === 'group'
-              ? `${channel.participants?.length || 0} members`
-              : <span className="text-emerald-500 font-medium">Online</span>}
-          </p>
-        </div>
-
-        {/* Header actions */}
-        <div className="flex items-center gap-1 shrink-0">
-          {channel.type === 'direct' && onStartCall && (
+          {onStartCall && (
             <>
-              <button
-                onClick={() => onStartCall(channel.id, 'voice')}
-                title="Voice Call"
-                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] hover:text-emerald-500 transition-colors"
-              >
+              <button onClick={() => onStartCall(channel.id, 'voice')} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors" title="Voice Call">
                 <Phone className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => onStartCall(channel.id, 'video')}
-                title="Video Call"
-                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] hover:text-blue-500 transition-colors"
-              >
+              <button onClick={() => onStartCall(channel.id, 'video')} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors" title="Video Call">
                 <Video className="w-4 h-4" />
               </button>
             </>
           )}
-          <button onClick={() => setSearchMode(v => !v)}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${searchMode ? 'bg-[hsl(var(--accent))] text-white' : 'hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))]'}`}>
-            <Search className="w-4 h-4" />
-          </button>
-          {channel.type === 'group' && (
-            <button className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] transition-colors">
-              <Info className="w-4 h-4" />
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Search bar */}
-      {searchMode && (
-        <div className="px-4 py-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" />
-            <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search in conversation..."
-              className="w-full h-9 pl-8 pr-4 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none" />
+      {/* Messages Feed */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-[hsl(var(--bg-primary))]">
+        {filteredMessages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-[hsl(var(--text-tertiary))] gap-2 py-12">
+            <div className="w-12 h-12 rounded-full bg-[hsl(var(--bg-secondary))] flex items-center justify-center">
+              <Smile className="w-6 h-6 opacity-30" />
+            </div>
+            <p className="text-xs">No messages yet. Send a message or share an attachment to begin!</p>
           </div>
-        </div>
-      )}
+        ) : null}
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1 bg-[hsl(var(--bg-primary))]"
-        style={{ backgroundImage: 'radial-gradient(hsl(var(--accent)/0.03) 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
-
-        {filteredMessages.map((msg, idx) => {
+        {filteredMessages.map((msg, index) => {
           const isMe = msg.sender_id === currentUserId;
-          const prevMsg = filteredMessages[idx - 1];
-          const showDate = !prevMsg || !isSameDay(prevMsg.created_at, msg.created_at);
-          const showAvatar = !isMe && (idx === 0 || filteredMessages[idx - 1]?.sender_id !== msg.sender_id);
-          const reactions = msg.reactions || {};
+          const prevMsg = index > 0 ? filteredMessages[index - 1] : null;
+          const showDateDivider = !prevMsg || !isSameDay(prevMsg.created_at, msg.created_at);
+          const showAvatar = !isMe && (!prevMsg || prevMsg.sender_id !== msg.sender_id || showDateDivider);
 
           return (
-            <div key={msg.id}>
-              {/* Date divider */}
-              {showDate && (
+            <div key={msg.id} className="space-y-2">
+              {showDateDivider && (
                 <div className="flex items-center justify-center my-4">
-                  <span className="px-3 py-1 rounded-full bg-[hsl(var(--bg-tertiary))] text-[10px] font-semibold text-[hsl(var(--text-tertiary))] border border-[hsl(var(--border))]">
+                  <span className="px-3 py-1 rounded-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-[10px] font-bold text-[hsl(var(--text-tertiary))] shadow-sm">
                     {formatDateDivider(msg.created_at)}
                   </span>
                 </div>
               )}
 
-              {/* Message bubble */}
-              <div className={`flex items-end gap-2 mb-0.5 group ${isMe ? 'flex-row-reverse' : ''}`}>
-                {/* Avatar for others */}
+              <div className={`flex gap-2 group ${isMe ? 'justify-end' : 'justify-start'}`}>
                 {!isMe && (
-                  <div className="shrink-0 mb-1">
+                  <div className="w-7 shrink-0">
                     {showAvatar ? (
-                      <div className={`w-7 h-7 rounded-full ${avatarColor(msg.sender_id)} text-white flex items-center justify-center text-[10px] font-bold overflow-hidden`}>
-                        {msg.sender?.avatar_url
-                          ? <img src={msg.sender.avatar_url} alt="" className="w-full h-full object-cover" />
-                          : getInitials(msg.sender?.full_name || 'U')}
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-sm ${avatarColor(msg.sender_id)}`}>
+                        {msg.sender?.avatar_url ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={msg.sender.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                        ) : (
+                          getInitials(msg.sender?.full_name || 'U')
+                        )}
                       </div>
                     ) : <div className="w-7" />}
                   </div>
                 )}
 
-                <div className={`max-w-[70%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                <div className={`max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   {/* Sender name (group only) */}
                   {!isMe && channel.type === 'group' && showAvatar && (
                     <span className="text-[10px] font-bold text-[hsl(var(--accent))] mb-1 ml-1">
@@ -371,7 +599,7 @@ export default function ChatWindow({
 
                   {/* Bubble */}
                   <div
-                    className={`relative px-3 py-2 rounded-2xl text-sm leading-relaxed cursor-pointer transition-all
+                    className={`relative px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed cursor-pointer transition-all shadow-sm
                       ${isMe
                         ? 'bg-[hsl(var(--accent))] text-white rounded-br-sm'
                         : 'bg-[hsl(var(--bg-secondary))] text-[hsl(var(--text-primary))] border border-[hsl(var(--border))] rounded-bl-sm'
@@ -388,25 +616,76 @@ export default function ChatWindow({
                       <span className="text-xs opacity-60">🚫 This message was deleted</span>
                     ) : msg.attachment ? (
                       msg.attachment.type === 'image' ? (
-                        <div className="space-y-1">
-                          <img src={msg.attachment.url} alt={msg.attachment.name}
-                            className="max-w-[200px] rounded-xl object-cover" />
-                          <p className="text-[10px] opacity-70">{msg.attachment.name}</p>
+                        <div className="space-y-1.5">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={msg.attachment.url} alt={msg.attachment.name} className="max-w-[240px] rounded-xl object-cover" />
+                          <p className="text-[10px] opacity-70 truncate">{msg.attachment.name}</p>
+                        </div>
+                      ) : msg.attachment.type === 'audio' ? (
+                        <div className="flex items-center gap-3 py-1 min-w-[190px]">
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              setPlayingAudioMsgId(playingAudioMsgId === msg.id ? null : msg.id);
+                            }}
+                            className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-md ${
+                              isMe ? 'bg-white text-[hsl(var(--accent))]' : 'bg-[hsl(var(--accent))] text-white'
+                            }`}
+                          >
+                            {playingAudioMsgId === msg.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                          </button>
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center gap-0.5 h-4">
+                              {[35, 60, 85, 45, 95, 70, 50, 80, 65, 40, 90, 75, 55, 30].map((h, i) => (
+                                <div
+                                  key={i}
+                                  className={`w-1 rounded-full ${
+                                    isMe ? 'bg-white/80' : 'bg-[hsl(var(--accent))]'
+                                  } ${playingAudioMsgId === msg.id ? 'animate-pulse' : ''}`}
+                                  style={{ height: `${h}%` }}
+                                />
+                              ))}
+                            </div>
+                            <div className="flex items-center justify-between text-[9px] opacity-80 font-mono">
+                              <span>{msg.attachment.name}</span>
+                              <Volume2 className="w-3 h-3" />
+                            </div>
+                          </div>
+                        </div>
+                      ) : msg.attachment.type === 'location' ? (
+                        <div className="flex items-start gap-2.5 p-1 min-w-[200px]">
+                          <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center shrink-0">
+                            <MapPin className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold">{msg.attachment.name}</p>
+                            <p className="text-[10px] opacity-80">{msg.attachment.sub}</p>
+                          </div>
+                        </div>
+                      ) : msg.attachment.type === 'event' ? (
+                        <div className="flex items-start gap-2.5 p-1 min-w-[210px]">
+                          <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                            <Calendar className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold">{msg.attachment.name}</p>
+                            <p className="text-[10px] opacity-80">⏰ {msg.attachment.date}</p>
+                            <p className="text-[10px] opacity-80">📍 {msg.attachment.venue}</p>
+                          </div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-8 h-8 opacity-70 shrink-0" />
+                        <div className="flex items-center gap-2.5 py-1">
+                          <FileText className="w-8 h-8 opacity-80 shrink-0" />
                           <div>
-                            <p className="text-xs font-semibold truncate max-w-[150px]">{msg.attachment.name}</p>
-                            <a href={msg.attachment.url} download={msg.attachment.name}
-                              className="text-[10px] underline opacity-70 flex items-center gap-0.5">
+                            <p className="text-xs font-semibold truncate max-w-[160px]">{msg.attachment.name}</p>
+                            <a href={msg.attachment.url} download={msg.attachment.name} className="text-[10px] underline opacity-80 flex items-center gap-0.5">
                               <Download className="w-2.5 h-2.5" /> Download
                             </a>
                           </div>
                         </div>
                       )
                     ) : (
-                      <span>{msg.content}</span>
+                      <span className="whitespace-pre-line">{msg.content}</span>
                     )}
 
                     {/* Edited indicator */}
@@ -437,7 +716,7 @@ export default function ChatWindow({
 
                   {/* Emoji bar */}
                   {showEmojiBar === msg.id && (
-                    <div className="flex gap-1 mt-1 p-1.5 bg-[hsl(var(--bg-secondary))] rounded-xl border border-[hsl(var(--border))] shadow-lg animate-fade-in">
+                    <div className="flex gap-1 mt-1 p-1.5 bg-[hsl(var(--bg-secondary))] rounded-xl border border-[hsl(var(--border))] shadow-lg animate-fade-in z-20">
                       {EMOJI_LIST.map(emoji => (
                         <button key={emoji} onClick={() => handleReaction(msg.id, emoji)}
                           className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[hsl(var(--bg-tertiary))] text-base transition-transform hover:scale-125">
@@ -448,49 +727,35 @@ export default function ChatWindow({
                   )}
 
                   {/* Reactions */}
-                  {Object.keys(reactions).length > 0 && (
+                  {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {Object.entries(reactions).map(([emoji, users]) => (
-                        <button key={emoji}
+                      {Object.entries(msg.reactions).map(([emoji, users]) => (
+                        <button
+                          key={emoji}
                           onClick={() => handleReaction(msg.id, emoji)}
-                          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-all flex items-center gap-1 ${
-                            (users as string[]).includes(currentUserId)
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                            users.includes(currentUserId)
                               ? 'bg-[hsl(var(--accent)/0.15)] border-[hsl(var(--accent)/0.4)] text-[hsl(var(--accent))]'
-                              : 'bg-[hsl(var(--bg-tertiary))] border-[hsl(var(--border))] text-[hsl(var(--text-secondary))]'
-                          }`}>
-                          {emoji} <span>{(users as string[]).length}</span>
+                              : 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'
+                          }`}
+                        >
+                          <span>{emoji}</span>
+                          <span>{users.length}</span>
                         </button>
                       ))}
                     </div>
                   )}
 
-                  {/* Timestamp + delivery status */}
-                  <div className={`flex items-center gap-1 mt-0.5 ${isMe ? 'justify-end' : ''}`}>
-                    <span className="text-[9px] text-[hsl(var(--text-tertiary))]">{formatTimestamp(msg.created_at)}</span>
-                    {isMe && !msg.is_deleted && (() => {
-                      const isSeen = (msg.read_by || []).some(id => id !== currentUserId);
-                      const isDelivered = msg.delivered || isSeen;
-
-                      if (isSeen) {
-                        return (
-                          <span title="Seen by user">
-                            <CheckCheck className="w-3.5 h-3.5 text-emerald-400 font-bold drop-shadow-sm" />
-                          </span>
-                        );
-                      }
-                      if (isDelivered) {
-                        return (
-                          <span title="Delivered to user">
-                            <CheckCheck className="w-3.5 h-3.5 opacity-70" />
-                          </span>
-                        );
-                      }
-                      return (
-                        <span title="Delivered to server">
-                          <Check className="w-3.5 h-3.5 opacity-70" />
-                        </span>
-                      );
-                    })()}
+                  {/* Timestamp & Status */}
+                  <div className="flex items-center gap-1 mt-0.5 text-[9px] text-[hsl(var(--text-tertiary))] px-1">
+                    <span>{formatTimestamp(msg.created_at)}</span>
+                    {isMe && !msg.is_deleted && (
+                      msg.read_by && msg.read_by.length > 0 ? (
+                        <CheckCheck className="w-3 h-3 text-sky-400" />
+                      ) : (
+                        <Check className="w-3 h-3 text-[hsl(var(--text-tertiary))]" />
+                      )
+                    )}
                   </div>
                 </div>
               </div>
@@ -562,29 +827,382 @@ export default function ChatWindow({
         </div>
       )}
 
-      {/* Input bar */}
-      <div className="px-4 py-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex items-center gap-2 shrink-0">
-        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,.pdf,.doc,.docx,.xlsx,.ppt"
-          onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }} />
-        <button onClick={() => fileInputRef.current?.click()}
-          className="w-9 h-9 rounded-xl flex items-center justify-center text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.1)] transition-colors shrink-0">
+      {/* ── ATTACHMENT POPUP MENU (MATCHING ATTACHED SCREENSHOT) ──────────── */}
+      {showAttachMenu && (
+        <div
+          ref={attachMenuRef}
+          className="absolute bottom-20 left-4 z-40 bg-white dark:bg-[#1E2028] rounded-[28px] p-5 shadow-2xl border border-slate-200/80 dark:border-slate-800 w-[320px] sm:w-[350px] animate-in fade-in zoom-in-95 duration-150"
+        >
+          <div className="grid grid-cols-4 gap-y-4 gap-x-2">
+            {/* 1. Document */}
+            <button
+              type="button"
+              onClick={() => { setShowAttachMenu(false); docFileInputRef.current?.click(); }}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer"
+            >
+              <div className="w-14 h-14 rounded-full bg-[#EDE8FF] text-[#635BFF] flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95 shadow-sm">
+                <FileText className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">Document</span>
+            </button>
+
+            {/* 2. Camera */}
+            <button
+              type="button"
+              onClick={() => { setShowAttachMenu(false); cameraFileInputRef.current?.click(); }}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer"
+            >
+              <div className="w-14 h-14 rounded-full bg-[#FFE6EE] text-[#E0245E] flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95 shadow-sm">
+                <Camera className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">Camera</span>
+            </button>
+
+            {/* 3. Gallery */}
+            <button
+              type="button"
+              onClick={() => { setShowAttachMenu(false); galleryFileInputRef.current?.click(); }}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer"
+            >
+              <div className="w-14 h-14 rounded-full bg-[#FCE8E6] text-[#A61C1C] flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95 shadow-sm">
+                <ImageIcon className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">Gallery</span>
+            </button>
+
+            {/* 4. Audio */}
+            <button
+              type="button"
+              onClick={() => { setShowAttachMenu(false); audioFileInputRef.current?.click(); }}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer"
+            >
+              <div className="w-14 h-14 rounded-full bg-[#FFF0E6] text-[#F05A28] flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95 shadow-sm">
+                <Music className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">Audio</span>
+            </button>
+
+            {/* 5. Quick Reply */}
+            <button
+              type="button"
+              onClick={() => { setShowAttachMenu(false); setShowQuickReplyModal(true); }}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer"
+            >
+              <div className="w-14 h-14 rounded-full bg-[#E8F4FD] text-[#0088CC] flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95 shadow-sm">
+                <Zap className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">Quick Reply</span>
+            </button>
+
+            {/* 6. Poll */}
+            <button
+              type="button"
+              onClick={() => { setShowAttachMenu(false); setShowPollModal(true); }}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer"
+            >
+              <div className="w-14 h-14 rounded-full bg-[#E6F9EE] text-[#059669] flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95 shadow-sm">
+                <BarChart2 className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">Poll</span>
+            </button>
+
+            {/* 7. Event */}
+            <button
+              type="button"
+              onClick={() => { setShowAttachMenu(false); setShowEventModal(true); }}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer"
+            >
+              <div className="w-14 h-14 rounded-full bg-[#FAECEE] text-[#881337] flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95 shadow-sm">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">Event</span>
+            </button>
+
+            {/* 8. Location */}
+            <button
+              type="button"
+              onClick={() => { setShowAttachMenu(false); setShowLocationModal(true); }}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer"
+            >
+              <div className="w-14 h-14 rounded-full bg-[#E6F8F6] text-[#0D9488] flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95 shadow-sm">
+                <MapPin className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">Location</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODALS FOR ATTACHMENT TYPES ──────────────────────────────────── */}
+      {/* Quick Reply Modal */}
+      {showQuickReplyModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+              <h3 className="font-extrabold text-sm text-[hsl(var(--text-primary))] flex items-center gap-2">
+                <Zap className="w-4 h-4 text-[#0088CC]" /> Quick Reply Presets
+              </h3>
+              <button onClick={() => setShowQuickReplyModal(false)} className="text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {QUICK_REPLIES.map((qr, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendRichMessage('quick_reply', qr)}
+                  className="w-full p-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-left hover:border-[#0088CC]/50 hover:bg-[#0088CC]/5 transition-all space-y-1"
+                >
+                  <p className="text-xs font-bold text-[#0088CC]">{qr.label}</p>
+                  <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">{qr.text}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Poll Creator Modal */}
+      {showPollModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+              <h3 className="font-extrabold text-sm text-[hsl(var(--text-primary))] flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-[#059669]" /> Create Academic Poll
+              </h3>
+              <button onClick={() => setShowPollModal(false)} className="text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">Poll Question</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Preferred time for WASSCE Science Moderation meeting?"
+                  value={pollQuestion}
+                  onChange={e => setPollQuestion(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[#059669]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">Options</label>
+                {pollOptions.map((opt, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={opt}
+                      onChange={e => {
+                        const next = [...pollOptions];
+                        next[i] = e.target.value;
+                        setPollOptions(next);
+                      }}
+                      className="flex-1 px-3 py-1.5 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[#059669]"
+                    />
+                    {pollOptions.length > 2 && (
+                      <button
+                        onClick={() => setPollOptions(pollOptions.filter((_, idx) => idx !== i))}
+                        className="text-rose-400 hover:text-rose-300 p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {pollOptions.length < 4 && (
+                  <button
+                    onClick={() => setPollOptions([...pollOptions, `Option ${pollOptions.length + 1}`])}
+                    className="text-xs font-bold text-[#059669] hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Option
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  if (pollQuestion.trim()) {
+                    handleSendRichMessage('poll', { question: pollQuestion.trim(), options: pollOptions });
+                  }
+                }}
+                disabled={!pollQuestion.trim()}
+                className="w-full py-2.5 rounded-xl bg-[#059669] hover:bg-[#047857] text-white font-bold text-xs disabled:opacity-40 transition-colors shadow-md"
+              >
+                Send Poll to Chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Event Share Modal */}
+      {showEventModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+              <h3 className="font-extrabold text-sm text-[hsl(var(--text-primary))] flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-[#881337]" /> Share Academic Event
+              </h3>
+              <button onClick={() => setShowEventModal(false)} className="text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">Event Title</label>
+                <input
+                  type="text"
+                  value={eventTitle}
+                  onChange={e => setEventTitle(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[#881337]"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">Date &amp; Time</label>
+                <input
+                  type="text"
+                  value={eventDate}
+                  onChange={e => setEventDate(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[#881337]"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">Venue / Hall</label>
+                <input
+                  type="text"
+                  value={eventVenue}
+                  onChange={e => setEventVenue(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[#881337]"
+                />
+              </div>
+              <button
+                onClick={() => handleSendRichMessage('event', { title: eventTitle, date: eventDate, venue: eventVenue })}
+                className="w-full py-2.5 rounded-xl bg-[#881337] hover:bg-[#700f2b] text-white font-bold text-xs transition-colors shadow-md"
+              >
+                Post Event Badge
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Location Share Modal */}
+      {showLocationModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
+            <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+              <h3 className="font-extrabold text-sm text-[hsl(var(--text-primary))] flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-[#0D9488]" /> Share Campus Venue
+              </h3>
+              <button onClick={() => setShowLocationModal(false)} className="text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {PRESET_LOCATIONS.map((loc, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendRichMessage('location', loc)}
+                  className="w-full p-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-left hover:border-[#0D9488]/50 hover:bg-[#0D9488]/5 transition-all flex items-center gap-3"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-[#E6F8F6] text-[#0D9488] flex items-center justify-center shrink-0">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-[hsl(var(--text-primary))]">{loc.name}</p>
+                    <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{loc.sub}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── INPUT BAR COMPOSER WITH DYNAMIC MIC / SEND TRANSFORMATION ──────── */}
+      <div className="px-4 py-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex items-center gap-2 shrink-0 relative">
+        {/* Paperclip / Attach Button */}
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            setShowAttachMenu(!showAttachMenu);
+          }}
+          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shrink-0 ${
+            showAttachMenu
+              ? 'bg-[hsl(var(--accent))] text-white shadow-md'
+              : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.1)]'
+          }`}
+          title="Attach media, files & quick cards"
+        >
           <Paperclip className="w-4.5 h-4.5" />
         </button>
-        <input
-          ref={inputRef}
-          value={editingMsg ? editContent : input}
-          onChange={e => editingMsg ? setEditContent(e.target.value) : setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={editingMsg ? 'Edit message...' : 'Type a message...'}
-          className="flex-1 h-10 px-4 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-        />
-        <button
-          onClick={handleSend}
-          disabled={isSending || (!(editingMsg ? editContent.trim() : input.trim()))}
-          className="w-10 h-10 rounded-xl bg-[hsl(var(--accent))] text-white flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
-        >
-          <Send className="w-4 h-4" />
-        </button>
+
+        {/* Dynamic Voice Recording Bar or Input Field */}
+        {isRecordingVoice ? (
+          <div className="flex-1 h-10 px-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between animate-fade-in">
+            <div className="flex items-center gap-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping shrink-0" />
+              <span className="text-xs font-bold text-rose-500">
+                Recording Voice Note... {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}
+              </span>
+              <div className="hidden sm:flex items-center gap-0.5 h-4">
+                {[40, 80, 55, 90, 65, 35, 95, 70, 50, 85].map((h, i) => (
+                  <div key={i} className="w-1 bg-rose-500/60 rounded-full animate-pulse" style={{ height: `${h}%` }} />
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setIsRecordingVoice(false); setRecordingSeconds(0); }}
+              className="text-xs font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Cancel
+            </button>
+          </div>
+        ) : (
+          <input
+            ref={inputRef}
+            value={editingMsg ? editContent : input}
+            onChange={e => (editingMsg ? setEditContent(e.target.value) : setInput(e.target.value))}
+            onKeyDown={handleKeyDown}
+            placeholder={editingMsg ? 'Edit message...' : 'Type a message...'}
+            className="flex-1 h-10 px-4 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+          />
+        )}
+
+        {/* ── MIC ICON THAT TRANSFORMS TO SEND BUTTON ──────────────────────── */}
+        {isRecordingVoice ? (
+          <button
+            type="button"
+            onClick={handleSendVoiceNote}
+            className="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all shadow-md shrink-0 animate-in zoom-in-90"
+            title="Send Voice Memo"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        ) : hasTypedContent ? (
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={isSending}
+            className="w-10 h-10 rounded-xl bg-[hsl(var(--accent))] text-white flex items-center justify-center hover:opacity-90 transition-all shadow-md shrink-0 animate-in zoom-in-90 active:scale-95"
+            title="Send Message"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setIsRecordingVoice(true);
+              setRecordingSeconds(0);
+            }}
+            className="w-10 h-10 rounded-xl bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.15)] flex items-center justify-center transition-all shrink-0 active:scale-95 border border-[hsl(var(--border))]"
+            title="Record Voice Note"
+          >
+            <Mic className="w-4.5 h-4.5" />
+          </button>
+        )}
       </div>
     </div>
   );

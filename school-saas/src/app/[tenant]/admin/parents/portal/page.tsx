@@ -653,11 +653,76 @@ export default function ParentPortalDashboard() {
             {/* Tab 6: Communication */}
             {activeTab === 'communication' && (
               <div className="glass-card p-6 border border-[hsl(var(--border))] space-y-6 rounded-2xl animate-fade-in text-xs">
-                <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">Message Homeroom Teacher</h3>
-                <p className="text-xs text-[hsl(var(--text-tertiary))]">Send messages directly to {activeChild.homeroomTeacher}.</p>
-                <div className="flex gap-2">
-                  <input type="text" placeholder="Type a message to the tutor..." className="bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] rounded-lg p-2.5 flex-1 text-[hsl(var(--text-primary))]" />
-                  <button onClick={() => handleAction('Message Sent')} className="px-4 py-2 bg-[hsl(var(--accent))] text-white font-bold rounded-lg hover:opacity-90">Send</button>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[hsl(var(--border))] pb-4">
+                  <div>
+                    <h3 className="text-base font-extrabold text-[hsl(var(--text-primary))] flex items-center gap-2">
+                      <MessageSquare className="w-5 h-5 text-violet-400" />
+                      Parent-Teacher Messaging &amp; Contact Desk
+                    </h3>
+                    <p className="text-xs text-[hsl(var(--text-tertiary))] mt-0.5">
+                      Direct, encrypted communication with {activeChild.name}&apos;s homeroom tutor, subject teachers, and school administration
+                    </p>
+                  </div>
+                  <a
+                    href={`/${tenant}/parent/messages`}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs transition-colors shadow-md w-fit"
+                  >
+                    <MessageSquare className="w-4 h-4" /> Open Full Chat Hub
+                  </a>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-full bg-violet-600/20 text-violet-400 font-bold flex items-center justify-center">
+                          {activeChild.homeroomTeacher.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm text-[hsl(var(--text-primary))]">{activeChild.homeroomTeacher}</p>
+                          <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Homeroom Tutor &bull; {activeChild.class}</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        Online
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[hsl(var(--text-secondary))] leading-relaxed">
+                      Available for academic performance discussions, attendance enquiries, and student welfare check-ins.
+                    </p>
+                    <a
+                      href={`/${tenant}/parent/messages`}
+                      className="w-full py-2 rounded-lg bg-[hsl(var(--bg-tertiary))] hover:bg-violet-600/15 hover:text-violet-300 text-[hsl(var(--text-primary))] font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-[hsl(var(--border))]"
+                    >
+                      <Send className="w-3.5 h-3.5" /> Start Conversation
+                    </a>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-full bg-blue-600/20 text-blue-400 font-bold flex items-center justify-center">
+                          A
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm text-[hsl(var(--text-primary))]">School Administration Desk</p>
+                          <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Fee Billing, Registry &amp; Transport</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                        Admin Desk
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[hsl(var(--text-secondary))] leading-relaxed">
+                      Direct channel for tuition receipts, bus route updates, and official school leave requests.
+                    </p>
+                    <a
+                      href={`/${tenant}/parent/messages`}
+                      className="w-full py-2 rounded-lg bg-[hsl(var(--bg-tertiary))] hover:bg-blue-600/15 hover:text-blue-300 text-[hsl(var(--text-primary))] font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-[hsl(var(--border))]"
+                    >
+                      <Send className="w-3.5 h-3.5" /> Contact Admin
+                    </a>
+                  </div>
                 </div>
               </div>
             )}

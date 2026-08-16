@@ -1,7 +1,6 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { revalidatePath } from 'next/cache';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -10,6 +9,9 @@ export interface ChatUser {
   full_name: string;
   role: string;
   avatar_url: string | null;
+  online?: boolean;
+  last_seen?: string | null;
+  status_message?: string | null;
 }
 
 export interface ChatChannel {
@@ -37,7 +39,17 @@ export interface ChatMessage {
   channel_id: string;
   sender_id: string;
   content: string | null;
-  attachment: { type: string; name: string; url: string; size?: number } | null;
+  attachment: {
+    type: string;
+    name: string;
+    url?: string;
+    size?: number;
+    duration?: string;
+    options?: string[];
+    date?: string;
+    venue?: string;
+    sub?: string;
+  } | null;
   reply_to_id: string | null;
   reply_to_snapshot: { content: string; sender_name: string } | null;
   reactions: Record<string, string[]>;
@@ -186,7 +198,7 @@ export async function sendMessage(formData: FormData) {
   const { data: profile } = await supabase
     .from('profiles').select('full_name').eq('id', user.id).single();
 
-  const messageData: any = {
+  const messageData: Record<string, unknown> = {
     channel_id: channelId,
     sender_id: user.id,
     content: content || null,
@@ -480,7 +492,14 @@ export async function loadPresence(userIds: string[]) {
     .select('user_id, is_online, last_seen_at, status_message, last_seen_visibility, online_visibility')
     .in('user_id', userIds);
 
-  const map: Record<string, any> = {};
+  const map: Record<string, {
+    user_id: string;
+    is_online: boolean;
+    last_seen_at: string;
+    status_message?: string;
+    last_seen_visibility?: 'everyone' | 'contacts' | 'nobody';
+    online_visibility?: 'everyone' | 'same_as_last_seen' | 'nobody';
+  }> = {};
   (data || []).forEach(p => { map[p.user_id] = p; });
   return map;
 }
