@@ -15,6 +15,9 @@ import { GradeDistributionChart, GradeDataItem, ClassGenderMatrixItem } from '..
 import { StudentDetailsCarousel, StudentDetailCard } from '../dashboard/StudentDetailsCarousel';
 import { ExamResultsBarChart, ExamResultSubject } from '../dashboard/ExamResultsBarChart';
 import { AverageScoreRings, SubjectScoreGauge } from '../dashboard/AverageScoreRings';
+import { WaecExamScheduleWidget } from '../dashboard/WaecExamScheduleWidget';
+import { CassComplianceAlertBanner } from '../dashboard/CassComplianceAlertBanner';
+import { BroadsheetQuickPreviewModal } from '../dashboard/BroadsheetQuickPreviewModal';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -89,6 +92,7 @@ export function ExamDashboardTab({ officer }: { officer: OfficerData }) {
   const [subjectResultsList, setSubjectResultsList] = useState<ExamResultSubject[] | undefined>(undefined);
   const [subjectAveragesList, setSubjectAveragesList] = useState<SubjectScoreGauge[] | undefined>(undefined);
   const [isLoadingDb, setIsLoadingDb] = useState(false);
+  const [showBroadsheetModal, setShowBroadsheetModal] = useState(false);
 
   const applyDataFromResponse = useCallback((data: DashboardApiResponseData) => {
     if (!data) return;
@@ -211,7 +215,7 @@ export function ExamDashboardTab({ officer }: { officer: OfficerData }) {
               {quickActions.map((a) => (
                 <button
                   key={a.tab}
-                  onClick={() => nav(a.tab)}
+                  onClick={() => a.tab === 'broadsheets' ? setShowBroadsheetModal(true) : nav(a.tab)}
                   title={a.label}
                   className={`px-1.5 sm:px-2 py-1.5 rounded-xl text-[10px] sm:text-xs font-bold text-white bg-gradient-to-r ${a.color} hover:opacity-90 transition-opacity flex items-center justify-center gap-1 shadow-sm w-full min-w-0`}
                 >
@@ -228,6 +232,12 @@ export function ExamDashboardTab({ officer }: { officer: OfficerData }) {
           <TopPerformersWall spotlights={spotlightsList} />
         </div>
       </div>
+
+      {/* ── 2.5 National WAEC Examination Sittings Countdown Widget ──── */}
+      <WaecExamScheduleWidget />
+
+      {/* ── 2.6 MBSSE CASS 30/70 Compliance Alert Banner ──────────────── */}
+      <CassComplianceAlertBanner />
 
       {/* ── 3. Examination Lifecycle Progress ────────────────────── */}
       <div className="glass-card rounded-2xl p-4 sm:p-5">
@@ -375,6 +385,14 @@ export function ExamDashboardTab({ officer }: { officer: OfficerData }) {
           </div>
         </div>
       </div>
+
+      {/* Master Broadsheet Quick Preview Modal */}
+      {showBroadsheetModal && (
+        <BroadsheetQuickPreviewModal
+          officer={officer}
+          onClose={() => setShowBroadsheetModal(false)}
+        />
+      )}
     </div>
   );
 }

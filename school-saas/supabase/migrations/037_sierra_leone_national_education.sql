@@ -1,4 +1,4 @@
-﻿-- 037_sierra_leone_national_education.sql
+-- 037_sierra_leone_national_education.sql
 -- Adds full Sierra Leone National Education System (MBSSE / MHERST / WAEC / NCTVA) support
 
 -- 1. WAEC 9-Point Grade Scale (Official)
@@ -161,14 +161,27 @@ ALTER TABLE public.sl_national_exams   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sl_cass_config      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sl_stream_rules     ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Public read sl_waec_grade_scale" ON public.sl_waec_grade_scale;
 CREATE POLICY "Public read sl_waec_grade_scale" ON public.sl_waec_grade_scale FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public read sl_school_levels" ON public.sl_school_levels;
 CREATE POLICY "Public read sl_school_levels"    ON public.sl_school_levels    FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public read sl_national_exams" ON public.sl_national_exams;
 CREATE POLICY "Public read sl_national_exams"   ON public.sl_national_exams   FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "Public read sl_stream_rules" ON public.sl_stream_rules;
 CREATE POLICY "Public read sl_stream_rules"     ON public.sl_stream_rules     FOR SELECT USING (TRUE);
 
+DROP POLICY IF EXISTS "Tenant read sl_cass_config" ON public.sl_cass_config;
 CREATE POLICY "Tenant read sl_cass_config" ON public.sl_cass_config
   FOR SELECT USING (tenant_id IS NULL OR tenant_id = public.get_user_tenant_id());
+
+DROP POLICY IF EXISTS "Tenant insert sl_cass_config" ON public.sl_cass_config;
 CREATE POLICY "Tenant insert sl_cass_config" ON public.sl_cass_config
   FOR INSERT WITH CHECK (tenant_id = public.get_user_tenant_id());
+
+DROP POLICY IF EXISTS "Tenant update sl_cass_config" ON public.sl_cass_config;
 CREATE POLICY "Tenant update sl_cass_config" ON public.sl_cass_config
   FOR UPDATE USING (tenant_id = public.get_user_tenant_id());
+

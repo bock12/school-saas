@@ -8,7 +8,10 @@ import {
   BookOpen, Award, GraduationCap, Zap,
   FileText, ArrowRight, RotateCcw, Info,
   FlaskConical, Palette, Briefcase, Wrench,
+  Printer, ShieldCheck
 } from 'lucide-react';
+import { AdmissionLetterModal, AdmissionApplicantData } from '../dashboard/AdmissionLetterModal';
+import { CassExportModal } from '../dashboard/CassExportModal';
 
 type ApplicantStage =
   | 'Application' | 'Document Review' | 'Assessment'
@@ -110,6 +113,8 @@ export function AdmissionsTab({ officer }: { officer: OfficerData }) {
   const [submitResult, setSubmitResult]   = useState<{stream?:string;auto?:boolean}|null>(null);
   const [selected, setSelected]           = useState<Applicant|null>(null);
   const [activeView, setActiveView]       = useState<'list'|'waec'|'cass'>('list');
+  const [letterApplicant, setLetterApplicant] = useState<AdmissionApplicantData|null>(null);
+  const [showCassExport, setShowCassExport]   = useState(false);
   const [form, setForm] = useState({
     firstName:'',lastName:'',dob:'',gender:'',email:'',phone:'',
     address:'',city:'',schoolLevel:'SSS',targetGrade:'SSS 1',
@@ -209,6 +214,10 @@ export function AdmissionsTab({ officer }: { officer: OfficerData }) {
           <button onClick={() => setActiveView(v => v === 'cass' ? 'list' : 'cass')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeView === 'cass' ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'}`}>
             <BookOpen className="w-3.5 h-3.5" /> CASS 30/70
+          </button>
+          <button onClick={() => setShowCassExport(true)}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-all flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5" /> Export MBSSE CASS
           </button>
           <button onClick={() => { setShowForm(true); setFormStep(1); setSubmitResult(null); }}
             className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs font-bold hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-lg">
@@ -558,6 +567,15 @@ export function AdmissionsTab({ officer }: { officer: OfficerData }) {
                 </div>
               </div>
             )}
+
+            <div className="pt-2 border-t border-[hsl(var(--border))] flex justify-end">
+              <button
+                onClick={() => { setLetterApplicant(selected); setSelected(null); }}
+                className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-md"
+              >
+                <Printer className="w-4 h-4" /> Print Official Admission Letter
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -729,6 +747,23 @@ export function AdmissionsTab({ officer }: { officer: OfficerData }) {
             )}
           </div>
         </div>
+      )}
+
+      {/* Official Sierra Leone Admission Letter Modal */}
+      {letterApplicant && (
+        <AdmissionLetterModal
+          applicant={letterApplicant}
+          officer={officer}
+          onClose={() => setLetterApplicant(null)}
+        />
+      )}
+
+      {/* MBSSE CASS Mark Exporter & Auditor Modal */}
+      {showCassExport && (
+        <CassExportModal
+          officer={officer}
+          onClose={() => setShowCassExport(false)}
+        />
       )}
     </div>
   );
