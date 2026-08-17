@@ -40,11 +40,13 @@ export function canUserDm(myRole: string, targetRole: string): boolean {
 
 export type CallState = {
   channelId: string;
-  peerId: string;
+  peerId: string;           // primary peer (first non-self for groups)
+  peerIds: string[];        // all peers: 1 for DM, N for group
   peerName: string;
   peerAvatar: string | null;
   type: 'voice' | 'video';
   direction: 'incoming' | 'outgoing';
+  isGroup: boolean;
 };
 
 interface MessagingClientProps {
@@ -73,6 +75,7 @@ export default function MessagingClient({
   initialOnline,
 }: MessagingClientProps) {
   const [channels, setChannels] = useState<ChatChannel[]>(initialChannels);
+  const [users, setUsers] = useState<ChatUser[]>(initialUsers);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -170,10 +173,12 @@ export default function MessagingClient({
           setCallState({
             channelId: payload.channelId,
             peerId: payload.from,
+            peerIds: [payload.from],
             peerName: payload.fromName,
             peerAvatar: payload.fromAvatar,
             type: payload.callType,
             direction: 'incoming',
+            isGroup: payload.isGroup ?? false,
           });
         }
       })
@@ -194,7 +199,45 @@ export default function MessagingClient({
     if (channels.some(ch => !ch.participants)) enrichChannels();
   }, [channels.length]);
 
-  // ── Presence heartbeat ─────────────────────────────────────────────────────
+  // ── Realtime presence sync via Supabase Realtime Presence ──────────────────
+  useEffect(() => {
+    if (!tenantId || !currentUserId) return;
+    const presenceCh = supabase.channel(`tenant_presence:${tenantId}`, {
+      config: { presence: { key: currentUserId } },
+    });
+
+    presenceCh
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceCh.presenceState();
+        const onlineUserIds = new Set(Object.keys(state));
+        setUsers(prev => prev.map(u => ({
+          ...u,
+          online: onlineUserIds.has(u.id),
+        })));
+        setChannels(prev => prev.map(ch => ({
+          ...ch,
+          participants: ch.participants?.map(p => ({
+            ...p,
+            online: onlineUserIds.has(p.id),
+          })),
+        })));
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceCh.track({
+            user_id: currentUserId,
+            online_at: new Date().toISOString(),
+          });
+        }
+      });
+
+    return () => {
+      presenceCh.untrack();
+      supabase.removeChannel(presenceCh);
+    };
+  }, [tenantId, currentUserId, supabase]);
+
+  // ── Presence heartbeat in database ─────────────────────────────────────────
   useEffect(() => {
     updatePresence(true);
     const interval = setInterval(() => { if (document.visibilityState === 'visible') updatePresence(true); }, 30000);
@@ -204,6 +247,7 @@ export default function MessagingClient({
     window.addEventListener('beforeunload', onUnload);
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('beforeunload', onUnload); updatePresence(false); };
   }, []);
+
 
   // ── Channel selection ──────────────────────────────────────────────────────
   const handleSelectChannel = useCallback((id: string) => {
@@ -278,60 +322,64 @@ export default function MessagingClient({
     if (callStateRef.current) return; // already in a call
     const channel = channels.find(c => c.id === channelId);
     if (!channel) return;
-    const peer = channel.participants?.find(p => p.id !== currentUserId);
-    if (!peer) return;
 
-    setCallingToast(`📞 Calling ${peer.full_name}...`);
+    const isGroup = channel.type === 'group';
+    const peers = (channel.participants || []).filter(p => p.id !== currentUserId);
+    if (peers.length === 0) return;
 
-    // Must subscribe to the peer's personal signal channel before sending.
-    // Supabase broadcast only delivers to subscribed members, so we subscribe,
-    // wait for the SUBSCRIBED status, then send the invite.
-    const peerSigCh = supabase.channel(`call-signal:${peer.id}`, {
-      config: { broadcast: { self: false } },
-    });
+    const primaryPeer = peers[0];
+    setCallingToast(`${type === 'video' ? '🎥' : '📞'} Calling ${isGroup ? channel.name || 'Group' : primaryPeer.full_name}...`);
 
-    await new Promise<void>((resolve) => {
-      peerSigCh.subscribe((status) => {
-        if (status === 'SUBSCRIBED') resolve();
+    // Send invite to each peer
+    await Promise.all(peers.map(async (peer) => {
+      const peerSigCh = supabase.channel(`call-signal:${peer.id}`, {
+        config: { broadcast: { self: false } },
       });
-      // Fallback timeout
-      setTimeout(resolve, 2000);
-    });
-
-    await peerSigCh.send({
-      type: 'broadcast',
-      event: 'call-invite',
-      payload: {
-        from: currentUserId,
-        fromName: currentUser.full_name,
-        fromAvatar: currentUser.avatar_url,
-        to: peer.id,
-        channelId,
-        callType: type,
-      },
-    });
-
-    // Don't remove peerSigCh immediately — the call-end signal may come on it
-    // The CallModal manages the dedicated WebRTC signaling channel separately.
+      await new Promise<void>((resolve) => {
+        peerSigCh.subscribe((status) => { if (status === 'SUBSCRIBED') resolve(); });
+        setTimeout(resolve, 2000);
+      });
+      await peerSigCh.send({
+        type: 'broadcast',
+        event: 'call-invite',
+        payload: {
+          from: currentUserId,
+          fromName: currentUser.full_name,
+          fromAvatar: currentUser.avatar_url,
+          to: peer.id,
+          channelId,
+          callType: type,
+          isGroup,
+        },
+      });
+    }));
 
     setCallingToast(null);
     setCallState({
-      channelId, peerId: peer.id, peerName: peer.full_name,
-      peerAvatar: peer.avatar_url, type, direction: 'outgoing',
+      channelId,
+      peerId: primaryPeer.id,
+      peerIds: peers.map(p => p.id),
+      peerName: isGroup ? (channel.name || 'Group Call') : primaryPeer.full_name,
+      peerAvatar: isGroup ? (channel.avatar_url || null) : primaryPeer.avatar_url,
+      type,
+      direction: 'outgoing',
+      isGroup,
     });
   }, [channels, currentUserId, currentUser, supabase]);
+
 
   const activeChannel = channels.find(c => c.id === activeChannelId) || null;
 
   // Filter users for DM modal based on role rules
   const dmableUsers = myRule.canDmRoles.includes('*')
-    ? initialUsers
-    : initialUsers.filter(u => myRule.canDmRoles.includes(u.role));
+    ? users
+    : users.filter(u => myRule.canDmRoles.includes(u.role));
 
   // Filter users for group modal based on role rules
   const groupableUsers = myRule.canAddToGroup.includes('*')
-    ? initialUsers
-    : initialUsers.filter(u => myRule.canAddToGroup.includes(u.role));
+    ? users
+    : users.filter(u => myRule.canAddToGroup.includes(u.role));
+
 
   return (
     <div className="flex h-[calc(100vh-8rem)] min-h-[500px] rounded-xl border border-[hsl(var(--border))] overflow-hidden shadow-xl bg-[hsl(var(--bg-primary))] relative">

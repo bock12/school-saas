@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   PhoneOff, Phone, Video, VideoOff, Mic, MicOff,
-  Volume2, VolumeX, Minimize2, Maximize2,
+  Volume2, VolumeX, Minimize2, Maximize2, Monitor, MonitorOff, Users,
 } from 'lucide-react';
 import type { CallState } from './messaging-client';
 import type { ChatUser } from './actions';
+import { logCallMessage } from './actions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const AVATAR_COLORS = ['bg-violet-600', 'bg-emerald-600', 'bg-amber-600', 'bg-rose-600', 'bg-sky-600', 'bg-fuchsia-600'];
@@ -26,6 +27,13 @@ const ICE_SERVERS = {
   ],
 };
 
+interface PeerTile {
+  peerId: string;
+  peerName: string;
+  peerAvatar: string | null;
+  stream: MediaStream | null;
+}
+
 interface CallModalProps {
   callState: CallState;
   currentUser: ChatUser;
@@ -41,83 +49,142 @@ export default function CallModal({ callState, currentUser, supabase, onClose }:
   const [isVideoOff, setIsVideoOff] = useState(callState.type === 'voice');
   const [isSpeakerOff, setIsSpeakerOff] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [duration, setDuration] = useState(0);
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [peerTiles, setPeerTiles] = useState<PeerTile[]>(
+    callState.peerIds.map(id => ({
+      peerId: id,
+      peerName: callState.isGroup ? `Peer ${id.slice(0, 4)}` : callState.peerName,
+      peerAvatar: callState.isGroup ? null : callState.peerAvatar,
+      stream: null,
+    }))
+  );
 
-  // Refs — stable across renders, safe to use inside useEffect/broadcast handlers
-  const pcRef = useRef<RTCPeerConnection | null>(null);
+  // One RTCPeerConnection per peer for group mesh
+  const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const remoteVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const signalChannelRef = useRef<any>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<any>(null);
-  const pendingCandidates = useRef<RTCIceCandidate[]>([]);
-  // Stable ref to endCall so broadcast handlers don't capture stale closures
+  const pendingCandidates = useRef<Map<string, RTCIceCandidate[]>>(new Map());
   const endCallRef = useRef<(sendSignal?: boolean) => void>(() => {});
   const ringTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  const statusRef = useRef(status);
+  const durationRef = useRef(duration);
+  const loggedCallRef = useRef(false);
 
-  const signalingChannelName = `webrtc:${[currentUser.id, callState.peerId].sort().join(':')}:${callState.channelId}`;
+  useEffect(() => { statusRef.current = status; }, [status]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
 
-  // ── Start media + peer connection ──────────────────────────────────────────
-  // Returns the RTCPeerConnection on success, null on failure.
-  const startMedia = useCallback(async (): Promise<RTCPeerConnection | null> => {
+  const signalingChannelName = `webrtc:${[currentUser.id, ...callState.peerIds].sort().join(':')}:${callState.channelId}`;
+
+
+  // ── Create peer connection for a single peer ───────────────────────────────
+  const createPeerConnection = useCallback((peerId: string) => {
+    if (pcsRef.current.has(peerId)) return pcsRef.current.get(peerId)!;
+
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    pcsRef.current.set(peerId, pc);
+
+    // Add local tracks
+    localStreamRef.current?.getTracks().forEach(track => {
+      pc.addTrack(track, localStreamRef.current!);
+    });
+
+    pc.ontrack = (e) => {
+      const [remStream] = e.streams;
+      const el = remoteVideoRefs.current.get(peerId);
+      if (el) el.srcObject = remStream;
+      setPeerTiles(prev => prev.map(t =>
+        t.peerId === peerId ? { ...t, stream: remStream } : t
+      ));
+      setStatus('active');
+    };
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        signalChannelRef.current?.send({
+          type: 'broadcast', event: 'ice-candidate',
+          payload: { candidate: e.candidate, from: currentUser.id, to: peerId },
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        setPeerTiles(prev => prev.map(t => t.peerId === peerId ? { ...t, stream: null } : t));
+      }
+    };
+
+    // Flush buffered ICE candidates
+    const buffered = pendingCandidates.current.get(peerId) || [];
+    buffered.forEach(c => { try { pc.addIceCandidate(c); } catch { } });
+    pendingCandidates.current.delete(peerId);
+
+    return pc;
+  }, [currentUser.id]);
+
+  // ── Start local media ──────────────────────────────────────────────────────
+  const startMedia = useCallback(async (): Promise<boolean> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: callState.type === 'video',
       });
-      setLocalStream(stream);
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-
-      const pc = new RTCPeerConnection(ICE_SERVERS);
-      pcRef.current = pc;
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-      pc.ontrack = (e) => {
-        const [remStream] = e.streams;
-        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remStream;
-        setStatus('active');
-      };
-
-      pc.onicecandidate = (e) => {
-        if (e.candidate) {
-          signalChannelRef.current?.send({
-            type: 'broadcast', event: 'ice-candidate',
-            payload: { candidate: e.candidate, from: currentUser.id },
-          });
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          setStatus('ended');
-        }
-      };
-
-      // Flush buffered ICE candidates that arrived before remote description was set
-      for (const c of pendingCandidates.current) {
-        try { await pc.addIceCandidate(c); } catch { /* ignore */ }
-      }
-      pendingCandidates.current = [];
-
-      return pc;
+      return true;
     } catch (err: any) {
-      console.error('Media error:', err);
       const msg = err?.name === 'NotAllowedError'
         ? 'Camera/Mic permission denied. Please allow access and try again.'
         : 'Could not access camera or microphone.';
       setMediaError(msg);
       setStatus('ended');
-      return null;
+      return false;
     }
-  }, [callState.type, currentUser.id]);
+  }, [callState.type]);
 
-  // ── Setup WebRTC signaling channel ──────────────────────────────────────────
-  // Runs once on mount. Broadcast handlers use refs (endCallRef) to avoid
-  // capturing stale state in the closure.
+  // ── Screen sharing ─────────────────────────────────────────────────────────
+  const toggleScreenShare = useCallback(async () => {
+    if (isScreenSharing) {
+      // Stop screen share, restore camera
+      screenStreamRef.current?.getTracks().forEach(t => t.stop());
+      screenStreamRef.current = null;
+      const camTrack = localStreamRef.current?.getVideoTracks()[0];
+      if (camTrack) {
+        pcsRef.current.forEach(pc => {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) sender.replaceTrack(camTrack);
+        });
+      }
+      setIsScreenSharing(false);
+    } else {
+      try {
+        const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        screenStreamRef.current = screen;
+        const screenTrack = screen.getVideoTracks()[0];
+
+        pcsRef.current.forEach(pc => {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) sender.replaceTrack(screenTrack);
+        });
+
+        // Local preview
+        if (localVideoRef.current) localVideoRef.current.srcObject = screen;
+
+        screenTrack.onended = () => toggleScreenShare();
+        setIsScreenSharing(true);
+      } catch {
+        // User cancelled or permission denied
+      }
+    }
+  }, [isScreenSharing]);
+
+  // ── Signaling channel setup ────────────────────────────────────────────────
   useEffect(() => {
     const sigCh = supabase.channel(signalingChannelName, {
       config: { broadcast: { self: false } },
@@ -125,11 +192,10 @@ export default function CallModal({ callState, currentUser, supabase, onClose }:
     signalChannelRef.current = sigCh;
 
     sigCh
-      // Incoming callee receives offer → create answer
+      // Callee receives offer
       .on('broadcast', { event: 'offer' }, async ({ payload }) => {
         if (payload.to !== currentUser.id) return;
-        const pc = pcRef.current || await startMedia();
-        if (!pc) return;
+        const pc = createPeerConnection(payload.from);
         await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -139,54 +205,54 @@ export default function CallModal({ callState, currentUser, supabase, onClose }:
         });
         setStatus('active');
       })
-      // Caller receives answer → set remote description
+      // Caller receives answer
       .on('broadcast', { event: 'answer' }, async ({ payload }) => {
         if (payload.to !== currentUser.id) return;
-        const pc = pcRef.current;
+        const pc = pcsRef.current.get(payload.from);
         if (pc && pc.signalingState !== 'stable') {
           await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
         }
         setStatus('active');
       })
-      // ICE candidate exchange — buffer if remote description not yet set
+      // ICE candidate
       .on('broadcast', { event: 'ice-candidate' }, async ({ payload }) => {
         if (payload.from === currentUser.id) return;
+        if (payload.to && payload.to !== currentUser.id) return;
         const candidate = new RTCIceCandidate(payload.candidate);
-        const pc = pcRef.current;
+        const pc = pcsRef.current.get(payload.from);
         if (pc && pc.remoteDescription) {
-          try { await pc.addIceCandidate(candidate); } catch { /* ignore */ }
+          try { await pc.addIceCandidate(candidate); } catch { }
         } else {
-          pendingCandidates.current.push(candidate);
+          const buf = pendingCandidates.current.get(payload.from) || [];
+          buf.push(candidate);
+          pendingCandidates.current.set(payload.from, buf);
         }
       })
-      // Peer ended the call
+      // Peer ended
       .on('broadcast', { event: 'call-end' }, ({ payload }) => {
         if (payload.from !== currentUser.id) endCallRef.current(false);
       })
-      // Peer accepted → caller creates and sends offer
-      .on('broadcast', { event: 'call-accept' }, async () => {
+      // Peer accepted (DM flow: callee accepts → caller sends offer)
+      .on('broadcast', { event: 'call-accept' }, async ({ payload }) => {
         if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
-        const pc = pcRef.current;
-        if (!pc) return;
+        const acceptingPeerId = payload.from;
+        const pc = createPeerConnection(acceptingPeerId);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         sigCh.send({
           type: 'broadcast', event: 'offer',
-          payload: { sdp: offer, to: callState.peerId, from: currentUser.id },
+          payload: { sdp: offer, to: acceptingPeerId, from: currentUser.id },
         });
       })
       .subscribe();
 
-    // Outgoing call: start media immediately, then wait for call-accept signal
+    // Outgoing call: start media and wait for peers to accept
     if (callState.direction === 'outgoing') {
       startMedia();
-      // Auto-cancel if peer doesn't answer within 30 seconds
-      ringTimeoutRef.current = setTimeout(() => {
-        endCallRef.current(true);
-      }, 30000);
+      ringTimeoutRef.current = setTimeout(() => endCallRef.current(true), 30000);
     }
 
-    // Incoming call: play a ringtone oscillator
+    // Incoming: ringtone
     if (callState.direction === 'incoming') {
       try {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -195,30 +261,25 @@ export default function CallModal({ callState, currentUser, supabase, onClose }:
           const gainNode = ctx.createGain();
           gainNode.gain.value = 0.15;
           gainNode.connect(ctx.destination);
-
-          // Create a simple two-tone ring pattern
           const playBeep = () => {
             const osc = ctx.createOscillator();
-            osc.type = 'sine';
-            osc.frequency.value = 880;
+            osc.type = 'sine'; osc.frequency.value = 880;
             osc.connect(gainNode);
             osc.start();
-            setTimeout(() => { try { osc.stop(); } catch { /* ignore */ } }, 300);
+            setTimeout(() => { try { osc.stop(); } catch { } }, 300);
           };
-
           playBeep();
           const ringInterval = setInterval(playBeep, 1200);
-          let isStopped = false;
+          let stopped = false;
           ringtoneRef.current = {
             stop: () => {
-              if (isStopped) return;
-              isStopped = true;
+              if (stopped) return; stopped = true;
               clearInterval(ringInterval);
-              if (ctx.state !== 'closed') ctx.close().catch(() => {});
+              if (ctx.state !== 'closed') ctx.close().catch(() => { });
             },
           };
         }
-      } catch { /* ignore */ }
+      } catch { }
     }
 
     return () => {
@@ -227,7 +288,7 @@ export default function CallModal({ callState, currentUser, supabase, onClose }:
       if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty — stable via refs
+  }, []);
 
   // ── Duration timer ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -246,96 +307,134 @@ export default function CallModal({ callState, currentUser, supabase, onClose }:
         payload: { from: currentUser.id },
       });
     }
-    pcRef.current?.close();
+
+    // Record call log message into chat if caller or if missed
+    if (!loggedCallRef.current) {
+      loggedCallRef.current = true;
+      const isCaller = callState.direction === 'outgoing';
+      const wasActive = statusRef.current === 'active';
+      // Only log once (caller logs, or callee if declined while incoming)
+      if (isCaller || statusRef.current === 'ringing') {
+        const callStatus = wasActive ? 'completed' : 'missed';
+        const durStr = wasActive && durationRef.current > 0 ? formatDuration(durationRef.current) : undefined;
+        logCallMessage(callState.channelId, callState.type, callStatus, durStr).catch(() => {});
+      }
+    }
+
+    pcsRef.current.forEach(pc => pc.close());
+    pcsRef.current.clear();
     localStreamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
     setStatus('ended');
     ringtoneRef.current?.stop?.();
     setTimeout(onClose, 1200);
-  }, [currentUser.id, onClose]);
+  }, [currentUser.id, onClose, callState.channelId, callState.type, callState.direction]);
 
-  // Keep endCallRef always pointing to the latest endCall (avoids stale closure in broadcasts)
   useEffect(() => { endCallRef.current = endCall; }, [endCall]);
+
 
   // ── Accept incoming call ───────────────────────────────────────────────────
   const acceptCall = useCallback(async () => {
     ringtoneRef.current?.stop?.();
     setStatus('connecting');
-    const pc = await startMedia();
-    if (!pc) return;
-    // Signal caller we accepted — they will then create an offer
+    const ok = await startMedia();
+    if (!ok) return;
     signalChannelRef.current?.send({
       type: 'broadcast', event: 'call-accept',
       payload: { from: currentUser.id },
     });
   }, [startMedia, currentUser.id]);
 
-  // ── Toggle mic ────────────────────────────────────────────────────────────
   const toggleMic = useCallback(() => {
     localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = !t.enabled; });
     setIsMuted(m => !m);
   }, []);
 
-  // ── Toggle video ──────────────────────────────────────────────────────────
   const toggleVideo = useCallback(() => {
     localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = !t.enabled; });
     setIsVideoOff(v => !v);
   }, []);
 
-  // ── Speaker toggle ────────────────────────────────────────────────────────
   const toggleSpeaker = useCallback(() => {
-    if (remoteVideoRef.current) remoteVideoRef.current.muted = !isSpeakerOff;
+    remoteVideoRefs.current.forEach(el => { el.muted = !isSpeakerOff; });
     setIsSpeakerOff(s => !s);
   }, [isSpeakerOff]);
 
   const isVideo = callState.type === 'video';
+  const hasActivePeers = peerTiles.some(t => t.stream);
 
   return (
-    <div className={`fixed z-[100] transition-all duration-300 ${
-      isMinimized
-        ? 'bottom-6 right-6 w-72 h-auto rounded-2xl shadow-2xl overflow-hidden'
-        : 'inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center'
+    <div className={`fixed z-[100] transition-all duration-300 ${isMinimized
+      ? 'bottom-6 right-6 w-72 h-auto rounded-2xl shadow-2xl overflow-hidden'
+      : 'inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center'
     }`}>
       <div className={`relative ${isMinimized
         ? 'w-full bg-gray-900 rounded-2xl'
-        : 'w-full max-w-sm bg-gray-900 rounded-3xl shadow-2xl overflow-hidden'
+        : 'w-full max-w-xl bg-gray-900 rounded-3xl shadow-2xl overflow-hidden'
       }`}>
 
-        {/* Remote video (background for video calls) */}
-        {isVideo && status === 'active' && (
-          <video ref={remoteVideoRef} autoPlay playsInline
-            className={`${isMinimized ? 'hidden' : 'absolute inset-0 w-full h-full object-cover'}`} />
+        {/* ── Grid of remote video tiles (video call + active) ── */}
+        {isVideo && status === 'active' && !isMinimized && hasActivePeers && (
+          <div className={`grid gap-1 ${peerTiles.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} absolute inset-0`}>
+            {peerTiles.map(tile => (
+              <div key={tile.peerId} className="relative bg-gray-800 overflow-hidden">
+                {tile.stream
+                  ? <video
+                      ref={el => {
+                        if (el) {
+                          remoteVideoRefs.current.set(tile.peerId, el);
+                          if (tile.stream && el.srcObject !== tile.stream) el.srcObject = tile.stream;
+                        }
+                      }}
+                      autoPlay playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  : <div className={`w-full h-full flex items-center justify-center ${avatarColor(tile.peerId)}`}>
+                      <span className="text-white font-bold text-2xl">{getInitials(tile.peerName)}</span>
+                    </div>
+                }
+                {isScreenSharing && (
+                  <div className="absolute top-2 left-2 bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Monitor className="w-2.5 h-2.5" /> Sharing Screen
+                  </div>
+                )}
+                <div className="absolute bottom-2 left-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full">
+                  {tile.peerName.split(' ')[0]}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
-        {/* Main content */}
-        <div className={`relative flex flex-col items-center ${isMinimized ? 'p-4' : 'p-8 min-h-[480px]'} ${isVideo && status === 'active' && !isMinimized ? 'bg-black/40' : 'bg-gray-900'}`}>
+        {/* ── Main content ── */}
+        <div className={`relative flex flex-col items-center ${isMinimized ? 'p-4' : 'p-8 min-h-[480px]'} ${(isVideo && status === 'active' && hasActivePeers && !isMinimized) ? 'bg-black/40' : 'bg-gray-900'}`}>
 
-          {/* Minimize/maximize button */}
+          {/* Minimize/maximize */}
           <button onClick={() => setIsMinimized(m => !m)}
-            className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-colors z-10">
+            className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 z-10">
             {isMinimized ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Peer info + avatar (expanded view) */}
+          {/* ── Expanded view ── */}
           {!isMinimized && (
             <div className="flex flex-col items-center gap-4 flex-1 justify-center w-full">
               {/* Call type badge */}
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white text-[10px] font-bold uppercase tracking-wider">
-                {isVideo ? <Video className="w-3 h-3" /> : <Phone className="w-3 h-3" />}
-                {isVideo ? 'Video Call' : 'Voice Call'}
+                {callState.isGroup ? <Users className="w-3 h-3" /> : isVideo ? <Video className="w-3 h-3" /> : <Phone className="w-3 h-3" />}
+                {callState.isGroup ? 'Group Call' : isVideo ? 'Video Call' : 'Voice Call'}
               </div>
 
-              {/* Avatar / remote video */}
-              {!(isVideo && status === 'active') && (
+              {/* Avatar (voice or no video stream yet) */}
+              {!(isVideo && status === 'active' && hasActivePeers) && (
                 <div className={`w-24 h-24 rounded-full ${avatarColor(callState.peerId)} text-white flex items-center justify-center font-bold text-3xl shadow-xl border-4 border-white/20 relative`}>
                   {callState.peerAvatar
                     ? <img src={callState.peerAvatar} alt="" className="w-full h-full rounded-full object-cover" />
-                    : getInitials(callState.peerName)}
+                    : callState.isGroup ? <Users className="w-10 h-10" /> : getInitials(callState.peerName)}
                   {status === 'active' && (
                     <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-gray-900 flex items-center justify-center">
                       <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
                     </span>
                   )}
-                  {/* Pulsing ring animation when ringing/connecting */}
                   {(status === 'ringing' || status === 'connecting') && (
                     <span className="absolute inset-0 rounded-full border-4 border-white/20 animate-ping" />
                   )}
@@ -355,27 +454,29 @@ export default function CallModal({ callState, currentUser, supabase, onClose }:
                 )}
               </div>
 
-              {/* Local video PiP (video calls) */}
+              {/* Local video PiP */}
               {isVideo && (
                 <div className="absolute bottom-28 right-4 w-24 h-32 rounded-xl overflow-hidden border-2 border-white/30 shadow-lg">
                   <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                  {isVideoOff && (
+                  {isVideoOff && !isScreenSharing && (
                     <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
                       <VideoOff className="w-5 h-5 text-white/40" />
                     </div>
+                  )}
+                  {isScreenSharing && (
+                    <div className="absolute bottom-1 left-1 bg-blue-600 text-white text-[8px] px-1.5 py-0.5 rounded-full">Screen</div>
                   )}
                 </div>
               )}
             </div>
           )}
 
-          {/* Minimized view */}
+          {/* ── Minimized view ── */}
           {isMinimized && (
             <div className="flex items-center gap-3 w-full">
               <div className={`w-10 h-10 rounded-full ${avatarColor(callState.peerId)} text-white flex items-center justify-center font-bold text-sm shrink-0`}>
-                {callState.peerAvatar
-                  ? <img src={callState.peerAvatar} alt="" className="w-full h-full rounded-full object-cover" />
-                  : getInitials(callState.peerName)}
+                {callState.peerAvatar ? <img src={callState.peerAvatar} alt="" className="w-full h-full rounded-full object-cover" />
+                  : callState.isGroup ? <Users className="w-5 h-5" /> : getInitials(callState.peerName)}
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-white truncate">{callState.peerName}</p>
@@ -384,48 +485,50 @@ export default function CallModal({ callState, currentUser, supabase, onClose }:
             </div>
           )}
 
-          {/* Call controls */}
-          <div className={`flex items-center justify-center gap-4 ${isMinimized ? 'mt-3' : 'mt-auto pt-6'}`}>
-
+          {/* ── Call controls ── */}
+          <div className={`flex items-center justify-center gap-3 ${isMinimized ? 'mt-3' : 'mt-auto pt-6'}`}>
             {status === 'ringing' && callState.direction === 'incoming' ? (
-              /* Incoming: Decline + Accept */
               <>
-                <button onClick={() => endCall(true)}
-                  className="w-14 h-14 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-lg hover:bg-rose-700 transition-colors"
-                  title="Decline">
+                <button onClick={() => endCall(true)} title="Decline"
+                  className="w-14 h-14 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-lg hover:bg-rose-700 transition-colors">
                   <PhoneOff className="w-6 h-6" />
                 </button>
-                <button onClick={acceptCall}
-                  className="w-14 h-14 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg hover:bg-emerald-700 transition-colors animate-bounce"
-                  title="Accept">
+                <button onClick={acceptCall} title="Accept"
+                  className="w-14 h-14 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg hover:bg-emerald-700 transition-colors animate-bounce">
                   <Phone className="w-6 h-6" />
                 </button>
               </>
             ) : (
-              /* Active / connecting: Mic, End, Video/Speaker */
               <>
-                <button onClick={toggleMic}
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-rose-600 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                  title={isMuted ? 'Unmute' : 'Mute'}>
+                {/* Mic */}
+                <button onClick={toggleMic} title={isMuted ? 'Unmute' : 'Mute'}
+                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-rose-600 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
                   {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                 </button>
 
-                <button onClick={() => endCall(true)}
-                  className="w-14 h-14 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-lg hover:bg-rose-700 transition-colors"
-                  title="End Call">
+                {/* Screen share (video calls only) */}
+                {isVideo && status === 'active' && !isMinimized && (
+                  <button onClick={toggleScreenShare} title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+                    className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${isScreenSharing ? 'bg-blue-600 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                    {isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
+                  </button>
+                )}
+
+                {/* End call */}
+                <button onClick={() => endCall(true)} title="End Call"
+                  className="w-14 h-14 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-lg hover:bg-rose-700 transition-colors">
                   <PhoneOff className="w-6 h-6" />
                 </button>
 
+                {/* Video / Speaker toggle */}
                 {isVideo ? (
-                  <button onClick={toggleVideo}
-                    className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-rose-600 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                    title={isVideoOff ? 'Turn Video On' : 'Turn Video Off'}>
+                  <button onClick={toggleVideo} title={isVideoOff ? 'Turn Video On' : 'Turn Video Off'}
+                    className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-rose-600 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
                     {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
                   </button>
                 ) : (
-                  <button onClick={toggleSpeaker}
-                    className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${isSpeakerOff ? 'bg-rose-600 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                    title={isSpeakerOff ? 'Unmute Speaker' : 'Mute Speaker'}>
+                  <button onClick={toggleSpeaker} title={isSpeakerOff ? 'Unmute Speaker' : 'Mute Speaker'}
+                    className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${isSpeakerOff ? 'bg-rose-600 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}>
                     {isSpeakerOff ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                   </button>
                 )}

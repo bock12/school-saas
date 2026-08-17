@@ -12,6 +12,9 @@ export interface ChatUser {
   online?: boolean;
   last_seen?: string | null;
   status_message?: string | null;
+  online_visibility?: 'everyone' | 'same_as_last_seen' | 'nobody';
+  last_seen_visibility?: 'everyone' | 'contacts' | 'nobody';
+  starred?: boolean;
 }
 
 export interface ChatChannel {
@@ -110,12 +113,31 @@ export async function loadMessagingData(tenantSlug: string) {
     .or(`tenant_id.eq.${tenant.id},role.eq.super_admin,role.eq.org_admin`)
     .neq('id', user.id);
 
-  const users: ChatUser[] = (profilesRaw || []).map(p => ({
-    id: p.id,
-    full_name: p.full_name || 'Unknown User',
-    role: p.role,
-    avatar_url: p.avatar_url || null,
-  }));
+  // Fetch presence for all users to get online status + privacy settings
+  const profileIds = (profilesRaw || []).map(p => p.id);
+  const { data: presenceRows } = await supabase
+    .from('chat_presence')
+    .select('user_id, is_online, last_seen_at, status_message, online_visibility, last_seen_visibility')
+    .in('user_id', profileIds);
+  const presenceMap: Record<string, typeof presenceRows extends (infer T)[] | null ? T : never> = {};
+  (presenceRows || []).forEach((p: any) => { presenceMap[p.user_id] = p; });
+
+  const now = Date.now();
+  const users: ChatUser[] = (profilesRaw || []).map(p => {
+    const presence = presenceMap[p.id];
+    const isRecent = presence?.last_seen_at ? (now - new Date(presence.last_seen_at).getTime() < 90000) : false;
+    return {
+      id: p.id,
+      full_name: p.full_name || 'Unknown User',
+      role: p.role,
+      avatar_url: p.avatar_url || null,
+      online: Boolean(presence?.is_online && isRecent),
+      last_seen: presence?.last_seen_at ?? null,
+      status_message: presence?.status_message ?? null,
+      online_visibility: (presence?.online_visibility ?? 'everyone') as ChatUser['online_visibility'],
+      last_seen_visibility: (presence?.last_seen_visibility ?? 'everyone') as ChatUser['last_seen_visibility'],
+    };
+  });
 
   return { channels, users, currentUserId: user.id, tenantId: tenant.id };
 }
@@ -174,13 +196,31 @@ export async function loadChannelMembers(channelId: string): Promise<ChatUser[]>
     .select('id, full_name, avatar_url, role')
     .in('id', userIds);
 
-  return (profiles || []).map(p => ({
-    id: p.id,
-    full_name: p.full_name || 'User',
-    avatar_url: p.avatar_url || null,
-    role: p.role,
-  }));
+  const { data: presenceData } = await supabase
+    .from('chat_presence')
+    .select('user_id, is_online, last_seen_at, status_message, online_visibility, last_seen_visibility')
+    .in('user_id', userIds);
+  const presMap: Record<string, any> = {};
+  (presenceData || []).forEach((p: any) => { presMap[p.user_id] = p; });
+
+  const now = Date.now();
+  return (profiles || []).map(p => {
+    const pres = presMap[p.id];
+    const isRecent = pres?.last_seen_at ? (now - new Date(pres.last_seen_at).getTime() < 90000) : false;
+    return {
+      id: p.id,
+      full_name: p.full_name || 'User',
+      avatar_url: p.avatar_url || null,
+      role: p.role,
+      online: Boolean(pres?.is_online && isRecent),
+      last_seen: pres?.last_seen_at ?? null,
+      online_visibility: (pres?.online_visibility ?? 'everyone') as ChatUser['online_visibility'],
+      last_seen_visibility: (pres?.last_seen_visibility ?? 'everyone') as ChatUser['last_seen_visibility'],
+    };
+  });
 }
+
+
 
 // ── Send a message ─────────────────────────────────────────────────────────
 
@@ -503,3 +543,62 @@ export async function loadPresence(userIds: string[]) {
   (data || []).forEach(p => { map[p.user_id] = p; });
   return map;
 }
+
+// ── Log Call Message (Missed / Completed Call) ─────────────────────────────
+
+export async function logCallMessage(
+  channelId: string,
+  callType: 'voice' | 'video',
+  callStatus: 'missed' | 'completed' | 'declined',
+  duration?: string
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false };
+
+  const isMissed = callStatus === 'missed' || callStatus === 'declined';
+  const callTitle = isMissed
+    ? (callType === 'video' ? 'Missed Video Call' : 'Missed Voice Call')
+    : (callType === 'video' ? 'Video Call' : 'Voice Call');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .single();
+
+  const senderName = profile?.full_name || 'User';
+
+  const { data, error } = await supabase
+    .from('chat_messages')
+    .insert({
+      channel_id: channelId,
+      sender_id: user.id,
+      content: callTitle,
+      attachment: {
+        type: 'call',
+        name: callTitle,
+        duration: duration || '',
+        sub: callStatus,
+      },
+    })
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  await supabase
+    .from('chat_channels')
+    .update({
+      last_message: {
+        content: `📞 ${callTitle}${duration ? ` (${duration})` : ''}`,
+        sender_name: senderName,
+        created_at: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', channelId);
+
+  return { success: true, message: data };
+}
+

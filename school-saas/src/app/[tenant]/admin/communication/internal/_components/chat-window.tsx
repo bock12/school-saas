@@ -2,16 +2,25 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Send, ArrowLeft, Phone, Video, Search, Paperclip,
+  Send, ArrowLeft, Phone, PhoneMissed, Video, Search, Paperclip,
   Smile, X, Reply, Edit2, Trash2, CheckCheck, Check, Download,
   FileText, Image as ImageIcon, Users,
   Mic, Camera, Music, Zap, BarChart2, Calendar, MapPin, Play,
-  Pause, Plus
+  Pause, Plus, MoreVertical, Star, Forward, Copy, Pin, Info,
+  BellOff, LogOut, Flag, RefreshCw, RotateCcw,
 } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatUser } from './actions';
 import { sendMessage, editMessage, deleteMessage, toggleReaction, markChannelRead } from './actions';
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅', '👏', '🎉'];
+
+const EMOJI_PICKER_CATEGORIES = [
+  { label: '🕐', emojis: ['😊','😂','❤️','👍','🔥','✅','🎉','😍','🙏','😭','💯','🤣','✨','🥳','👀','💪','🤝','👋','🫡','🤔'] },
+  { label: '😊', emojis: ['😀','😁','😄','😅','😆','😎','🥹','😇','🤩','😋','😜','😝','😛','🤭','🤫','😏','😒','😔','😞','😟','😣','😖','😤','😠','😡','🤬','🤯','😱','😨','😰','😥','🤕','🤒','🤢','🤮','💀'] },
+  { label: '👋', emojis: ['👋','🤚','🖐','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝','👍','👎','✊','👊','🤛','🤜','👏','🙌','🫶','👐','🤲','🤝','🙏','✍','💅','🤳','💪','🦾','🦵','🦶','👂','👁','👀'] },
+  { label: '📱', emojis: ['📱','💻','⌨️','📷','📸','📹','🎥','📡','📺','📻','🎙️','📚','📖','📝','✏️','🔑','🔒','🔓','🔔','🔕','📢','📣','🎵','🎶','🎸','🎹','🎺','🎻','🥁','🎤','🎧','📞','☎️','📟','📠'] },
+  { label: '❤️', emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','✅','❌','⭕','🚫','💯','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🆗','🆕','🆓','🆙','🆒','🆖','🆚'] },
+];
 
 const QUICK_REPLIES = [
   { label: 'Exam Office Verification', text: '✅ Verified with Sierra Leone MBSSE & WAEC guidelines. Marks are validated.' },
@@ -71,6 +80,27 @@ function formatTimestamp(dateStr: string): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatLastSeen(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
+  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  if (diffDays === 0 && d.getDate() === now.getDate()) {
+    return `Last seen today at ${timeStr}`;
+  } else if (diffDays <= 1 || (diffDays === 0 && d.getDate() !== now.getDate())) {
+    return `Last seen yesterday at ${timeStr}`;
+  } else if (diffDays < 7) {
+    const dayName = d.toLocaleDateString([], { weekday: 'long' });
+    return `Last seen ${dayName} at ${timeStr}`;
+  } else {
+    const dateFormatted = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return `Last seen ${dateFormatted} at ${timeStr}`;
+  }
+}
+
 function formatDateDivider(dateStr: string): string {
   const d = new Date(dateStr);
   const now = new Date();
@@ -83,6 +113,7 @@ function formatDateDivider(dateStr: string): string {
 function isSameDay(a: string, b: string) {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
+
 
 function parseDurationSec(durationStr?: string): number {
   if (!durationStr) return 5;
@@ -158,11 +189,28 @@ export default function ChatWindow({
   const [searchMode, setSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // ── Message Selection Mode ────────────────────────────────────────────────
+  const [selectedMsgIds, setSelectedMsgIds] = useState<string[]>([]);
+  const isSelectMode = selectedMsgIds.length > 0;
+
+  // ── Emoji Picker (composer) ───────────────────────────────────────────────
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiPickerTab, setEmojiPickerTab] = useState(0);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  // ── Three-dot header menu ─────────────────────────────────────────────────
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+
+  // ── Starred messages (client-side optimistic) ─────────────────────────────
+  const [starredMsgIds, setStarredMsgIds] = useState<Set<string>>(new Set());
+
   // Attachment Menu Popup & Voice Record States
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [liveVolumeBars, setLiveVolumeBars] = useState<number[]>([25, 45, 70, 35, 80, 50, 90, 40, 75, 55, 65, 30]);
+
 
   // Audio playback state
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -201,6 +249,80 @@ export default function ChatWindow({
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
   const audioFileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Live Camera Photo Capture State ──────────────────────────────────────
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
+  const [photoCaption, setPhotoCaption] = useState('');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+
+  const startCameraStream = useCallback(async (facing: 'user' | 'environment') => {
+    try {
+      setCameraError(null);
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      cameraStreamRef.current = stream;
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = stream;
+      }
+    } catch (err: any) {
+      console.warn('Camera access error:', err);
+      setCameraError('Camera access denied or unavailable. Please check browser permissions.');
+    }
+  }, []);
+
+  const openLiveCamera = useCallback(() => {
+    setShowCameraModal(true);
+    setCapturedPhoto(null);
+    setPhotoCaption('');
+    startCameraStream(cameraFacingMode);
+  }, [cameraFacingMode, startCameraStream]);
+
+  const closeLiveCamera = useCallback(() => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(t => t.stop());
+      cameraStreamRef.current = null;
+    }
+    setShowCameraModal(false);
+    setCapturedPhoto(null);
+    setPhotoCaption('');
+  }, []);
+
+  const takePhotoSnapshot = useCallback(() => {
+    const video = cameraVideoRef.current;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      if (cameraFacingMode === 'user') {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+      setCapturedPhoto(dataUrl);
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(t => t.stop());
+        cameraStreamRef.current = null;
+      }
+    }
+  }, [cameraFacingMode]);
+
+  const retakePhoto = useCallback(() => {
+    setCapturedPhoto(null);
+    startCameraStream(cameraFacingMode);
+  }, [cameraFacingMode, startCameraStream]);
+
+
   // Voice recording timer
   useEffect(() => {
     if (!isRecordingVoice) return;
@@ -210,20 +332,17 @@ export default function ChatWindow({
     return () => clearInterval(timer);
   }, [isRecordingVoice]);
 
-  // Click outside to close attachment menu
+  // Click outside to close popups (attach menu, emoji picker, header menu)
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (attachMenuRef.current && !attachMenuRef.current.contains(event.target as Node)) {
-        setShowAttachMenu(false);
-      }
+      const target = event.target as Node;
+      if (attachMenuRef.current && !attachMenuRef.current.contains(target)) setShowAttachMenu(false);
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(target)) setShowEmojiPicker(false);
+      if (headerMenuRef.current && !headerMenuRef.current.contains(target)) setShowHeaderMenu(false);
     }
-    if (showAttachMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showAttachMenu]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => { document.removeEventListener('mousedown', handleClickOutside); };
+  }, []);
 
   // Cleanup audio player interval on unmount
   useEffect(() => {
@@ -698,8 +817,8 @@ export default function ChatWindow({
     }
   };
 
-  // Send Custom Rich Card (Quick Reply, Poll, Event, Location)
-  const handleSendRichMessage = useCallback(async (type: 'quick_reply' | 'poll' | 'event' | 'location', data: QuickReplyItem | LocationItem | PollData | EventData) => {
+  // Send Custom Rich Card (Quick Reply, Poll, Event, Location, Image)
+  const handleSendRichMessage = useCallback(async (type: 'quick_reply' | 'poll' | 'event' | 'location' | 'image', data: QuickReplyItem | LocationItem | PollData | EventData | { name: string; url: string; sub?: string }) => {
     if (!channel) return;
     setShowQuickReplyModal(false);
     setShowPollModal(false);
@@ -724,11 +843,15 @@ export default function ChatWindow({
       const item = data as LocationItem;
       contentText = `📍 Campus Location: ${item.name}\n${item.sub}`;
       attachObj = { type: 'location', name: item.name, sub: item.sub };
+    } else if (type === 'image') {
+      const item = data as { name: string; url: string; sub?: string };
+      contentText = item.sub || '';
+      attachObj = { type: 'image', name: item.name, url: item.url, sub: item.sub };
     }
 
     const fd = new FormData();
     fd.append('channel_id', channel.id);
-    fd.append('content', contentText);
+    if (contentText) fd.append('content', contentText);
     if (attachObj) {
       fd.append('attachment', JSON.stringify(attachObj));
     }
@@ -737,7 +860,7 @@ export default function ChatWindow({
       id: `temp-${Math.random().toString(36).substring(2, 9)}`,
       channel_id: channel.id,
       sender_id: currentUserId,
-      content: contentText,
+      content: contentText || null,
       attachment: attachObj,
       reply_to_id: null,
       reply_to_snapshot: null,
@@ -751,6 +874,17 @@ export default function ChatWindow({
     onMessagesChange([...messages, optimistic]);
     await sendMessage(fd);
   }, [channel, currentUserId, currentUser, messages, onMessagesChange, setShowQuickReplyModal, setShowPollModal, setShowEventModal, setShowLocationModal]);
+
+  const sendCapturedPhoto = useCallback(() => {
+    if (!capturedPhoto) return;
+    handleSendRichMessage('image', {
+      name: `photo_${Date.now()}.jpg`,
+      url: capturedPhoto,
+      sub: photoCaption.trim() || undefined,
+    });
+    closeLiveCamera();
+  }, [capturedPhoto, photoCaption, handleSendRichMessage, closeLiveCamera]);
+
 
   const filteredMessages = searchQuery.trim()
     ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -818,67 +952,172 @@ export default function ChatWindow({
         onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }}
       />
 
-      {/* Header */}
-      <div className="h-16 px-4 border-b border-[hsl(var(--border))] flex items-center justify-between bg-[hsl(var(--bg-secondary))] shrink-0 z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <button onClick={onBack} className="md:hidden text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] mr-1">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="relative shrink-0">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${avatarColor(channel.id)}`}>
-              {channel.type === 'group' ? <Users className="w-5 h-5" /> : getInitials(channelName)}
+      {/* ── Header ── */}
+      <div className={`h-16 px-4 border-b border-[hsl(var(--border))] flex items-center justify-between shrink-0 z-10 transition-colors ${isSelectMode ? 'bg-[hsl(var(--accent)/0.06)]' : 'bg-[hsl(var(--bg-secondary))]'}`}>
+
+        {/* Left side */}
+        {isSelectMode ? (
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSelectedMsgIds([])} className="w-8 h-8 rounded-xl flex items-center justify-center text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-bold text-[hsl(var(--text-primary))]">{selectedMsgIds.length} selected</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={onBack} className="md:hidden text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] mr-1">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="relative shrink-0">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${avatarColor(channel.id)}`}>
+                {channel.type === 'group' ? <Users className="w-5 h-5" /> : getInitials(channelName)}
+              </div>
+              {channel.type === 'direct' && otherParticipant?.online && otherParticipant.online_visibility !== 'nobody' && (
+                <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[hsl(var(--bg-secondary))]" />
+              )}
             </div>
-            {channel.type === 'direct' && otherParticipant?.online && (
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[hsl(var(--bg-secondary))]" />
+            <div className="min-w-0">
+              <h2 className="font-bold text-sm text-[hsl(var(--text-primary))] truncate">{channelName}</h2>
+              <p className="text-[11px] text-[hsl(var(--text-tertiary))] truncate">
+                {channel.type === 'group'
+                  ? `${channel.participants?.length || 0} members`
+                  : otherParticipant?.online_visibility !== 'nobody' && otherParticipant?.online
+                    ? '🟢 Online'
+                    : otherParticipant?.last_seen_visibility !== 'nobody' && otherParticipant?.last_seen
+                      ? formatLastSeen(otherParticipant.last_seen)
+                      : otherParticipant?.role || 'Staff'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Right side — selection mode actions OR normal controls */}
+        {isSelectMode ? (
+          <div className="flex items-center gap-0.5 text-[hsl(var(--text-secondary))]">
+            {selectedMsgIds.length === 1 && (
+              <>
+                <button title="Reply" onClick={() => {
+                  const msg = messages.find(m => m.id === selectedMsgIds[0]);
+                  if (msg) { setReplyTo(msg); setSelectedMsgIds([]); }
+                }} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--accent))] transition-colors">
+                  <Reply className="w-4 h-4" />
+                </button>
+                <button title="Pin" className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-amber-400 transition-colors">
+                  <Pin className="w-4 h-4" />
+                </button>
+                <button title="Message Info" className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--accent))] transition-colors">
+                  <Info className="w-4 h-4" />
+                </button>
+              </>
+            )}
+            <button title={starredMsgIds.has(selectedMsgIds[0]) ? 'Unstar' : 'Star'}
+              onClick={() => {
+                setStarredMsgIds(prev => {
+                  const next = new Set(prev);
+                  selectedMsgIds.forEach(id => next.has(id) ? next.delete(id) : next.add(id));
+                  return next;
+                });
+                setSelectedMsgIds([]);
+              }}
+              className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-amber-400 transition-colors">
+              <Star className={`w-4 h-4 ${selectedMsgIds.some(id => starredMsgIds.has(id)) ? 'text-amber-400 fill-amber-400' : ''}`} />
+            </button>
+            <button title="Copy" onClick={() => {
+              const texts = messages.filter(m => selectedMsgIds.includes(m.id) && m.content).map(m => m.content!).join('\n');
+              navigator.clipboard?.writeText(texts).catch(() => {});
+              setSelectedMsgIds([]);
+            }} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--accent))] transition-colors">
+              <Copy className="w-4 h-4" />
+            </button>
+            <button title="Forward" className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--accent))] transition-colors">
+              <Forward className="w-4 h-4" />
+            </button>
+            <button title="Delete" onClick={async () => {
+              for (const id of selectedMsgIds) {
+                const msg = messages.find(m => m.id === id);
+                if (msg && msg.sender_id === currentUserId) await handleDelete(msg);
+              }
+              setSelectedMsgIds([]);
+            }} className="p-2 rounded-xl hover:bg-rose-500/10 hover:text-rose-400 transition-colors">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-0.5 text-[hsl(var(--text-secondary))]">
+            {searchMode ? (
+              <div className="flex items-center gap-2 bg-[hsl(var(--bg-tertiary))] px-3 py-1.5 rounded-xl border border-[hsl(var(--border))] animate-fade-in">
+                <Search className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" />
+                <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search in chat..."
+                  className="bg-transparent text-xs text-[hsl(var(--text-primary))] focus:outline-none w-32 md:w-48" />
+                <button onClick={() => { setSearchMode(false); setSearchQuery(''); }}>
+                  <X className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]" />
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setSearchMode(true)} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors" title="Search">
+                <Search className="w-4 h-4" />
+              </button>
+            )}
+            {onStartCall && !searchMode && (
+              <>
+                <button onClick={() => onStartCall(channel.id, 'voice')} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors" title="Voice Call">
+                  <Phone className="w-4 h-4" />
+                </button>
+                <button onClick={() => onStartCall(channel.id, 'video')} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors" title="Video Call">
+                  <Video className="w-4 h-4" />
+                </button>
+              </>
+            )}
+
+            {/* ── Three-dot menu ── */}
+            {!searchMode && (
+              <div className="relative" ref={headerMenuRef}>
+                <button onClick={() => setShowHeaderMenu(v => !v)}
+                  className={`p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors ${showHeaderMenu ? 'bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-primary))]' : ''}`}
+                  title="More options">
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+                {showHeaderMenu && (
+                  <div className="absolute right-0 top-10 w-52 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl z-50 overflow-hidden py-1 animate-fade-in">
+                    <button onClick={() => { setSearchMode(true); setShowHeaderMenu(false); }}
+                      className="w-full px-4 py-2.5 text-left text-xs text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] flex items-center gap-3 transition-colors">
+                      <Search className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" /> Search in chat
+                    </button>
+                    <button onClick={() => setShowHeaderMenu(false)}
+                      className="w-full px-4 py-2.5 text-left text-xs text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] flex items-center gap-3 transition-colors">
+                      <Pin className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" /> Pinned Messages
+                    </button>
+                    <button onClick={() => setShowHeaderMenu(false)}
+                      className="w-full px-4 py-2.5 text-left text-xs text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] flex items-center gap-3 transition-colors">
+                      <BellOff className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" /> Mute Notifications
+                    </button>
+                    <div className="mx-3 border-t border-[hsl(var(--border))] my-1" />
+                    {channel.type === 'group' ? (
+                      <>
+                        <button onClick={() => setShowHeaderMenu(false)}
+                          className="w-full px-4 py-2.5 text-left text-xs text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] flex items-center gap-3 transition-colors">
+                          <Users className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" /> Group Info
+                        </button>
+                        <button onClick={() => setShowHeaderMenu(false)}
+                          className="w-full px-4 py-2.5 text-left text-xs text-rose-400 hover:bg-rose-500/5 flex items-center gap-3 transition-colors">
+                          <LogOut className="w-3.5 h-3.5" /> Leave Group
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => setShowHeaderMenu(false)}
+                        className="w-full px-4 py-2.5 text-left text-xs text-rose-400 hover:bg-rose-500/5 flex items-center gap-3 transition-colors">
+                        <Flag className="w-3.5 h-3.5" /> Block / Report
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
-          <div className="min-w-0">
-            <h2 className="font-bold text-sm text-[hsl(var(--text-primary))] truncate">{channelName}</h2>
-            <p className="text-[11px] text-[hsl(var(--text-tertiary))] truncate">
-              {channel.type === 'group'
-                ? `${channel.participants?.length || 0} members`
-                : otherParticipant?.online
-                  ? 'Online'
-                  : otherParticipant?.last_seen
-                    ? `Last seen ${formatTimestamp(otherParticipant.last_seen)}`
-                    : otherParticipant?.role || 'Staff'}
-            </p>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-1 text-[hsl(var(--text-secondary))]">
-          {searchMode ? (
-            <div className="flex items-center gap-2 bg-[hsl(var(--bg-tertiary))] px-3 py-1.5 rounded-xl border border-[hsl(var(--border))] animate-fade-in">
-              <Search className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))]" />
-              <input
-                autoFocus
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search in chat..."
-                className="bg-transparent text-xs text-[hsl(var(--text-primary))] focus:outline-none w-32 md:w-48"
-              />
-              <button onClick={() => { setSearchMode(false); setSearchQuery(''); }}>
-                <X className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))]" />
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => setSearchMode(true)} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors">
-              <Search className="w-4 h-4" />
-            </button>
-          )}
-          {onStartCall && (
-            <>
-              <button onClick={() => onStartCall(channel.id, 'voice')} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors" title="Voice Call">
-                <Phone className="w-4 h-4" />
-              </button>
-              <button onClick={() => onStartCall(channel.id, 'video')} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--text-primary))] transition-colors" title="Video Call">
-                <Video className="w-4 h-4" />
-              </button>
-            </>
-          )}
-        </div>
+        )}
       </div>
+
 
       {/* Messages Feed */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-[hsl(var(--bg-primary))]">
@@ -896,9 +1135,13 @@ export default function ChatWindow({
           const prevMsg = index > 0 ? filteredMessages[index - 1] : null;
           const showDateDivider = !prevMsg || !isSameDay(prevMsg.created_at, msg.created_at);
           const showAvatar = !isMe && (!prevMsg || prevMsg.sender_id !== msg.sender_id || showDateDivider);
+          const isSelected = selectedMsgIds.includes(msg.id);
+          const isStarred = starredMsgIds.has(msg.id);
 
           return (
-            <div key={msg.id} className="space-y-2">
+            <div key={msg.id}
+              onClick={() => { if (isSelectMode && !msg.is_deleted) setSelectedMsgIds(prev => prev.includes(msg.id) ? prev.filter(id => id !== msg.id) : [...prev, msg.id]); }}
+              className={`space-y-2 rounded-xl px-1 transition-colors ${isSelectMode ? 'cursor-pointer' : ''} ${isSelected ? 'bg-[hsl(var(--accent)/0.07)]' : ''}`}>
               {showDateDivider && (
                 <div className="flex items-center justify-center my-4">
                   <span className="px-3 py-1 rounded-full bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-[10px] font-bold text-[hsl(var(--text-tertiary))] shadow-sm">
@@ -947,11 +1190,17 @@ export default function ChatWindow({
                         : 'bg-[hsl(var(--bg-secondary))] text-[hsl(var(--text-primary))] border border-[hsl(var(--border))] rounded-bl-sm'
                       }
                       ${msg.is_deleted ? 'opacity-50 italic' : ''}
+                      ${isSelected ? 'ring-2 ring-[hsl(var(--accent)/0.5)]' : ''}
                     `}
                     onContextMenu={e => {
                       if (msg.is_deleted) return;
                       e.preventDefault();
-                      setContextMenu({ msgId: msg.id, x: e.clientX, y: e.clientY });
+                      if (!isSelectMode) {
+                        // Right-click enters selection mode for this message
+                        setSelectedMsgIds([msg.id]);
+                      } else {
+                        setContextMenu({ msgId: msg.id, x: e.clientX, y: e.clientY });
+                      }
                     }}
                   >
                     {msg.is_deleted ? (
@@ -1044,6 +1293,54 @@ export default function ChatWindow({
                             <p className="text-[10px] opacity-80">⏰ {msg.attachment.date}</p>
                             <p className="text-[10px] opacity-80">📍 {msg.attachment.venue}</p>
                           </div>
+                        </div>
+                      ) : msg.attachment.type === 'call' ? (
+                        <div className="flex items-center gap-3 py-1 min-w-[210px]">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                            msg.attachment.sub === 'missed' || msg.attachment.sub === 'declined'
+                              ? 'bg-rose-500/20 text-rose-500'
+                              : 'bg-emerald-500/20 text-emerald-500'
+                          }`}>
+                            {msg.attachment.sub === 'missed' || msg.attachment.sub === 'declined' ? (
+                              <PhoneMissed className="w-4 h-4" />
+                            ) : msg.attachment.name?.toLowerCase().includes('video') ? (
+                              <Video className="w-4 h-4" />
+                            ) : (
+                              <Phone className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-bold ${
+                              msg.attachment.sub === 'missed' || msg.attachment.sub === 'declined'
+                                ? isMe ? 'text-white' : 'text-rose-500'
+                                : isMe ? 'text-white' : 'text-[hsl(var(--text-primary))]'
+                            }`}>
+                              {msg.attachment.name}
+                            </p>
+                            <p className="text-[10px] opacity-70">
+                              {msg.attachment.sub === 'missed' || msg.attachment.sub === 'declined'
+                                ? 'Missed call'
+                                : msg.attachment.duration
+                                  ? `Duration: ${msg.attachment.duration}`
+                                  : 'Call ended'}
+                            </p>
+                          </div>
+                          {onStartCall && (
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation();
+                                onStartCall(channel.id, msg.attachment?.name?.toLowerCase().includes('video') ? 'video' : 'voice');
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors shrink-0 ${
+                                isMe
+                                  ? 'bg-white/20 hover:bg-white/30 text-white'
+                                  : 'bg-[hsl(var(--accent)/0.15)] hover:bg-[hsl(var(--accent)/0.25)] text-[hsl(var(--accent))]'
+                              }`}
+                            >
+                              Call back
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-center gap-2.5 py-1">
@@ -1221,7 +1518,7 @@ export default function ChatWindow({
             {/* 2. Camera */}
             <button
               type="button"
-              onClick={() => { setShowAttachMenu(false); cameraFileInputRef.current?.click(); }}
+              onClick={() => { setShowAttachMenu(false); openLiveCamera(); }}
               className="flex flex-col items-center gap-1.5 group cursor-pointer"
             >
               <div className="w-14 h-14 rounded-full bg-[#FFE6EE] text-[#E0245E] flex items-center justify-center transition-transform group-hover:scale-110 group-active:scale-95 shadow-sm">
@@ -1490,28 +1787,11 @@ export default function ChatWindow({
         </div>
       )}
 
-      {/* ── INPUT BAR COMPOSER WITH DYNAMIC MIC / SEND TRANSFORMATION ──────── */}
+      {/* ── INPUT BAR COMPOSER (EMOJI LEFT, ATTACH & CAMERA RIGHT INSIDE FIELD) ── */}
       <div className="px-4 py-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] flex items-center gap-2 shrink-0 relative">
-        {/* Paperclip / Attach Button */}
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation();
-            setShowAttachMenu(!showAttachMenu);
-          }}
-          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shrink-0 ${
-            showAttachMenu
-              ? 'bg-[hsl(var(--accent))] text-white shadow-md'
-              : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.1)]'
-          }`}
-          title="Attach media, files & quick cards"
-        >
-          <Paperclip className="w-4.5 h-4.5" />
-        </button>
-
-        {/* Dynamic Voice Recording Bar with Real Audio Equalizer or Input Field */}
+        {/* Dynamic Voice Recording Bar or WhatsApp-Style Unified Input Pill */}
         {isRecordingVoice ? (
-          <div className="flex-1 h-10 px-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between animate-fade-in">
+          <div className="flex-1 h-11 px-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between animate-fade-in">
             <div className="flex items-center gap-3">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping shrink-0" />
               <span className="text-xs font-bold text-rose-500">
@@ -1537,47 +1817,228 @@ export default function ChatWindow({
             </button>
           </div>
         ) : (
-          <input
-            ref={inputRef}
-            value={editingMsg ? editContent : input}
-            onChange={e => (editingMsg ? setEditContent(e.target.value) : setInput(e.target.value))}
-            onKeyDown={handleKeyDown}
-            placeholder={editingMsg ? 'Edit message...' : 'Type a message...'}
-            className="flex-1 h-10 px-4 rounded-xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-          />
+          <div className="flex-1 min-h-[44px] rounded-2xl md:rounded-3xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] flex items-center px-2 py-1 gap-1 focus-within:border-[hsl(var(--accent))] focus-within:ring-1 focus-within:ring-[hsl(var(--accent)/0.3)] transition-all">
+            {/* 1. Emoji button (far left inside) */}
+            <div className="relative shrink-0" ref={emojiPickerRef}>
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(v => !v)}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                  showEmojiPicker ? 'bg-[hsl(var(--accent))] text-white' : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--bg-secondary))]'
+                }`}
+                title="Emoji"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+
+              {/* Emoji picker panel */}
+              {showEmojiPicker && (
+                <div className="absolute bottom-12 left-0 w-72 bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in">
+                  {/* Category tabs */}
+                  <div className="flex border-b border-[hsl(var(--border))] px-2 pt-2 gap-1">
+                    {EMOJI_PICKER_CATEGORIES.map((cat, i) => (
+                      <button key={i} onClick={() => setEmojiPickerTab(i)}
+                        className={`flex-1 h-8 rounded-lg text-base transition-colors ${emojiPickerTab === i ? 'bg-[hsl(var(--accent)/0.15)]' : 'hover:bg-[hsl(var(--bg-tertiary))]'}`}>
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Emoji grid */}
+                  <div className="p-2 grid grid-cols-8 gap-0.5 max-h-48 overflow-y-auto">
+                    {EMOJI_PICKER_CATEGORIES[emojiPickerTab].emojis.map((emoji, i) => (
+                      <button key={i}
+                        onClick={() => {
+                          if (editingMsg) setEditContent(c => c + emoji);
+                          else setInput(c => c + emoji);
+                          setShowEmojiPicker(false);
+                        }}
+                        className="h-9 rounded-lg text-xl hover:bg-[hsl(var(--bg-tertiary))] transition-colors flex items-center justify-center"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Text input (middle) */}
+            <input
+              ref={inputRef}
+              value={editingMsg ? editContent : input}
+              onChange={e => (editingMsg ? setEditContent(e.target.value) : setInput(e.target.value))}
+              onKeyDown={handleKeyDown}
+              placeholder={editingMsg ? 'Edit message...' : 'Type a message...'}
+              className="flex-1 h-9 bg-transparent border-0 px-2 text-sm text-[hsl(var(--text-primary))] placeholder:text-[hsl(var(--text-tertiary))] focus:outline-none min-w-0"
+            />
+
+            {/* 3. Paperclip / Attachment Button (far right inside) */}
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                setShowAttachMenu(!showAttachMenu);
+              }}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 ${
+                showAttachMenu
+                  ? 'bg-[hsl(var(--accent))] text-white'
+                  : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--bg-secondary))]'
+              }`}
+              title="Attach media, files & quick cards"
+            >
+              <Paperclip className="w-4.5 h-4.5 -rotate-45" />
+            </button>
+
+            {/* 4. Live Camera Button (far right inside) */}
+            <button
+              type="button"
+              onClick={openLiveCamera}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--bg-secondary))] transition-all shrink-0"
+              title="Take Photo"
+            >
+              <Camera className="w-4.5 h-4.5" />
+            </button>
+          </div>
         )}
 
-        {/* ── MIC ICON THAT TRANSFORMS TO SEND BUTTON ──────────────────────── */}
+        {/* ── MIC ICON THAT TRANSFORMS TO SEND BUTTON (FAR RIGHT OUTSIDE) ────── */}
         {isRecordingVoice ? (
           <button
             type="button"
             onClick={stopAndSendVoiceRecording}
-            className="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all shadow-md shrink-0 animate-in zoom-in-90 active:scale-95"
+            className="w-11 h-11 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all shadow-md shrink-0 animate-in zoom-in-90 active:scale-95"
             title="Send Voice Memo"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-4.5 h-4.5" />
           </button>
         ) : hasTypedContent ? (
           <button
             type="button"
             onClick={handleSend}
             disabled={isSending}
-            className="w-10 h-10 rounded-xl bg-[hsl(var(--accent))] text-white flex items-center justify-center hover:opacity-90 transition-all shadow-md shrink-0 animate-in zoom-in-90 active:scale-95"
+            className="w-11 h-11 rounded-full bg-[hsl(var(--accent))] text-white flex items-center justify-center hover:opacity-90 transition-all shadow-md shrink-0 animate-in zoom-in-90 active:scale-95"
             title="Send Message"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-4.5 h-4.5" />
           </button>
         ) : (
           <button
             type="button"
             onClick={startVoiceRecording}
-            className="w-10 h-10 rounded-xl bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.15)] flex items-center justify-center transition-all shrink-0 active:scale-95 border border-[hsl(var(--border))]"
+            className="w-11 h-11 rounded-full bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.15)] flex items-center justify-center transition-all shrink-0 active:scale-95 border border-[hsl(var(--border))]"
             title="Record Voice Note"
           >
             <Mic className="w-4.5 h-4.5" />
           </button>
         )}
       </div>
+
+      {/* ── LIVE CAMERA PHOTO CAPTURE MODAL ─────────────────────────────── */}
+      {showCameraModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-white/20 rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl animate-fade-in text-white relative">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Camera className="w-4.5 h-4.5 text-[hsl(var(--accent))]" />
+                <span>Take Photo</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {!capturedPhoto && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = cameraFacingMode === 'user' ? 'environment' : 'user';
+                      setCameraFacingMode(next);
+                      startCameraStream(next);
+                    }}
+                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                    title="Flip camera"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={closeLiveCamera}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Video Viewfinder / Photo Preview */}
+            <div className="relative aspect-[4/3] bg-black rounded-2xl overflow-hidden flex items-center justify-center border border-white/10 shadow-inner">
+              {cameraError ? (
+                <div className="p-6 text-center text-rose-400 text-xs space-y-2">
+                  <p>⚠️ {cameraError}</p>
+                  <button
+                    onClick={() => startCameraStream(cameraFacingMode)}
+                    className="px-3 py-1.5 rounded-xl bg-white/10 text-white hover:bg-white/20 font-bold"
+                  >
+                    Retry Access
+                  </button>
+                </div>
+              ) : capturedPhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={capturedPhoto} alt="Captured" className="w-full h-full object-cover" />
+              ) : (
+                <video
+                  ref={cameraVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? '-scale-x-100' : ''}`}
+                />
+              )}
+            </div>
+
+            {/* Photo Caption or Action Buttons */}
+            {capturedPhoto ? (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={photoCaption}
+                  onChange={e => setPhotoCaption(e.target.value)}
+                  placeholder="Add a caption... (optional)"
+                  className="w-full h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-xs text-white placeholder:text-white/40 focus:outline-none focus:border-[hsl(var(--accent))]"
+                  onKeyDown={e => { if (e.key === 'Enter') sendCapturedPhoto(); }}
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={retakePhoto}
+                    className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Retake
+                  </button>
+                  <button
+                    type="button"
+                    onClick={sendCapturedPhoto}
+                    className="flex-1 py-2.5 rounded-xl bg-[hsl(var(--accent))] hover:opacity-90 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-lg"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Send Photo
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-2">
+                <button
+                  type="button"
+                  onClick={takePhotoSnapshot}
+                  disabled={Boolean(cameraError)}
+                  className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center bg-white/20 hover:bg-white/40 active:scale-95 transition-all shadow-xl disabled:opacity-40"
+                  title="Capture photo"
+                >
+                  <span className="w-12 h-12 rounded-full bg-white block" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
