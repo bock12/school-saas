@@ -3,9 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Users, GraduationCap, Shield, Layers, BookOpen,
-  CalendarCheck, Clock, BarChart3, DollarSign, FileText, ClipboardList,
-  Award, LayoutGrid, Briefcase, UserPlus
+  LayoutDashboard, Users, Layers, BookOpen, CalendarCheck, Clock,
+  BarChart3, DollarSign, FileText, ClipboardList, Award, LayoutGrid, Briefcase
 } from 'lucide-react';
 import { useRef, useEffect } from 'react';
 
@@ -18,9 +17,7 @@ interface HCMHeaderProps {
 
 const HCM_TABS = [
   { label: 'Overview', href: '/admin/staff', icon: LayoutDashboard, exact: true },
-  { label: 'Employees', href: '/admin/staff/employees', icon: Users },
-  { label: 'Teachers', href: '/admin/staff/teachers', icon: GraduationCap },
-  { label: 'Non-Teaching', href: '/admin/staff/non-teaching', icon: Shield },
+  { label: 'Staff Directory', href: '/admin/staff/employees', icon: Users },
   { label: 'Attendance', href: '/admin/staff/attendance', icon: CalendarCheck },
   { label: 'Leave', href: '/admin/staff/leave', icon: Clock },
   { label: 'Recruitment', href: '/admin/staff/recruitment', icon: Briefcase },
@@ -37,7 +34,7 @@ const HCM_TABS = [
 
 export function HCMHeader({
   title = 'Human Capital Management (HCM)',
-  subtitle = 'Unified workforce directory, teacher allocation, attendance logs, and contract compliance.',
+  subtitle = 'Unified workforce directory, attendance logs, department structures, and contract compliance.',
   badge = '84 Active Staff',
   actionButton
 }: HCMHeaderProps) {
@@ -84,7 +81,7 @@ export function HCMHeader({
         )}
       </div>
 
-      {/* Horizontal Scrollable Tabs Bar with Touch Indicators */}
+      {/* Horizontal Scrollable Tabs Bar */}
       <div className="relative border-b border-[hsl(var(--border))] group">
         <div
           ref={tabsContainerRef}
