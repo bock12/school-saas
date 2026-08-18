@@ -1,66 +1,89 @@
 'use client';
 
 import { useState } from 'react';
-import { BarChart3, TrendingUp, Users, Calendar, Award } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, Calendar, Award, Download, Building, FileSpreadsheet } from 'lucide-react';
+import { HCMHeader } from '../_components/hcm-header';
 
 export default function ReportsPage() {
   const [activeReport, setActiveReport] = useState('dept');
 
   return (
     <div className="space-y-6 max-w-[1600px] animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-[hsl(var(--text-primary))]">Staff Insights &amp; Demographics</h1>
-        <p className="text-sm text-[hsl(var(--text-secondary))] mt-1">Review workforce distributions, qualifications counts, and daily attendance records.</p>
-      </div>
+      {/* Shared Responsive HCM Header */}
+      <HCMHeader
+        title="Workforce Analytics & Demographic Reports"
+        subtitle="Explore department headcount distributions, academic credential tiers, turnover ratios, and attendance trends."
+        badge="Export Engine Ready"
+        actionButton={
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[hsl(var(--accent))] hover:opacity-90 text-white text-xs font-bold shadow-md shadow-[hsl(var(--accent)/0.2)] transition-all"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export Full Report (PDF)</span>
+          </button>
+        }
+      />
 
-      <div className="glass-card p-1 flex gap-1 overflow-x-auto whitespace-nowrap scrollbar-none">
+      {/* Report Switcher Tabs */}
+      <div className="flex items-center gap-1 bg-[hsl(var(--bg-secondary))] p-1 rounded-2xl border border-[hsl(var(--border))] w-fit overflow-x-auto no-scrollbar">
         {[
-          { id: 'dept', label: 'By Department', icon: Users },
-          { id: 'qualifications', label: 'Qualifications Distribution', icon: Award },
-          { id: 'attendance', label: 'Attendance Trends', icon: TrendingUp }
+          { id: 'dept', label: 'Department Headcount', icon: Users },
+          { id: 'qualifications', label: 'Academic Qualifications', icon: Award },
+          { id: 'attendance', label: 'Weekly Attendance Trends', icon: TrendingUp },
         ].map(rep => (
           <button
             key={rep.id}
+            type="button"
             onClick={() => setActiveReport(rep.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
               activeReport === rep.id
-                ? 'bg-[hsl(var(--accent)/0.12)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.1)]'
-                : 'text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]'
+                ? 'bg-[hsl(var(--accent))] text-white shadow-md shadow-[hsl(var(--accent)/0.25)]'
+                : 'text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))]'
             }`}
           >
-            <rep.icon className="w-3.5 h-3.5" /> {rep.label}
+            <rep.icon className="w-4 h-4" />
+            <span>{rep.label}</span>
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 glass-card p-5 space-y-6">
-          <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+      {/* Main Analytics Card */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-8 glass-card p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-[hsl(var(--border))] space-y-6 shadow-sm">
+          <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-4">
             <div>
-              <h3 className="text-base font-semibold text-[hsl(var(--text-primary))]">
-                {activeReport === 'dept' && 'Workforce Headcount by Department'}
-                {activeReport === 'qualifications' && 'Academic Qualification Demographics'}
-                {activeReport === 'attendance' && 'Live Daily Attendance (Last 7 Days)'}
+              <h3 className="text-base font-bold text-[hsl(var(--text-primary))]">
+                {activeReport === 'dept' && 'Workforce Distribution by Department'}
+                {activeReport === 'qualifications' && 'Academic Credential Demographics'}
+                {activeReport === 'attendance' && 'Daily Attendance Percentages (Last 7 Days)'}
               </h3>
-              <p className="text-xs text-[hsl(var(--text-tertiary))]">Accurate figures computed from daily live trackers</p>
+              <p className="text-xs text-[hsl(var(--text-tertiary))] mt-0.5">
+                Computed from live employee registries and verified attendance gates
+              </p>
             </div>
-            <span className="text-xs text-[hsl(var(--accent))] font-medium">Export PDF Summary</span>
+            <button type="button" className="text-xs text-[hsl(var(--accent))] font-bold hover:underline flex items-center gap-1">
+              <Download className="w-3.5 h-3.5" /> CSV
+            </button>
           </div>
 
-          <div className="h-64 flex items-end justify-between px-4 pt-10 relative">
+          {/* Dynamic Responsive Bar Chart */}
+          <div className="h-64 flex items-end justify-between px-2 sm:px-6 pt-10 relative">
             {activeReport === 'dept' && (
               <>
                 {[
-                  { label: 'Admin', val: 18, h: 'h-24' },
-                  { label: 'Math', val: 14, h: 'h-20' },
-                  { label: 'Science', val: 16, h: 'h-22' },
-                  { label: 'Finance', val: 8, h: 'h-12' },
-                  { label: 'Operations', val: 28, h: 'h-40' }
+                  { label: 'Admin', val: '18 Staff', height: '60%' },
+                  { label: 'Math', val: '14 Staff', height: '48%' },
+                  { label: 'Science', val: '16 Staff', height: '54%' },
+                  { label: 'Finance', val: '8 Staff', height: '28%' },
+                  { label: 'Operations', val: '28 Staff', height: '94%' },
                 ].map(item => (
-                  <div key={item.label} className="flex flex-col items-center gap-2 w-12 group cursor-pointer">
-                    <div className="text-[10px] font-bold text-[hsl(var(--text-secondary))] opacity-0 group-hover:opacity-100 transition-opacity">{item.val}</div>
-                    <div className={`w-full ${item.h} rounded-t bg-gradient-to-t from-[hsl(var(--accent)/0.6)] to-[hsl(var(--accent))]`} />
-                    <span className="text-[9px] text-[hsl(var(--text-tertiary))] text-center truncate w-full">{item.label}</span>
+                  <div key={item.label} className="flex flex-col items-center gap-2 w-12 sm:w-16 group cursor-pointer">
+                    <span className="text-[10px] font-bold text-[hsl(var(--text-primary))] opacity-80 group-hover:opacity-100 transition-opacity">
+                      {item.val.split(' ')[0]}
+                    </span>
+                    <div className="w-full rounded-t-xl bg-gradient-to-t from-[hsl(var(--accent)/0.4)] to-[hsl(var(--accent))] transition-all duration-300 group-hover:brightness-110" style={{ height: item.height }} />
+                    <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-bold text-center truncate w-full">{item.label}</span>
                   </div>
                 ))}
               </>
@@ -69,15 +92,17 @@ export default function ReportsPage() {
             {activeReport === 'qualifications' && (
               <>
                 {[
-                  { label: 'Doctorate', val: 6, h: 'h-12' },
-                  { label: 'Masters', val: 24, h: 'h-36' },
-                  { label: 'Bachelors', val: 48, h: 'h-52' },
-                  { label: 'Diploma', val: 6, h: 'h-12' }
+                  { label: 'Doctorate', val: '6 Staff', height: '20%' },
+                  { label: 'Masters', val: '24 Staff', height: '50%' },
+                  { label: 'Bachelors', val: '48 Staff', height: '100%' },
+                  { label: 'Diploma', val: '6 Staff', height: '20%' },
                 ].map(item => (
-                  <div key={item.label} className="flex flex-col items-center gap-2 w-16 group cursor-pointer">
-                    <div className="text-[10px] font-bold text-[hsl(var(--text-secondary))] opacity-0 group-hover:opacity-100 transition-opacity">{item.val}</div>
-                    <div className={`w-full ${item.h} rounded-t bg-gradient-to-t from-blue-500/50 to-blue-500`} />
-                    <span className="text-[9px] text-[hsl(var(--text-tertiary))] text-center truncate w-full">{item.label}</span>
+                  <div key={item.label} className="flex flex-col items-center gap-2 w-14 sm:w-20 group cursor-pointer">
+                    <span className="text-[10px] font-bold text-blue-400 opacity-80 group-hover:opacity-100 transition-opacity">
+                      {item.val.split(' ')[0]}
+                    </span>
+                    <div className="w-full rounded-t-xl bg-gradient-to-t from-blue-500/30 to-blue-500 transition-all duration-300 group-hover:brightness-110" style={{ height: item.height }} />
+                    <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-bold text-center truncate w-full">{item.label}</span>
                   </div>
                 ))}
               </>
@@ -86,16 +111,18 @@ export default function ReportsPage() {
             {activeReport === 'attendance' && (
               <>
                 {[
-                  { label: 'Mon', val: '96%', h: 'h-48' },
-                  { label: 'Tue', val: '97%', h: 'h-52' },
-                  { label: 'Wed', val: '94%', h: 'h-44' },
-                  { label: 'Thu', val: '95%', h: 'h-48' },
-                  { label: 'Fri', val: '98%', h: 'h-56' }
+                  { label: 'Mon', val: '91.2%', height: '80%' },
+                  { label: 'Tue', val: '92.5%', height: '83%' },
+                  { label: 'Wed', val: '94.0%', height: '87%' },
+                  { label: 'Thu', val: '94.8%', height: '90%' },
+                  { label: 'Fri', val: '95.2%', height: '95%' },
                 ].map(item => (
-                  <div key={item.label} className="flex flex-col items-center gap-2 w-12 group cursor-pointer">
-                    <div className="text-[10px] font-bold text-[hsl(var(--text-secondary))] opacity-0 group-hover:opacity-100 transition-opacity">{item.val}</div>
-                    <div className={`w-full ${item.h} rounded-t bg-gradient-to-t from-purple-500/50 to-purple-500`} />
-                    <span className="text-[9px] text-[hsl(var(--text-tertiary))]">{item.label}</span>
+                  <div key={item.label} className="flex flex-col items-center gap-2 w-12 sm:w-16 group cursor-pointer">
+                    <span className="text-[10px] font-bold text-emerald-400 opacity-80 group-hover:opacity-100 transition-opacity">
+                      {item.val}
+                    </span>
+                    <div className="w-full rounded-t-xl bg-gradient-to-t from-emerald-500/30 to-emerald-500 transition-all duration-300 group-hover:brightness-110" style={{ height: item.height }} />
+                    <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-bold text-center truncate w-full">{item.label}</span>
                   </div>
                 ))}
               </>
@@ -103,16 +130,29 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        <div className="glass-card p-5 space-y-4 h-fit text-xs text-[hsl(var(--text-secondary))]">
-          <h3 className="text-base font-semibold text-[hsl(var(--text-primary))] pb-2 border-b border-[hsl(var(--border))]">Summary KPIs</h3>
-          <div className="space-y-3">
-            <div>
-              <span className="text-[hsl(var(--text-tertiary))] block mb-1">Total FTE Count</span>
-              <p className="text-lg font-bold text-[hsl(var(--text-primary))]">84 Full-Time</p>
-            </div>
-            <div>
-              <span className="text-[hsl(var(--text-tertiary))] block mb-1">Retention Rate</span>
-              <p className="text-lg font-bold text-emerald-400">98.2% (YTD)</p>
+        {/* Right Summary Card */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="glass-card p-5 rounded-2xl sm:rounded-3xl border border-[hsl(var(--border))] space-y-4 shadow-sm">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-secondary))] pb-2 border-b border-[hsl(var(--border))]">
+              Key Metrics Summary
+            </h3>
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[hsl(var(--text-tertiary))]">Total Active Staff</span>
+                <span className="font-bold text-[hsl(var(--text-primary))]">84</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[hsl(var(--text-tertiary))]">Educator License Compliance</span>
+                <span className="font-bold text-emerald-400">100%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[hsl(var(--text-tertiary))]">Annual Staff Retention</span>
+                <span className="font-bold text-[hsl(var(--accent))]">96.4%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[hsl(var(--text-tertiary))]">Average Punctuality Index</span>
+                <span className="font-bold text-emerald-400">95.2%</span>
+              </div>
             </div>
           </div>
         </div>

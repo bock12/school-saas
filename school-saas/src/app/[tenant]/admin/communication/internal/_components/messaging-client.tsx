@@ -105,39 +105,82 @@ export default function MessagingClient({
       markChannelRead(activeChannelId);
     });
 
+    const handleIncomingMessage = (newMsg: ChatMessage) => {
+      if (newMsg.sender_id !== currentUserId) {
+        markChannelRead(activeChannelId);
+      }
+      setMessages(prev => {
+        const isDuplicate = prev.some(m => m.id === newMsg.id || (m.id.startsWith('temp-') && m.content === newMsg.content && m.sender_id === newMsg.sender_id));
+        if (isDuplicate) {
+          return prev.map(m => m.id.startsWith('temp-') && m.content === newMsg.content && m.sender_id === newMsg.sender_id ? { ...newMsg, sender: m.sender || newMsg.sender } : m);
+        }
+        return [...prev, { ...newMsg, reactions: newMsg.reactions || {}, read_by: newMsg.read_by || [] }];
+      });
+    };
+
     const msgSub = supabase
       .channel(`msgs:${activeChannelId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'chat_messages',
         filter: `channel_id=eq.${activeChannelId}`,
-      }, payload => {
-        const newMsg = payload.new as ChatMessage;
-        if (newMsg.sender_id !== currentUserId) {
-          markChannelRead(activeChannelId);
+      }, payload => handleIncomingMessage(payload.new as ChatMessage))
+      .on('broadcast', { event: 'new_msg' }, ({ payload }) => {
+        if (payload?.channel_id === activeChannelId) {
+          handleIncomingMessage(payload as ChatMessage);
         }
-        setMessages(prev => {
-          const isDuplicate = prev.some(m => m.id === newMsg.id || (m.id.startsWith('temp-') && m.content === newMsg.content && m.sender_id === newMsg.sender_id));
-          if (isDuplicate) {
-            return prev.map(m => m.id.startsWith('temp-') && m.content === newMsg.content && m.sender_id === newMsg.sender_id ? { ...newMsg, sender: m.sender } : m);
-          }
-          return [...prev, { ...newMsg, reactions: newMsg.reactions || {}, read_by: newMsg.read_by || [] }];
-        });
       })
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'chat_messages',
         filter: `channel_id=eq.${activeChannelId}`,
       }, payload => {
         const updated = payload.new as ChatMessage;
-        setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated, sender: m.sender } : m));
+        setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated, sender: m.sender || prev.find(x => x.id === m.id)?.sender } : m));
       })
       .subscribe();
 
     return () => { supabase.removeChannel(msgSub); };
-  }, [activeChannelId]);
+  }, [activeChannelId, currentUserId]);
 
-  // ── Realtime: channel list ─────────────────────────────────────────────────
+  // ── Realtime: tenant-wide message stream & channel list ──────────────────
   useEffect(() => {
     if (!tenantId) return;
+
+    // 1. Instant WebSocket broadcast across all channels in tenant
+    const streamSub = supabase
+      .channel(`tenant_msg_stream:${tenantId}`, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'incoming_msg' }, ({ payload }) => {
+        const msg = payload as ChatMessage;
+        if (!msg || !msg.channel_id) return;
+
+        // If currently open, add to message list
+        if (msg.channel_id === activeChannelId) {
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id || (m.id.startsWith('temp-') && m.content === msg.content && m.sender_id === msg.sender_id))) return prev;
+            return [...prev, { ...msg, reactions: msg.reactions || {}, read_by: msg.read_by || [] }];
+          });
+        }
+
+        // Update sidebar channel preview & unread counter
+        setChannels(prev => prev.map(ch => {
+          if (ch.id !== msg.channel_id) return ch;
+          const isCurrent = ch.id === activeChannelId;
+          const senderName = msg.sender?.full_name || (ch.participants || []).find(p => p.id === msg.sender_id)?.full_name || 'User';
+          const contentPreview = msg.attachment ? '📎 Attachment' : (msg.content || '');
+          return {
+            ...ch,
+            last_message: {
+              content: contentPreview,
+              sender_name: senderName,
+              created_at: msg.created_at,
+            },
+            updated_at: msg.created_at,
+            unread_count: isCurrent || msg.sender_id === currentUserId ? ch.unread_count : (ch.unread_count || 0) + 1,
+          };
+        }));
+      })
+      .subscribe();
+
+    // 2. Postgres CDC backup
     const channelSub = supabase
       .channel(`chlist:${currentUserId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_channels', filter: `tenant_id=eq.${tenantId}` }, () => {
@@ -155,8 +198,12 @@ export default function MessagingClient({
         });
       })
       .subscribe();
-    return () => { supabase.removeChannel(channelSub); };
-  }, [currentUserId, tenantId, tenantSlug]);
+
+    return () => {
+      supabase.removeChannel(streamSub);
+      supabase.removeChannel(channelSub);
+    };
+  }, [currentUserId, tenantId, tenantSlug, activeChannelId]);
 
   // Keep callStateRef in sync so the incoming call listener is always current
   // without needing to re-subscribe to the Supabase channel.

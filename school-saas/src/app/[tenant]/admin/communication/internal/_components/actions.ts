@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,8 @@ export interface ChatMessage {
     date?: string;
     venue?: string;
     sub?: string;
+    call_type?: string;
+    caller_id?: string;
   } | null;
   reply_to_id: string | null;
   reply_to_snapshot: { content: string; sender_name: string } | null;
@@ -257,43 +260,53 @@ export async function sendMessage(formData: FormData) {
     try { messageData.attachment = JSON.parse(attachmentRaw); } catch {}
   }
 
-  const { error: msgError } = await supabase.from('chat_messages').insert(messageData);
+  const adminSupabase = createAdminClient();
+
+  const { data: insertedMsg, error: msgError } = await supabase
+    .from('chat_messages')
+    .insert(messageData)
+    .select('*')
+    .single();
+
   if (msgError) return { success: false, error: msgError.message };
 
-  // Update channel's last_message + updated_at
+  // Update channel's last_message + updated_at using admin client
   const lastMessagePreview = attachmentRaw
     ? '📎 Attachment'
     : (content || '').substring(0, 120);
 
-  await supabase.from('chat_channels').update({
-    last_message: {
-      content: lastMessagePreview,
-      sender_name: profile?.full_name || 'User',
-      created_at: new Date().toISOString(),
-    },
+  const lastMsgObj = {
+    content: lastMessagePreview,
+    sender_name: profile?.full_name || 'User',
+    created_at: new Date().toISOString(),
+  };
+
+  await adminSupabase.from('chat_channels').update({
+    last_message: lastMsgObj,
     updated_at: new Date().toISOString(),
   }).eq('id', channelId);
 
-  // Increment unread_count for all OTHER members
-  const { data: otherMembers } = await supabase
+  // Increment unread_count for all OTHER members using admin client
+  const { data: otherMembers } = await adminSupabase
     .from('chat_members')
     .select('id, unread_count')
     .eq('channel_id', channelId)
     .neq('user_id', user.id);
 
   for (const member of otherMembers || []) {
-    await supabase.from('chat_members')
+    await adminSupabase.from('chat_members')
       .update({ unread_count: (member.unread_count || 0) + 1 })
       .eq('id', member.id);
   }
 
-  return { success: true };
+  return { success: true, message: insertedMsg };
 }
 
 // ── Create DM channel ──────────────────────────────────────────────────────
 
 export async function createDirectMessageChannel(tenantId: string, targetUserId: string) {
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Not authenticated' };
 
@@ -332,8 +345,8 @@ export async function createDirectMessageChannel(tenantId: string, targetUserId:
 
   if (error || !channel) return { success: false, error: error?.message || 'Failed to create channel' };
 
-  // Add both participants as members
-  await supabase.from('chat_members').insert([
+  // Add both participants as members using admin client
+  await adminSupabase.from('chat_members').insert([
     { channel_id: channel.id, user_id: user.id, role: 'admin' },
     { channel_id: channel.id, user_id: targetUserId, role: 'member' },
   ]);
@@ -345,6 +358,7 @@ export async function createDirectMessageChannel(tenantId: string, targetUserId:
 
 export async function createGroupChannel(formData: FormData) {
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Not authenticated' };
 
@@ -368,9 +382,9 @@ export async function createGroupChannel(formData: FormData) {
 
   if (error || !channel) return { success: false, error: error?.message || 'Failed to create group' };
 
-  // Add creator + all selected members
+  // Add creator + all selected members using admin client
   const allMemberIds = [...new Set([user.id, ...memberIds])];
-  await supabase.from('chat_members').insert(
+  await adminSupabase.from('chat_members').insert(
     allMemberIds.map(uid => ({
       channel_id: channel.id,
       user_id: uid,
@@ -549,17 +563,17 @@ export async function loadPresence(userIds: string[]) {
 export async function logCallMessage(
   channelId: string,
   callType: 'voice' | 'video',
-  callStatus: 'missed' | 'completed' | 'declined',
+  callStatus: 'missed' | 'completed' | 'declined' | 'unanswered',
   duration?: string
 ) {
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false };
 
-  const isMissed = callStatus === 'missed' || callStatus === 'declined';
-  const callTitle = isMissed
-    ? (callType === 'video' ? 'Missed Video Call' : 'Missed Voice Call')
-    : (callType === 'video' ? 'Video Call' : 'Voice Call');
+  const isCompleted = callStatus === 'completed';
+  const isVideo = callType === 'video';
+  const baseTitle = isVideo ? 'Video Call' : 'Voice Call';
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -574,12 +588,14 @@ export async function logCallMessage(
     .insert({
       channel_id: channelId,
       sender_id: user.id,
-      content: callTitle,
+      content: baseTitle,
       attachment: {
         type: 'call',
-        name: callTitle,
+        call_type: callType,
+        name: baseTitle,
         duration: duration || '',
         sub: callStatus,
+        caller_id: user.id,
       },
     })
     .select()
@@ -587,11 +603,11 @@ export async function logCallMessage(
 
   if (error) return { success: false, error: error.message };
 
-  await supabase
+  await adminSupabase
     .from('chat_channels')
     .update({
       last_message: {
-        content: `📞 ${callTitle}${duration ? ` (${duration})` : ''}`,
+        content: `📞 ${baseTitle}${duration ? ` (${duration})` : isCompleted ? '' : ' (Unanswered)'}`,
         sender_name: senderName,
         created_at: new Date().toISOString(),
       },

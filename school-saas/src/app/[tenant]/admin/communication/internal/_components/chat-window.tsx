@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Send, ArrowLeft, Phone, PhoneMissed, Video, Search, Paperclip,
+  Send, ArrowLeft, Phone, PhoneMissed, PhoneIncoming, PhoneOutgoing, Video, Search, Paperclip,
   Smile, X, Reply, Edit2, Trash2, CheckCheck, Check, Download,
   FileText, Image as ImageIcon, Users,
   Mic, Camera, Music, Zap, BarChart2, Calendar, MapPin, Play,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatUser } from './actions';
 import { sendMessage, editMessage, deleteMessage, toggleReaction, markChannelRead } from './actions';
+import { createClient } from '@/lib/supabase/client';
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅', '👏', '🎉'];
 
@@ -205,6 +206,9 @@ export default function ChatWindow({
   // ── Starred messages (client-side optimistic) ─────────────────────────────
   const [starredMsgIds, setStarredMsgIds] = useState<Set<string>>(new Set());
 
+  // ── Message Info Modal ───────────────────────────────────────────────────
+  const [infoMsg, setInfoMsg] = useState<ChatMessage | null>(null);
+
   // Attachment Menu Popup & Voice Record States
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
@@ -365,6 +369,27 @@ export default function ChatWindow({
     if (channel?.id) markChannelRead(channel.id);
   }, [channel?.id]);
 
+  const broadcastOutgoingMessage = useCallback((msg: ChatMessage) => {
+    if (!channel) return;
+    try {
+      const supabase = createClient();
+      supabase.channel(`msgs:${channel.id}`).send({
+        type: 'broadcast',
+        event: 'new_msg',
+        payload: msg,
+      });
+      if (channel.tenant_id) {
+        supabase.channel(`tenant_msg_stream:${channel.tenant_id}`).send({
+          type: 'broadcast',
+          event: 'incoming_msg',
+          payload: msg,
+        });
+      }
+    } catch (e) {
+      console.warn('Broadcast error:', e);
+    }
+  }, [channel]);
+
   const handleSend = useCallback(async () => {
     if ((!input.trim() && !editingMsg) || !channel) return;
     setIsSending(true);
@@ -414,10 +439,11 @@ export default function ChatWindow({
     onMessagesChange([...messages, optimistic]);
     setInput('');
     setReplyTo(null);
+    broadcastOutgoingMessage(optimistic);
 
     await sendMessage(fd);
     setIsSending(false);
-  }, [input, channel, replyTo, editingMsg, editContent, currentUserId, currentUser, messages, onMessagesChange]);
+  }, [input, channel, replyTo, editingMsg, editContent, currentUserId, currentUser, messages, onMessagesChange, broadcastOutgoingMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -497,6 +523,7 @@ export default function ChatWindow({
       };
       setReplyTo(null);
       onMessagesChange([...messages, optimistic]);
+      broadcastOutgoingMessage(optimistic);
       await sendMessage(fd);
     };
     reader.readAsDataURL(file);
@@ -670,6 +697,7 @@ export default function ChatWindow({
       };
 
       onMessagesChange([...messages, optimistic]);
+      broadcastOutgoingMessage(optimistic);
       await sendMessage(fd);
     };
 
@@ -872,8 +900,9 @@ export default function ChatWindow({
       sender: currentUser,
     };
     onMessagesChange([...messages, optimistic]);
+    broadcastOutgoingMessage(optimistic);
     await sendMessage(fd);
-  }, [channel, currentUserId, currentUser, messages, onMessagesChange, setShowQuickReplyModal, setShowPollModal, setShowEventModal, setShowLocationModal]);
+  }, [channel, currentUserId, currentUser, messages, onMessagesChange, setShowQuickReplyModal, setShowPollModal, setShowEventModal, setShowLocationModal, broadcastOutgoingMessage]);
 
   const sendCapturedPhoto = useCallback(() => {
     if (!capturedPhoto) return;
@@ -1005,7 +1034,10 @@ export default function ChatWindow({
                 <button title="Pin" className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-amber-400 transition-colors">
                   <Pin className="w-4 h-4" />
                 </button>
-                <button title="Message Info" className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--accent))] transition-colors">
+                <button title="Message Info" onClick={() => {
+                  const msg = messages.find(m => m.id === selectedMsgIds[0]);
+                  if (msg) { setInfoMsg(msg); setSelectedMsgIds([]); }
+                }} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--accent))] transition-colors">
                   <Info className="w-4 h-4" />
                 </button>
               </>
@@ -1155,12 +1187,15 @@ export default function ChatWindow({
                   <div className="w-7 shrink-0">
                     {showAvatar ? (
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-sm ${avatarColor(msg.sender_id)}`}>
-                        {msg.sender?.avatar_url ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img src={msg.sender.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                        ) : (
-                          getInitials(msg.sender?.full_name || 'U')
-                        )}
+                        {(() => {
+                          const senderObj = msg.sender || (channel.participants || []).find(p => p.id === msg.sender_id);
+                          return senderObj?.avatar_url ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={senderObj.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                          ) : (
+                            getInitials(senderObj?.full_name || 'U')
+                          );
+                        })()}
                       </div>
                     ) : <div className="w-7" />}
                   </div>
@@ -1170,7 +1205,7 @@ export default function ChatWindow({
                   {/* Sender name (group only) */}
                   {!isMe && channel.type === 'group' && showAvatar && (
                     <span className="text-[10px] font-bold text-[hsl(var(--accent))] mb-1 ml-1">
-                      {msg.sender?.full_name}
+                      {msg.sender?.full_name || (channel.participants || []).find(p => p.id === msg.sender_id)?.full_name || 'Group Member'}
                     </span>
                   )}
 
@@ -1295,53 +1330,76 @@ export default function ChatWindow({
                           </div>
                         </div>
                       ) : msg.attachment.type === 'call' ? (
-                        <div className="flex items-center gap-3 py-1 min-w-[210px]">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                            msg.attachment.sub === 'missed' || msg.attachment.sub === 'declined'
-                              ? 'bg-rose-500/20 text-rose-500'
-                              : 'bg-emerald-500/20 text-emerald-500'
-                          }`}>
-                            {msg.attachment.sub === 'missed' || msg.attachment.sub === 'declined' ? (
-                              <PhoneMissed className="w-4 h-4" />
-                            ) : msg.attachment.name?.toLowerCase().includes('video') ? (
-                              <Video className="w-4 h-4" />
-                            ) : (
-                              <Phone className="w-4 h-4" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-xs font-bold ${
-                              msg.attachment.sub === 'missed' || msg.attachment.sub === 'declined'
-                                ? isMe ? 'text-white' : 'text-rose-500'
-                                : isMe ? 'text-white' : 'text-[hsl(var(--text-primary))]'
-                            }`}>
-                              {msg.attachment.name}
-                            </p>
-                            <p className="text-[10px] opacity-70">
-                              {msg.attachment.sub === 'missed' || msg.attachment.sub === 'declined'
-                                ? 'Missed call'
-                                : msg.attachment.duration
-                                  ? `Duration: ${msg.attachment.duration}`
-                                  : 'Call ended'}
-                            </p>
-                          </div>
-                          {onStartCall && (
-                            <button
-                              type="button"
-                              onClick={e => {
-                                e.stopPropagation();
-                                onStartCall(channel.id, msg.attachment?.name?.toLowerCase().includes('video') ? 'video' : 'voice');
-                              }}
-                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors shrink-0 ${
-                                isMe
-                                  ? 'bg-white/20 hover:bg-white/30 text-white'
-                                  : 'bg-[hsl(var(--accent)/0.15)] hover:bg-[hsl(var(--accent)/0.25)] text-[hsl(var(--accent))]'
-                              }`}
-                            >
-                              Call back
-                            </button>
-                          )}
-                        </div>
+                        (() => {
+                          const isVideo = msg.attachment.name?.toLowerCase().includes('video') || msg.attachment.call_type === 'video';
+                          const isUnanswered = msg.attachment.sub === 'missed' || msg.attachment.sub === 'declined' || msg.attachment.sub === 'unanswered';
+
+                          // You cannot miss a call from yourself:
+                          // - If isMe (I initiated): Outgoing Call ("Unanswered" or duration)
+                          // - If !isMe (Someone called me): if unanswered -> "Missed Call" (red)
+                          //                                if completed -> "Incoming Call" (green)
+                          const title = isMe
+                            ? (isVideo ? 'Outgoing Video Call' : 'Outgoing Voice Call')
+                            : isUnanswered
+                              ? (isVideo ? 'Missed Video Call' : 'Missed Voice Call')
+                              : (isVideo ? 'Incoming Video Call' : 'Incoming Voice Call');
+
+                          const statusText = isMe
+                            ? (isUnanswered ? 'Unanswered' : (msg.attachment.duration ? `Duration: ${msg.attachment.duration}` : 'Call ended'))
+                            : (isUnanswered ? 'Missed call' : (msg.attachment.duration ? `Duration: ${msg.attachment.duration}` : 'Call ended'));
+
+                          const isMissedForMe = !isMe && isUnanswered;
+
+                          return (
+                            <div className="flex items-center gap-3 py-1 min-w-[210px]">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                                isMissedForMe
+                                  ? 'bg-rose-500/20 text-rose-500'
+                                  : isMe
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-emerald-500/20 text-emerald-500'
+                              }`}>
+                                {isMissedForMe ? (
+                                  <PhoneMissed className="w-4 h-4" />
+                                ) : isMe ? (
+                                  <PhoneOutgoing className="w-4 h-4" />
+                                ) : isVideo ? (
+                                  <Video className="w-4 h-4" />
+                                ) : (
+                                  <PhoneIncoming className="w-4 h-4" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-bold ${
+                                  isMissedForMe
+                                    ? 'text-rose-500'
+                                    : isMe ? 'text-white' : 'text-[hsl(var(--text-primary))]'
+                                }`}>
+                                  {title}
+                                </p>
+                                <p className="text-[10px] opacity-70">
+                                  {statusText}
+                                </p>
+                              </div>
+                              {onStartCall && (
+                                <button
+                                  type="button"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    onStartCall(channel.id, isVideo ? 'video' : 'voice');
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors shrink-0 ${
+                                    isMe
+                                      ? 'bg-white/20 hover:bg-white/30 text-white'
+                                      : 'bg-[hsl(var(--accent)/0.15)] hover:bg-[hsl(var(--accent)/0.25)] text-[hsl(var(--accent))]'
+                                  }`}
+                                >
+                                  {isMe ? 'Call again' : 'Call back'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()
                       ) : (
                         <div className="flex items-center gap-2.5 py-1">
                           <FileText className="w-8 h-8 opacity-80 shrink-0" />
@@ -1456,6 +1514,12 @@ export default function ChatWindow({
               className="w-full px-4 py-2 text-xs text-left flex items-center gap-2.5 hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-primary))]">
               <Smile className="w-3.5 h-3.5" /> React
             </button>
+            {msg && !msg.is_deleted && (
+              <button onClick={() => { setInfoMsg(msg); setContextMenu(null); }}
+                className="w-full px-4 py-2 text-xs text-left flex items-center gap-2.5 hover:bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-primary))]">
+                <Info className="w-3.5 h-3.5" /> Message Info
+              </button>
+            )}
             {isMe && msg && !msg.is_deleted && (
               <>
                 <div className="h-px bg-[hsl(var(--border))] my-1" />
@@ -2035,6 +2099,238 @@ export default function ChatWindow({
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MESSAGE INFO MODAL ──────────────────────────────────────────── */}
+      {infoMsg && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-fade-in">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-[hsl(var(--border))] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setInfoMsg(null)}
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h3 className="font-extrabold text-sm text-[hsl(var(--text-primary))] flex items-center gap-2">
+                  <Info className="w-4 h-4 text-[hsl(var(--accent))]" /> Message Info
+                </h3>
+              </div>
+              <button
+                onClick={() => setInfoMsg(null)}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-[hsl(var(--text-tertiary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* 1. Message Preview Box */}
+              <div className="p-4 rounded-2xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] space-y-2">
+                <div className="flex items-center justify-between text-[11px] text-[hsl(var(--text-tertiary))]">
+                  <span className="font-bold text-[hsl(var(--accent))]">
+                    {infoMsg.sender_id === currentUserId ? 'You' : infoMsg.sender?.full_name || 'Sender'}
+                  </span>
+                  <span>{formatDateDivider(infoMsg.created_at)} • {formatTimestamp(infoMsg.created_at)}</span>
+                </div>
+
+                {/* Message Content / Attachment preview */}
+                {infoMsg.attachment ? (
+                  infoMsg.attachment.type === 'image' ? (
+                    <div className="space-y-1.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={infoMsg.attachment.url} alt={infoMsg.attachment.name} className="max-h-48 rounded-xl object-cover" />
+                      {infoMsg.attachment.sub && <p className="text-xs text-[hsl(var(--text-primary))]">{infoMsg.attachment.sub}</p>}
+                    </div>
+                  ) : infoMsg.attachment.type === 'audio' ? (
+                    <div className="p-2.5 rounded-xl bg-[hsl(var(--bg-secondary))] flex items-center gap-2.5 text-xs">
+                      <Music className="w-4 h-4 text-[hsl(var(--accent))]" />
+                      <span className="font-bold">Voice Note ({infoMsg.attachment.duration || '0:05'})</span>
+                    </div>
+                  ) : infoMsg.attachment.type === 'call' ? (
+                    (() => {
+                      const isMeInfo = infoMsg.sender_id === currentUserId;
+                      const isVideo = infoMsg.attachment.name?.toLowerCase().includes('video') || infoMsg.attachment.call_type === 'video';
+                      const isUnanswered = infoMsg.attachment.sub === 'missed' || infoMsg.attachment.sub === 'declined' || infoMsg.attachment.sub === 'unanswered';
+                      const callTitle = isMeInfo
+                        ? (isVideo ? 'Outgoing Video Call' : 'Outgoing Voice Call')
+                        : isUnanswered
+                          ? (isVideo ? 'Missed Video Call' : 'Missed Voice Call')
+                          : (isVideo ? 'Incoming Video Call' : 'Incoming Voice Call');
+
+                      return (
+                        <div className="p-2.5 rounded-xl bg-[hsl(var(--bg-secondary))] flex items-center gap-2.5 text-xs">
+                          {isMeInfo ? (
+                            <PhoneOutgoing className="w-4 h-4 text-[hsl(var(--accent))]" />
+                          ) : isUnanswered ? (
+                            <PhoneMissed className="w-4 h-4 text-rose-500" />
+                          ) : (
+                            <PhoneIncoming className="w-4 h-4 text-emerald-500" />
+                          )}
+                          <span className="font-bold">{callTitle}{infoMsg.attachment.duration ? ` (${infoMsg.attachment.duration})` : isUnanswered ? ' (Unanswered)' : ''}</span>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div className="p-2.5 rounded-xl bg-[hsl(var(--bg-secondary))] flex items-center gap-2.5 text-xs">
+                      <FileText className="w-4 h-4 text-[hsl(var(--accent))]" />
+                      <span className="font-bold truncate">{infoMsg.attachment.name}</span>
+                    </div>
+                  )
+                ) : (
+                  <p className="text-xs text-[hsl(var(--text-primary))] whitespace-pre-line leading-relaxed">
+                    {infoMsg.content}
+                  </p>
+                )}
+              </div>
+
+              {/* 2. Read Status Section */}
+              <div className="rounded-2xl bg-[hsl(var(--bg-tertiary)/0.5)] border border-[hsl(var(--border))] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCheck className="w-4 h-4 text-sky-400" />
+                    <span className="text-xs font-bold text-[hsl(var(--text-primary))]">Read</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400">
+                    {channel?.type === 'group'
+                      ? `${(infoMsg.read_by || []).length} / ${(channel.participants || []).filter(p => p.id !== infoMsg.sender_id).length}`
+                      : (infoMsg.read_by || []).length > 0 ? 'Read' : 'Unread'}
+                  </span>
+                </div>
+
+                {/* Readers list */}
+                <div className="divide-y divide-[hsl(var(--border))]">
+                  {channel?.type === 'group' ? (
+                    (() => {
+                      const readers = (channel.participants || []).filter(p => (infoMsg.read_by || []).includes(p.id) && p.id !== infoMsg.sender_id);
+                      if (readers.length === 0) {
+                        return (
+                          <div className="p-4 text-center text-xs text-[hsl(var(--text-tertiary))]">
+                            No group members have read this message yet.
+                          </div>
+                        );
+                      }
+                      return readers.map(user => (
+                        <div key={user.id} className="p-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${avatarColor(user.id)}`}>
+                              {user.avatar_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                              ) : getInitials(user.full_name)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-[hsl(var(--text-primary))] truncate">{user.full_name}</p>
+                              <p className="text-[10px] text-[hsl(var(--text-tertiary))] capitalize">{user.role}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-sky-400">
+                            <CheckCheck className="w-3.5 h-3.5" /> Read
+                          </div>
+                        </div>
+                      ));
+                    })()
+                  ) : (
+                    (() => {
+                      const isRead = (infoMsg.read_by || []).length > 0 || (otherParticipant && (infoMsg.read_by || []).includes(otherParticipant.id));
+                      return (
+                        <div className="p-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${avatarColor(otherParticipant?.id || '1')}`}>
+                              {otherParticipant?.avatar_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={otherParticipant.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                              ) : getInitials(otherParticipant?.full_name || 'U')}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-[hsl(var(--text-primary))] truncate">{otherParticipant?.full_name || 'Recipient'}</p>
+                              <p className="text-[10px] text-[hsl(var(--text-tertiary))] capitalize">{otherParticipant?.role || 'User'}</p>
+                            </div>
+                          </div>
+                          <div className={`flex items-center gap-1 text-[10px] font-bold ${isRead ? 'text-sky-400' : 'text-[hsl(var(--text-tertiary))]'}`}>
+                            {isRead ? (
+                              <><CheckCheck className="w-3.5 h-3.5" /> Read</>
+                            ) : (
+                              <span>Not read yet</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Delivered Status Section */}
+              <div className="rounded-2xl bg-[hsl(var(--bg-tertiary)/0.5)] border border-[hsl(var(--border))] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCheck className="w-4 h-4 text-[hsl(var(--text-tertiary))]" />
+                    <span className="text-xs font-bold text-[hsl(var(--text-primary))]">Delivered</span>
+                  </div>
+                  <span className="text-[10px] text-[hsl(var(--text-tertiary))]">
+                    {formatDateDivider(infoMsg.created_at)} at {formatTimestamp(infoMsg.created_at)}
+                  </span>
+                </div>
+
+                {/* Delivered list for groups */}
+                {channel?.type === 'group' && (
+                  <div className="divide-y divide-[hsl(var(--border))] max-h-40 overflow-y-auto">
+                    {(() => {
+                      const unreadMembers = (channel.participants || []).filter(p => !(infoMsg.read_by || []).includes(p.id) && p.id !== infoMsg.sender_id);
+                      if (unreadMembers.length === 0) {
+                        return (
+                          <div className="p-3 text-center text-xs text-[hsl(var(--text-tertiary))]">
+                            All group members have read this message.
+                          </div>
+                        );
+                      }
+                      return unreadMembers.map(user => (
+                        <div key={user.id} className="p-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${avatarColor(user.id)}`}>
+                              {user.avatar_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                              ) : getInitials(user.full_name)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-[hsl(var(--text-primary))] truncate">{user.full_name}</p>
+                              <p className="text-[10px] text-[hsl(var(--text-tertiary))] capitalize">{user.role}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 text-[10px] text-[hsl(var(--text-tertiary))]">
+                            <CheckCheck className="w-3.5 h-3.5" /> Delivered
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Reactions summary (if any) */}
+              {infoMsg.reactions && Object.keys(infoMsg.reactions).length > 0 && (
+                <div className="rounded-2xl bg-[hsl(var(--bg-tertiary)/0.5)] border border-[hsl(var(--border))] p-4 space-y-2">
+                  <span className="text-xs font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
+                    <Smile className="w-4 h-4 text-[hsl(var(--accent))]" /> Reactions
+                  </span>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {Object.entries(infoMsg.reactions).map(([emoji, userIds]) => (
+                      <div key={emoji} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-xs">
+                        <span className="text-base">{emoji}</span>
+                        <span className="font-bold text-[hsl(var(--text-primary))]">{userIds.length}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
