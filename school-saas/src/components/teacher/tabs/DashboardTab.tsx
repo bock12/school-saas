@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { TeacherData } from '../TeacherDashboardContent';
+import { StaffMobileCheckinWidget } from '@/app/[tenant]/admin/staff/_components/staff-mobile-checkin-widget';
 import {
   CheckSquare, FileText, Upload, ClipboardList, Calendar,
   BookOpen, MessageSquare, AlertTriangle, BarChart3, Zap,
@@ -286,6 +287,12 @@ export function DashboardTab({ teacher }: { teacher: TeacherData }) {
 
         {/* ── Right Column ─────────────────────────────────── */}
         <div className="space-y-5">
+          {/* Personal Staff Mobile Check-In Widget */}
+          <StaffMobileCheckinWidget
+            staffName={teacher.name}
+            staffId={teacher.id.substring(0, 10).toUpperCase()}
+          />
+
           {/* Assigned Classes */}
           <div className="glass-card rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
