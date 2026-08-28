@@ -15,10 +15,10 @@ export default async function TeacherDashboardLayout({
   const { user, profile, school } = await requireTeacher(tenant);
 
   const displayName =
-    profile.full_name || user.email?.split('@')[0] || 'Teacher';
+    profile?.full_name || user?.email?.split('@')[0] || 'Teacher';
 
   const tenantName =
-    school.name ||
+    school?.name ||
     tenant.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
@@ -27,15 +27,15 @@ export default async function TeacherDashboardLayout({
         <TeacherSidebar
           tenantSlug={tenant}
           tenantName={tenantName}
-          primaryColor={school.primary_color || '#6366f1'}
+          primaryColor={school?.primary_color || '#6366f1'}
         />
         <SidebarLayoutShell>
           <TenantTopbar
             tenantSlug={tenant}
             tenantName={tenantName}
             userName={displayName}
-            userRole={profile.role}
-            tenantType={school.type}
+            userRole={profile?.role}
+            tenantType={school?.type}
           />
           <main className="p-4 sm:p-6 min-h-[calc(100vh-4rem)]">{children}</main>
         </SidebarLayoutShell>

@@ -5,6 +5,7 @@ import { DashboardTab } from './tabs/DashboardTab';
 import { AttendanceTab } from './tabs/AttendanceTab';
 import { ClassesTab } from './tabs/ClassesTab';
 import { SubjectsTab } from './tabs/SubjectsTab';
+import { TodayScheduleTab } from './tabs/TodayScheduleTab';
 import { ScheduleTab } from './tabs/ScheduleTab';
 import { LessonPlansTab } from './tabs/LessonPlansTab';
 import { AssignmentsTab } from './tabs/AssignmentsTab';
@@ -42,7 +43,7 @@ const TAB_MAP: Record<string, React.ComponentType<{ teacher: TeacherData }>> = {
   'attendance-history': AttendanceTab,
   classes: ClassesTab,
   subjects: SubjectsTab,
-  schedule: ScheduleTab,
+  schedule: TodayScheduleTab,
   timetable: ScheduleTab,
   calendar: CalendarTab,
   'lesson-plans': LessonPlansTab,

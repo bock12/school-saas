@@ -13,7 +13,7 @@ export default async function TeacherDashboardPage({
   const { user, profile, school } = await requireTeacher(tenant);
 
   const displayName =
-    profile.full_name || user.email?.split('@')[0] || 'Teacher';
+    profile?.full_name || user?.email?.split('@')[0] || 'Teacher';
 
   return (
     <TeacherDashboardContent
@@ -22,12 +22,12 @@ export default async function TeacherDashboardPage({
         id: user.id,
         name: displayName,
         email: user.email || '',
-        role: profile.role || 'teacher',
-        department: (profile as Record<string, unknown>).department as string | undefined,
+        role: profile?.role || 'teacher',
+        department: (profile as Record<string, unknown>)?.department as string | undefined,
         tenantSlug: tenant,
-        tenantName: school.name || tenant,
-        primaryColor: school.primary_color || '#6366f1',
-        schoolLevel: school.type || 'school',
+        tenantName: school?.name || tenant,
+        primaryColor: school?.primary_color || '#6366f1',
+        schoolLevel: school?.type || 'school',
       }}
     />
   );

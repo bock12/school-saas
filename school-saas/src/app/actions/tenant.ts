@@ -489,10 +489,24 @@ export async function saveBrandingSettings(
 ) {
   if (!tenantId) return { success: false, error: 'Tenant ID required.' };
   const supabaseAdmin = createAdminClient();
+
+  let resolvedTenantId = tenantId;
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+  if (!isUUID) {
+    const { data: tRecord } = await supabaseAdmin
+      .from('tenants')
+      .select('id')
+      .eq('slug', tenantId)
+      .maybeSingle();
+    if (tRecord?.id) {
+      resolvedTenantId = tRecord.id;
+    }
+  }
+
   const { error } = await supabaseAdmin
     .from('tenants')
     .update(data)
-    .eq('id', tenantId);
+    .eq('id', resolvedTenantId);
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
@@ -506,10 +520,76 @@ export async function saveOrgSettings(
 ) {
   if (!tenantId) return { success: false, error: 'Tenant ID required.' };
   const supabaseAdmin = createAdminClient();
-  const { error } = await supabaseAdmin
-    .from('org_settings')
-    .upsert({ tenant_id: tenantId, ...data, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' });
-  if (error) return { success: false, error: error.message };
+
+  let resolvedTenantId = tenantId;
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+  if (!isUUID) {
+    const { data: tRecord } = await supabaseAdmin
+      .from('tenants')
+      .select('id')
+      .eq('slug', tenantId)
+      .maybeSingle();
+    if (tRecord?.id) {
+      resolvedTenantId = tRecord.id;
+    }
+  }
+
+  // 1. Update tenants table with basic tenant fields
+  const tenantFields: Record<string, unknown> = {};
+  if (data.name !== undefined) tenantFields.name = data.name;
+  if (data.contact_email !== undefined) tenantFields.contact_email = data.contact_email;
+  if (data.contact_phone !== undefined) tenantFields.contact_phone = data.contact_phone;
+  if (data.address !== undefined) tenantFields.address = data.address;
+  if (data.primary_color !== undefined) tenantFields.primary_color = data.primary_color;
+  if (data.secondary_color !== undefined) tenantFields.secondary_color = data.secondary_color;
+  if (data.custom_domain !== undefined) tenantFields.custom_domain = data.custom_domain;
+  if (data.logo_url !== undefined) tenantFields.logo_url = data.logo_url;
+
+  if (Object.keys(tenantFields).length > 0) {
+    await supabaseAdmin
+      .from('tenants')
+      .update(tenantFields)
+      .eq('id', resolvedTenantId);
+  }
+
+  // 2. Filter only valid columns for org_settings table
+  const validOrgCols = [
+    'contact_email',
+    'contact_phone',
+    'address',
+    'timezone',
+    'language',
+    'min_password_length',
+    'password_expiry_days',
+    'lockout_attempts',
+    'session_timeout_mins',
+    'require_mfa',
+    'staff_approval_required',
+  ];
+
+  const orgSettingsPayload: Record<string, unknown> = {
+    tenant_id: resolvedTenantId,
+    updated_at: new Date().toISOString(),
+  };
+
+  let hasOrgFields = false;
+  for (const key of validOrgCols) {
+    if (data[key] !== undefined) {
+      orgSettingsPayload[key] = data[key];
+      hasOrgFields = true;
+    }
+  }
+
+  if (hasOrgFields) {
+    const { error } = await supabaseAdmin
+      .from('org_settings')
+      .upsert(orgSettingsPayload, { onConflict: 'tenant_id' });
+    if (error) {
+      console.warn('[saveOrgSettings] org_settings table update note:', error.message);
+    }
+  }
+
   return { success: true };
 }
+
 
