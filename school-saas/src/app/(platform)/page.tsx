@@ -74,6 +74,12 @@ export default function HomePage() {
   const getTenantUrl = (slug: string) => {
     if (typeof window === 'undefined') return `/${slug}`;
     const hostname = window.location.hostname;
+    
+    // For local development, use path-based routing to avoid DNS issues with subdomains
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `/${slug}`;
+    }
+    
     const cleanHost = hostname.replace(/^(www\.|admin\.)/, '');
     const port = window.location.port ? `:${window.location.port}` : '';
     return `${window.location.protocol}//${slug}.${cleanHost}${port}`;

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Calendar, Clock, Layers, BookMarked, GraduationCap, Users, UsersRound,
@@ -8,6 +9,9 @@ import {
   LayoutDashboard, Search, Filter, BookOpen, Sliders, Building2, CheckCircle2,
   FileCheck, ShieldCheck, ArrowUpRight, Sparkles, Activity, X, Info
 } from 'lucide-react';
+import SubjectAnalyticsSummary from '@/components/academics/SubjectAnalyticsSummary';
+import { getSubjects, SubjectRecord } from '@/app/actions/subjects';
+import { getUnassignedSubjects } from '@/app/actions/offerings';
 
 interface ModuleAction {
   id: string;
@@ -27,10 +31,57 @@ export default function AcademicsDashboardPage() {
 
   const [activeTab, setActiveTab] = useState<'all' | 'curriculum' | 'allocation' | 'grading' | 'calendar'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedYear, setSelectedYear] = useState('2026/2027');
+  const [selectedYear, setSelectedYear] = useState('');
   const [selectedTerm, setSelectedTerm] = useState('Term 1');
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
   const [newSubject, setNewSubject] = useState({ code: '', name: '', dept: 'Science & Math', credits: 4, compulsory: true });
+
+  const [subjects, setSubjects] = useState<SubjectRecord[]>([]);
+  const [unassignedCount, setUnassignedCount] = useState(0);
+  const [academicYears, setAcademicYears] = useState<{ id: string; name: string; is_current: boolean }[]>([]);
+
+  const loadData = useCallback(async () => {
+    try {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const admin = createAdminClient();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant);
+      let tenantId = tenant;
+
+      if (!isUuid) {
+        const { data } = await admin.from('tenants').select('id').eq('slug', tenant).maybeSingle();
+        tenantId = data?.id || tenant;
+      }
+
+      const { data: years } = await admin
+        .from('academic_years')
+        .select('id, name, is_current')
+        .eq('tenant_id', tenantId)
+        .order('start_date', { ascending: false });
+
+      let currentYearId = '';
+      if (years && years.length > 0) {
+        setAcademicYears(years);
+        const current = years.find((y: any) => y.is_current) || years[0];
+        currentYearId = current.id;
+        setSelectedYear(current.id);
+      }
+
+      const [subjectsRes, unassignedRes] = await Promise.all([
+        getSubjects(tenant, { limit: 500 }),
+        currentYearId ? getUnassignedSubjects(tenant, currentYearId) : Promise.resolve({ success: false, data: [] })
+      ]);
+
+      if (subjectsRes.success) setSubjects(subjectsRes.data);
+      if (unassignedRes.success) setUnassignedCount(unassignedRes.data.length);
+      
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err);
+    }
+  }, [tenant]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const activeSubjectCount = subjects.filter(s => s.is_active).length;
 
   const allModules: ModuleAction[] = [
     {
@@ -41,7 +92,7 @@ export default function AcademicsDashboardPage() {
       icon: BookMarked,
       category: 'curriculum',
       primary: true,
-      badge: '46 Active'
+      badge: `${activeSubjectCount} Active`
     },
     {
       id: 'departments',
@@ -222,8 +273,13 @@ export default function AcademicsDashboardPage() {
                 onChange={e => setSelectedYear(e.target.value)}
                 className="bg-transparent font-bold text-[hsl(var(--text-primary))] focus:outline-none cursor-pointer pr-1 text-xs"
               >
-                <option value="2026/2027">2026/2027 Year</option>
-                <option value="2025/2026">2025/2026 Year</option>
+                {academicYears.length > 0 ? (
+                  academicYears.map(y => (
+                    <option key={y.id} value={y.id}>{y.name}{y.is_current ? ' (Active)' : ''}</option>
+                  ))
+                ) : (
+                  <option value="">No years found</option>
+                )}
               </select>
             </div>
 
@@ -240,17 +296,23 @@ export default function AcademicsDashboardPage() {
               </select>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsQuickCreateOpen(true)}
+            <Link
+              href={`/${tenant}/admin/academics/subjects`}
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-bold text-xs shadow-md hover:opacity-95 transition-all"
             >
               <Plus className="w-4 h-4" />
               <span>Add Subject</span>
-            </button>
+            </Link>
           </div>
         </div>
       </div>
+
+      {/* ── Analytics Summary ── */}
+      <SubjectAnalyticsSummary
+        subjects={subjects}
+        activeEnrollmentsCount={0} // To be connected to enrollment engine
+        unassignedOfferingsCount={unassignedCount}
+      />
 
       {/* ── 2. Top-Level Quick Navigation Links (Mobile Scrollable, Tablet/Desktop Grid) ── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs">

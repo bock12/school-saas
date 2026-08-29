@@ -73,21 +73,36 @@ export default function PlatformLoginPage() {
     }
 
     // After successful auth, redirect to the tenant's dashboard
-    const tenantBase = typeof window !== 'undefined'
-      ? `${window.location.protocol}//${selectedTenant.slug}.${window.location.hostname.replace(/^(www\.|admin\.)/, '')}${window.location.port ? `:${window.location.port}` : ''}`
-      : `/${selectedTenant.slug}`;
+    let tenantBase = `/${selectedTenant.slug}`;
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        const cleanHost = hostname.replace(/^(www\.|admin\.)/, '');
+        const port = window.location.port ? `:${window.location.port}` : '';
+        tenantBase = `${window.location.protocol}//${selectedTenant.slug}.${cleanHost}${port}`;
+      }
+    }
 
-    window.location.href = `${tenantBase}/dashboard`;
+    // Redirect to admin for school admins/teachers, or dashboard as fallback
+    window.location.href = `${tenantBase}/admin`;
   };
 
   const handleGoogleLogin = async () => {
     if (!selectedTenant) { setError('Please select your school or organization first.'); return; }
-    const tenantBase = typeof window !== 'undefined'
-      ? `${window.location.protocol}//${selectedTenant.slug}.${window.location.hostname.replace(/^(www\.|admin\.)/, '')}${window.location.port ? `:${window.location.port}` : ''}`
-      : '';
+    
+    let tenantBase = `/${selectedTenant.slug}`;
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        const cleanHost = hostname.replace(/^(www\.|admin\.)/, '');
+        const port = window.location.port ? `:${window.location.port}` : '';
+        tenantBase = `${window.location.protocol}//${selectedTenant.slug}.${cleanHost}${port}`;
+      }
+    }
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/api/auth/callback?next=${tenantBase}/dashboard` }
+      options: { redirectTo: `${window.location.origin}/api/auth/callback?next=${tenantBase}/admin` }
     });
     if (error) setError(error.message);
   };
