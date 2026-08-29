@@ -37,15 +37,15 @@ export default async function TenantDashboardRedirectPage({
   const role = profile?.role || user.user_metadata?.role;
 
   if (role === 'teacher') {
-    redirect('/teacher');
+    redirect(`/${tenant}/teacher`);
   } else if (role === 'student') {
-    redirect('/student');
+    redirect(`/${tenant}/student`);
   } else if (role === 'parent') {
-    redirect('/parent');
+    redirect(`/${tenant}/parent`);
   } else if (role === 'super_admin') {
-    redirect('/super-admin');
+    redirect(`/${tenant}/super-admin`);
   } else {
     // Default to tenant admin dashboard
-    redirect('/admin');
+    redirect(`/${tenant}/admin`);
   }
 }

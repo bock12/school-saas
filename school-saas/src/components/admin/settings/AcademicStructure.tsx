@@ -1,15 +1,25 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import {
   Plus, Trash2, Save, Layers, Workflow,
   Settings2, CheckCircle2, AlertCircle, ChevronRight,
   School, Calendar, GraduationCap, Users, X, Pencil,
-  Award, Check, BookOpen, RefreshCw
+  Award, Check, BookOpen, RefreshCw, Clock
 } from 'lucide-react';
+import Link from 'next/link';
+import {
+  getAcademicSessions,
+  createAcademicSession,
+  updateAcademicSession,
+  deleteAcademicSession,
+  AcademicSessionRecord,
+  TermPayload
+} from '@/app/actions/academic-sessions';
 
 export interface TermConfig {
-  id: string;
+  id?: string;
   name: string;
   startDate: string;
   endDate: string;
@@ -35,36 +45,13 @@ interface AcademicStructureProps {
   isEmbedded?: boolean;
 }
 
-const INITIAL_YEARS: AcademicYear[] = [
-  {
-    id: 'ay_2025_2026',
-    name: '2025/2026',
-    startDate: '2025-09-01',
-    endDate: '2026-07-31',
-    isCurrent: true,
-    terms: [
-      { id: 'term_1', name: 'First Term', startDate: '2025-09-01', endDate: '2025-12-20' },
-      { id: 'term_2', name: 'Second Term', startDate: '2026-01-05', endDate: '2026-04-10' },
-      { id: 'term_3', name: 'Third Term', startDate: '2026-04-25', endDate: '2026-07-20' },
-    ],
-  },
-  {
-    id: 'ay_2026_2027',
-    name: '2026/2027',
-    startDate: '2026-09-01',
-    endDate: '2027-07-31',
-    isCurrent: false,
-    terms: [
-      { id: 'term_1', name: 'First Term', startDate: '2026-09-01', endDate: '2026-12-20' },
-      { id: 'term_2', name: 'Second Term', startDate: '2027-01-05', endDate: '2027-04-10' },
-      { id: 'term_3', name: 'Third Term', startDate: '2027-04-25', endDate: '2027-07-20' },
-    ],
-  },
-];
-
 export default function AcademicStructure({ organization, isEmbedded = false }: AcademicStructureProps) {
-  const [academicYears, setAcademicYears] = useState<AcademicYear[]>(INITIAL_YEARS);
-  const [selectedYear, setSelectedYear] = useState<string>('ay_2025_2026');
+  const params = useParams();
+  const tenantSlug = (params?.tenant as string) || organization?.id || 'demo';
+
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [selectedYear, setSelectedYear] = useState<string>('');
+  const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [saving, setSaving] = useState(false);
 
@@ -73,23 +60,26 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
   const [editingYear, setEditingYear] = useState<AcademicYear | null>(null);
   const [deletingYear, setDeletingYear] = useState<AcademicYear | null>(null);
 
+  const currentYear = new Date().getFullYear();
   const [newYearData, setNewYearData] = useState({
-    name: `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
-    startDate: `${new Date().getFullYear()}-09-01`,
-    endDate: `${new Date().getFullYear() + 1}-07-31`,
+    name: `${currentYear}/${currentYear + 1}`,
+    startDate: `${currentYear}-09-01`,
+    endDate: `${currentYear + 1}-07-31`,
     terms: [
-      { id: 'term_1', name: 'First Term', startDate: `${new Date().getFullYear()}-09-01`, endDate: `${new Date().getFullYear()}-12-20` },
-      { id: 'term_2', name: 'Second Term', startDate: `${new Date().getFullYear() + 1}-01-05`, endDate: `${new Date().getFullYear() + 1}-04-10` },
-      { id: 'term_3', name: 'Third Term', startDate: `${new Date().getFullYear() + 1}-04-25`, endDate: `${new Date().getFullYear() + 1}-07-20` },
+      { name: 'First Term', startDate: `${currentYear}-09-01`, endDate: `${currentYear}-12-20` },
+      { name: 'Second Term', startDate: `${currentYear + 1}-01-05`, endDate: `${currentYear + 1}-04-10` },
+      { name: 'Third Term', startDate: `${currentYear + 1}-04-25`, endDate: `${currentYear + 1}-07-20` },
     ],
   });
 
   const [editYearData, setEditYearData] = useState<{
+    id: string;
     name: string;
     startDate: string;
     endDate: string;
     terms: TermConfig[];
   }>({
+    id: '',
     name: '',
     startDate: '',
     endDate: '',
@@ -108,6 +98,37 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
 
   const [generatedCount, setGeneratedCount] = useState<number>(0);
 
+  // ── Fetch and synchronize live academic sessions ─────────────────────────
+  const fetchSessions = async () => {
+    setLoading(true);
+    const res = await getAcademicSessions(tenantSlug);
+    if (res.success && res.data) {
+      const formatted: AcademicYear[] = res.data.map(d => ({
+        id: d.id,
+        name: d.name,
+        startDate: d.start_date,
+        endDate: d.end_date,
+        isCurrent: d.is_current,
+        terms: d.terms.map(t => ({
+          id: t.id,
+          name: t.name,
+          startDate: t.start_date,
+          endDate: t.end_date,
+        })),
+      }));
+      setAcademicYears(formatted);
+      if (formatted.length > 0 && !selectedYear) {
+        const current = formatted.find(y => y.isCurrent) || formatted[0];
+        setSelectedYear(current.id);
+      }
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchSessions();
+  }, [tenantSlug]);
+
   const addGradeLevel = () => {
     setGradeStructures(prev => [...prev, { level: 'New Level', streams: ['General'], sectionsPerStream: 1 }]);
   };
@@ -124,48 +145,65 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
     });
   };
 
-  const handleAddYear = (e: React.FormEvent) => {
+  const handleAddYear = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newYearData.name.trim()) return;
 
-    const newId = `ay_${Date.now()}`;
-    const newYear: AcademicYear = {
-      id: newId,
+    setSaving(true);
+    const res = await createAcademicSession(tenantSlug, {
       name: newYearData.name,
       startDate: newYearData.startDate,
       endDate: newYearData.endDate,
       isCurrent: academicYears.length === 0,
       terms: newYearData.terms,
-    };
+    });
 
-    setAcademicYears(prev => [...prev, newYear]);
-    setSelectedYear(newId);
-    setIsAddingYear(false);
+    setSaving(false);
+    if (res.success) {
+      setIsAddingYear(false);
+      fetchSessions();
+    } else {
+      alert(res.error || 'Failed to create academic session');
+    }
   };
 
-  const handleEditYear = (e: React.FormEvent) => {
+  const handleEditYear = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingYear) return;
+    if (!editingYear || !editYearData.name.trim()) return;
 
-    setAcademicYears(prev => prev.map(y => y.id === editingYear.id ? {
-      ...y,
+    setSaving(true);
+    const res = await updateAcademicSession(tenantSlug, editYearData.id, {
       name: editYearData.name,
       startDate: editYearData.startDate,
       endDate: editYearData.endDate,
       terms: editYearData.terms,
-    } : y));
+    });
 
-    setEditingYear(null);
+    setSaving(false);
+    if (res.success) {
+      setEditingYear(null);
+      fetchSessions();
+    } else {
+      alert(res.error || 'Failed to update academic session');
+    }
   };
 
-  const handleDeleteYear = () => {
+  const handleDeleteYear = async () => {
     if (!deletingYear) return;
 
-    setAcademicYears(prev => prev.filter(y => y.id !== deletingYear.id));
-    if (selectedYear === deletingYear.id) {
-      setSelectedYear(academicYears.find(y => y.id !== deletingYear.id)?.id || '');
+    setSaving(true);
+    const res = await deleteAcademicSession(tenantSlug, deletingYear.id);
+    setSaving(false);
+
+    if (res.success) {
+      if (selectedYear === deletingYear.id) {
+        setSelectedYear(academicYears.find(y => y.id !== deletingYear.id)?.id || '');
+      }
+      setDeletingYear(null);
+      fetchSessions();
+    } else {
+      alert(res.error || 'Failed to delete academic session');
     }
-    setDeletingYear(null);
   };
 
   const generateStructure = async () => {
@@ -175,7 +213,7 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
     }
 
     setSaving(true);
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 700));
 
     let totalClasses = 0;
     gradeStructures.forEach(g => {
@@ -198,7 +236,10 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
             <span className="px-2.5 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] font-black uppercase tracking-wider rounded-md border border-blue-500/20">
               Academics Console
             </span>
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider hidden sm:inline">
+              Live Sync with Session Registry
+            </span>
           </div>
           <h2 className="text-2xl md:text-3xl font-black tracking-tight text-[hsl(var(--text-primary))]">Academic Structure</h2>
           <p className="text-[hsl(var(--text-tertiary))] mt-0.5 text-xs md:text-sm font-medium">
@@ -241,94 +282,110 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
       {/* Step 1: Session Selection */}
       {step === 1 && (
         <div className="glass-card p-6 md:p-8 space-y-6 animate-in fade-in duration-200">
-          <div className="flex items-center gap-3.5 pb-2 border-b border-[hsl(var(--border))]">
-            <div className="w-11 h-11 bg-blue-500/10 text-blue-500 rounded-2xl flex items-center justify-center shrink-0 border border-blue-500/20">
-              <Calendar className="w-5 h-5" />
+          <div className="flex items-center justify-between gap-3.5 pb-2 border-b border-[hsl(var(--border))]">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 bg-blue-500/10 text-blue-500 rounded-2xl flex items-center justify-center shrink-0 border border-blue-500/20">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-[hsl(var(--text-primary))]">Select Academic Session</h3>
+                <p className="text-xs text-[hsl(var(--text-tertiary))] font-medium">Choose or create the academic session to apply this structural blueprint to.</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-[hsl(var(--text-primary))]">Select Academic Session</h3>
-              <p className="text-xs text-[hsl(var(--text-tertiary))] font-medium">Choose or create the academic session to apply this structural blueprint to.</p>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {academicYears.map((year) => {
-              const isSelected = selectedYear === year.id;
-              return (
-                <div
-                  key={year.id}
-                  onClick={() => setSelectedYear(year.id)}
-                  className={`group relative flex items-center justify-between p-5 rounded-3xl border-2 transition-all text-left cursor-pointer ${
-                    isSelected
-                      ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.08)] shadow-sm'
-                      : 'border-[hsl(var(--border))] hover:border-[hsl(var(--accent)/0.5)] hover:bg-[hsl(var(--bg-tertiary)/0.5)] bg-[hsl(var(--bg-tertiary)/0.2)]'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-black text-[hsl(var(--text-primary))] text-base">{year.name}</p>
-                      {year.isCurrent && (
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                          Active
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-bold uppercase tracking-wider">
-                      {year.terms?.length || 0} Terms Configured
-                    </p>
-                    <p className="text-[11px] text-[hsl(var(--text-secondary))] font-medium">
-                      {year.startDate} → {year.endDate}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingYear(year);
-                          setEditYearData({
-                            name: year.name,
-                            startDate: year.startDate,
-                            endDate: year.endDate,
-                            terms: year.terms || [],
-                          });
-                        }}
-                        className="p-1.5 hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--accent))] rounded-xl text-[hsl(var(--text-tertiary))] transition-colors"
-                        title="Edit Session"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeletingYear(year);
-                        }}
-                        className="p-1.5 hover:bg-red-500/10 hover:text-red-400 rounded-xl text-[hsl(var(--text-tertiary))] transition-colors"
-                        title="Delete Session"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {isSelected && <CheckCircle2 className="w-5 h-5 text-[hsl(var(--accent))] shrink-0 ml-1" />}
-                  </div>
-                </div>
-              );
-            })}
-
-            <button
-              type="button"
-              onClick={() => setIsAddingYear(true)}
-              className="p-5 rounded-3xl border-2 border-dashed border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.2)] flex flex-col items-center justify-center text-center group hover:border-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.04)] transition-all cursor-pointer min-h-[110px]"
+            <Link
+              href={`/${tenantSlug}/admin/academics/years`}
+              className="text-xs font-bold text-[hsl(var(--accent))] hover:underline flex items-center gap-1 shrink-0"
             >
-              <Plus className="w-6 h-6 text-[hsl(var(--text-tertiary))] group-hover:text-[hsl(var(--accent))] mb-1 transition-colors" />
-              <p className="text-xs font-black text-[hsl(var(--text-tertiary))] group-hover:text-[hsl(var(--accent))] transition-colors uppercase tracking-wider">
-                Create New Session
-              </p>
-            </button>
+              Open Session Registry →
+            </Link>
           </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-7 h-7 border-4 border-[hsl(var(--accent)/0.2)] border-t-[hsl(var(--accent))] rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {academicYears.map((year) => {
+                const isSelected = selectedYear === year.id;
+                return (
+                  <div
+                    key={year.id}
+                    onClick={() => setSelectedYear(year.id)}
+                    className={`group relative flex items-center justify-between p-5 rounded-3xl border-2 transition-all text-left cursor-pointer ${
+                      isSelected
+                        ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.08)] shadow-sm'
+                        : 'border-[hsl(var(--border))] hover:border-[hsl(var(--accent)/0.5)] hover:bg-[hsl(var(--bg-tertiary)/0.5)] bg-[hsl(var(--bg-tertiary)/0.2)]'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-black text-[hsl(var(--text-primary))] text-base">{year.name}</p>
+                        {year.isCurrent && (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-[hsl(var(--text-tertiary))] font-bold uppercase tracking-wider">
+                        {year.terms?.length || 0} Terms Configured
+                      </p>
+                      <p className="text-[11px] text-[hsl(var(--text-secondary))] font-medium">
+                        {year.startDate} → {year.endDate}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingYear(year);
+                            setEditYearData({
+                              id: year.id,
+                              name: year.name,
+                              startDate: year.startDate,
+                              endDate: year.endDate,
+                              terms: year.terms || [],
+                            });
+                          }}
+                          className="p-1.5 hover:bg-[hsl(var(--bg-tertiary))] hover:text-[hsl(var(--accent))] rounded-xl text-[hsl(var(--text-tertiary))] transition-colors"
+                          title="Edit Session"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingYear(year);
+                          }}
+                          className="p-1.5 hover:bg-red-500/10 hover:text-red-400 rounded-xl text-[hsl(var(--text-tertiary))] transition-colors"
+                          title="Delete Session"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {isSelected && <CheckCircle2 className="w-5 h-5 text-[hsl(var(--accent))] shrink-0 ml-1" />}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => setIsAddingYear(true)}
+                className="p-5 rounded-3xl border-2 border-dashed border-[hsl(var(--border))] bg-[hsl(var(--bg-tertiary)/0.2)] flex flex-col items-center justify-center text-center group hover:border-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.04)] transition-all cursor-pointer min-h-[110px]"
+              >
+                <Plus className="w-6 h-6 text-[hsl(var(--text-tertiary))] group-hover:text-[hsl(var(--accent))] mb-1 transition-colors" />
+                <p className="text-xs font-black text-[hsl(var(--text-tertiary))] group-hover:text-[hsl(var(--accent))] transition-colors uppercase tracking-wider">
+                  Create New Session
+                </p>
+              </button>
+            </div>
+          )}
 
           <div className="flex justify-end pt-3 border-t border-[hsl(var(--border))]">
             <button
@@ -560,7 +617,7 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
             <form onSubmit={handleAddYear} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-black text-[hsl(var(--text-tertiary))] uppercase tracking-wider mb-1.5">
-                  Academic Year Name
+                  Academic Year Name *
                 </label>
                 <input
                   required
@@ -575,7 +632,7 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-[hsl(var(--text-tertiary))] uppercase tracking-wider mb-1.5">
-                    Start Date
+                    Start Date *
                   </label>
                   <input
                     required
@@ -587,7 +644,7 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-[hsl(var(--text-tertiary))] uppercase tracking-wider mb-1.5">
-                    End Date
+                    End Date *
                   </label>
                   <input
                     required
@@ -604,7 +661,7 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
                   Default Term Configurations
                 </label>
                 {newYearData.terms.map((term, idx) => (
-                  <div key={term.id} className="p-3 bg-[hsl(var(--bg-tertiary)/0.4)] rounded-2xl border border-[hsl(var(--border))] grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div key={idx} className="p-3 bg-[hsl(var(--bg-tertiary)/0.4)] rounded-2xl border border-[hsl(var(--border))] grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                       <label className="block text-[8px] font-black text-[hsl(var(--text-tertiary))] uppercase mb-1">Term Name</label>
                       <input
@@ -661,9 +718,10 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-[hsl(var(--accent))] text-white text-xs font-bold hover:opacity-90 transition-all shadow-sm"
+                  disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl bg-[hsl(var(--accent))] text-white text-xs font-bold hover:opacity-90 transition-all shadow-sm disabled:opacity-50"
                 >
-                  Create Session
+                  {saving ? 'Creating…' : 'Create Session'}
                 </button>
               </div>
             </form>
@@ -692,7 +750,7 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
             <form onSubmit={handleEditYear} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-black text-[hsl(var(--text-tertiary))] uppercase tracking-wider mb-1.5">
-                  Academic Year Name
+                  Academic Year Name *
                 </label>
                 <input
                   required
@@ -707,7 +765,7 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-[hsl(var(--text-tertiary))] uppercase tracking-wider mb-1.5">
-                    Start Date
+                    Start Date *
                   </label>
                   <input
                     required
@@ -719,7 +777,7 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-[hsl(var(--text-tertiary))] uppercase tracking-wider mb-1.5">
-                    End Date
+                    End Date *
                   </label>
                   <input
                     required
@@ -736,7 +794,7 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
                   Default Term Configurations
                 </label>
                 {editYearData.terms.map((term, idx) => (
-                  <div key={term.id} className="p-3 bg-[hsl(var(--bg-tertiary)/0.4)] rounded-2xl border border-[hsl(var(--border))] grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div key={idx} className="p-3 bg-[hsl(var(--bg-tertiary)/0.4)] rounded-2xl border border-[hsl(var(--border))] grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                       <label className="block text-[8px] font-black text-[hsl(var(--text-tertiary))] uppercase mb-1">Term Name</label>
                       <input
@@ -793,9 +851,10 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-[hsl(var(--accent))] text-white text-xs font-bold hover:opacity-90 transition-all shadow-sm"
+                  disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl bg-[hsl(var(--accent))] text-white text-xs font-bold hover:opacity-90 transition-all shadow-sm disabled:opacity-50"
                 >
-                  Save Changes
+                  {saving ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -829,9 +888,10 @@ export default function AcademicStructure({ organization, isEmbedded = false }: 
               <button
                 type="button"
                 onClick={handleDeleteYear}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-xs font-bold hover:bg-red-600 transition-all shadow-sm"
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-xs font-bold hover:bg-red-600 transition-all shadow-sm disabled:opacity-50"
               >
-                Yes, Delete
+                {saving ? 'Deleting…' : 'Yes, Delete'}
               </button>
             </div>
           </div>

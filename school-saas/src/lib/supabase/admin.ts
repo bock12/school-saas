@@ -5,10 +5,14 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
  * Falls back to NEXT_PUBLIC_SUPABASE_ANON_KEY if SUPABASE_SERVICE_ROLE_KEY is missing or invalid.
  */
 export function createAdminClient() {
-  const serviceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('sb_secret_')
-      ? process.env.SUPABASE_SERVICE_ROLE_KEY
-      : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const rawKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const isValidServiceKey =
+    rawKey &&
+    rawKey !== 'sb_secret_placeholder' &&
+    rawKey !== 'your_service_role_key_here' &&
+    !rawKey.toLowerCase().includes('placeholder');
+
+  const serviceKey = isValidServiceKey ? rawKey : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

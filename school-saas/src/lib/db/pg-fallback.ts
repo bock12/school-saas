@@ -3,7 +3,7 @@ import crypto from 'crypto';
 
 let pool: Pool | null = null;
 
-function getPgPool() {
+export function getPgPool() {
   if (!pool && process.env.DATABASE_URL) {
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
