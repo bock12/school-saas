@@ -68,6 +68,7 @@ export function OrgSidebar({ tenantSlug, tenantName, primaryColor }: OrgSidebarP
       label: 'Organization',
       items: [
         { label: 'Schools Directory', href: `${basePath}/schools`, icon: School },
+        { label: 'Campuses & Branches', href: `${basePath}/campuses`, icon: Building2 },
         { label: 'Org Staff', href: `${basePath}/org-staff`, icon: Users },
         { label: '💬 Direct Messaging', href: `${basePath}/communication/internal`, icon: MessageSquare },
         { label: 'Reports', href: `${basePath}/reports`, icon: TrendingUp },

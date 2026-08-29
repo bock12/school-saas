@@ -86,7 +86,14 @@ export async function OrgDashboard({ tenant, orgId, orgName }: OrgDashboardProps
             {' '}— here&apos;s the overview across all your schools.
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+          <Link
+            href={`${basePath}/campuses`}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[hsl(var(--border))] text-sm font-medium text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"
+          >
+            <Building2 className="w-4 h-4 text-[hsl(var(--accent))]" />
+            <span>Campuses & Branches</span>
+          </Link>
           <Link
             href={`${basePath}/reports`}
             className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[hsl(var(--border))] text-sm font-medium text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all"
