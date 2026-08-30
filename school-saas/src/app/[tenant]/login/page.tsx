@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getPgPool } from '@/lib/db/pg-fallback';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { TenantLoginForm } from './login-form';
 
@@ -32,13 +33,29 @@ export default async function TenantLoginPage({
     }
   }
 
-  // ── Fetch real school name from DB (admin client bypasses RLS for anon visitors) ──
-  const adminSupabase = createAdminClient();
-  const { data: school } = await adminSupabase
-    .from('tenants')
-    .select('id, name')
-    .eq('slug', tenant)
-    .single();
+  // ── Fetch real school name from DB ──
+  let school: { id: string; name: string } | null = null;
+  const pool = getPgPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT id, name FROM tenants WHERE slug = $1 LIMIT 1', [tenant]);
+      if (res.rows.length > 0) {
+        school = res.rows[0];
+      }
+    } catch (err) {
+      console.warn('[TenantLoginPage] PG query failed:', err);
+    }
+  }
+
+  if (!school) {
+    const adminSupabase = createAdminClient();
+    const { data } = await adminSupabase
+      .from('tenants')
+      .select('id, name')
+      .eq('slug', tenant)
+      .maybeSingle();
+    school = data;
+  }
 
   const tenantName =
     school?.name ||

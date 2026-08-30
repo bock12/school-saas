@@ -30,6 +30,7 @@ export interface WizardData {
   adminEmail: string;
   adminRole: AdminRole;
   tempPassword?: string;
+  leadId?: string;
 }
 
 export interface WizardState {

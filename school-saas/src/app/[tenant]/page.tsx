@@ -9,33 +9,57 @@ import {
 
 
 
+import { getPgPool } from '@/lib/db/pg-fallback';
+
 export default async function PublicTenantLanding({ params }: { params: Promise<{ tenant: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   const { tenant: tenantSlug } = await params;
 
-  // Fetch tenant via direct REST API — avoids any SDK key-format or module-cache issues
-  const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const SUPA_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  let tenant: any = null;
 
-  const tenantRes = await fetch(
-    `${SUPA_URL}/rest/v1/tenants?slug=eq.${encodeURIComponent(tenantSlug)}&select=id,name,logo_url,domain,type,contact_email,address,city,country,primary_color&limit=1`,
-    {
-      headers: {
-        apikey: SUPA_KEY,
-        Authorization: `Bearer ${SUPA_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
+  // 1. Direct PG Pool lookup
+  const pool = getPgPool();
+  if (pool) {
+    try {
+      const res = await pool.query(
+        `SELECT id, name, logo_url, domain, type, contact_email, address, city, country, primary_color
+         FROM tenants
+         WHERE slug = $1
+         LIMIT 1`,
+        [tenantSlug]
+      );
+      if (res.rows.length > 0) {
+        tenant = res.rows[0];
+      }
+    } catch (err) {
+      console.warn('[PublicTenantLanding] PG lookup failed, falling back to REST:', err);
     }
-  );
+  }
 
-  const tenantRows: any[] = tenantRes.ok ? await tenantRes.json() : [];
-  const tenant = tenantRows[0] ?? null;
+  // 2. REST API fallback
+  if (!tenant) {
+    const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const SUPA_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+    const tenantRes = await fetch(
+      `${SUPA_URL}/rest/v1/tenants?slug=eq.${encodeURIComponent(tenantSlug)}&select=id,name,logo_url,domain,type,contact_email,address,city,country,primary_color&limit=1`,
+      {
+        headers: {
+          apikey: SUPA_KEY,
+          Authorization: `Bearer ${SUPA_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      }
+    );
+
+    const tenantRows: any[] = tenantRes.ok ? await tenantRes.json() : [];
+    tenant = tenantRows[0] ?? null;
+  }
 
   if (!tenant) return notFound();
-
 
   const isOrg = tenant.type === 'organization';
   const accentColor = tenant.primary_color || '#6366f1';
@@ -54,14 +78,33 @@ export default async function PublicTenantLanding({ params }: { params: Promise<
   }> = [];
 
   if (isOrg) {
-    const schoolsRes = await fetch(
-      `${SUPA_URL}/rest/v1/tenants?parent_id=eq.${tenant.id}&select=id,name,slug,logo_url,address,city,country,contact_email,primary_color&order=name.asc`,
-      {
-        headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
-        cache: 'no-store',
+    if (pool) {
+      try {
+        const schoolsRes = await pool.query(
+          `SELECT id, name, slug, logo_url, address, city, country, contact_email, primary_color
+           FROM tenants
+           WHERE parent_id = $1
+           ORDER BY name ASC`,
+          [tenant.id]
+        );
+        childSchools = schoolsRes.rows || [];
+      } catch (err) {
+        console.warn('[PublicTenantLanding] Child schools PG lookup failed:', err);
       }
-    );
-    childSchools = schoolsRes.ok ? await schoolsRes.json() : [];
+    }
+
+    if (childSchools.length === 0) {
+      const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const SUPA_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+      const schoolsRes = await fetch(
+        `${SUPA_URL}/rest/v1/tenants?parent_id=eq.${tenant.id}&select=id,name,slug,logo_url,address,city,country,contact_email,primary_color&order=name.asc`,
+        {
+          headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
+          cache: 'no-store',
+        }
+      );
+      childSchools = schoolsRes.ok ? await schoolsRes.json() : [];
+    }
   }
 
 

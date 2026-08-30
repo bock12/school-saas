@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getPgPool } from '@/lib/db/pg-fallback';
 import { redirect } from 'next/navigation';
 
 export async function loginToTenant(tenantSlug: string, formData: FormData) {
@@ -27,6 +28,7 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
 
   const inputPhoneNorm = normalizePhone(cleanId);
   const adminSupabase = createAdminClient();
+  const pool = getPgPool();
 
   // 1. Resolve Super Admin authentication
   const isSuperAdminPortal = tenantSlug === 'admin' || tenantSlug === 'super-admin';
@@ -64,11 +66,36 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
     }
   }
 
-  const { data: tenant } = await adminSupabase
-    .from('tenants')
-    .select('id, name, slug, parent_id')
-    .eq('slug', tenantSlug)
-    .single();
+  // 1b. Resolve Tenant via PG Pool first, then fallback to Supabase
+  let tenant: { id: string; name: string; slug: string; parent_id: string | null } | null = null;
+  if (pool) {
+    try {
+      const res = await pool.query(
+        `SELECT id, name, slug, parent_id
+         FROM tenants
+         WHERE slug = $1
+         LIMIT 1`,
+        [tenantSlug]
+      );
+      if (res.rows.length > 0) {
+        tenant = res.rows[0];
+      }
+    } catch (pgErr) {
+      console.warn('[loginToTenant] Direct PG lookup error:', pgErr);
+    }
+  }
+
+  if (!tenant) {
+    const { data: tenantData } = await adminSupabase
+      .from('tenants')
+      .select('id, name, slug, parent_id')
+      .eq('slug', tenantSlug)
+      .maybeSingle();
+
+    if (tenantData) {
+      tenant = tenantData;
+    }
+  }
 
   if (!tenant) {
     return { error: 'School portal not found' };
@@ -255,28 +282,53 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   let emailToSignIn = cleanId.toLowerCase();
   let matchedStaffProfile: any = null;
 
-  let staffOrQuery = `email.ilike.${cleanLower}`;
-  if (cleanId) {
-    staffOrQuery += `,staff_id.ilike.${cleanId}`;
+  if (pool) {
+    try {
+      const pRes = await pool.query(
+        `SELECT id, email, role, tenant_id, full_name, requires_password_change
+         FROM profiles
+         WHERE LOWER(email) = $1 OR staff_id = $2 OR phone = $2
+         LIMIT 5`,
+        [cleanLower, cleanId]
+      );
+      if (pRes.rows.length > 0) {
+        matchedStaffProfile =
+          pRes.rows.find((p: any) => p.tenant_id === tenant.id) ||
+          pRes.rows.find((p: any) => p.tenant_id === tenant.parent_id) ||
+          pRes.rows[0];
+        if (matchedStaffProfile?.email) {
+          emailToSignIn = matchedStaffProfile.email.toLowerCase();
+        }
+      }
+    } catch (pgStaffErr) {
+      console.warn('[loginToTenant] PG staff profile lookup error:', pgStaffErr);
+    }
   }
-  if (inputPhoneNorm.length >= 6) {
-    staffOrQuery += `,phone.ilike.%${inputPhoneNorm}%`;
-  }
 
-  const { data: staffProfiles } = await adminSupabase
-    .from('profiles')
-    .select('id, email, role, tenant_id, full_name, requires_password_change')
-    .or(staffOrQuery)
-    .limit(5);
+  if (!matchedStaffProfile) {
+    let staffOrQuery = `email.ilike.${cleanLower}`;
+    if (cleanId) {
+      staffOrQuery += `,staff_id.ilike.${cleanId}`;
+    }
+    if (inputPhoneNorm.length >= 6) {
+      staffOrQuery += `,phone.ilike.%${inputPhoneNorm}%`;
+    }
 
-  if (staffProfiles && staffProfiles.length > 0) {
-    matchedStaffProfile =
-      staffProfiles.find(p => p.tenant_id === tenant.id) ||
-      staffProfiles.find(p => p.tenant_id === tenant.parent_id) ||
-      staffProfiles[0];
+    const { data: staffProfiles } = await adminSupabase
+      .from('profiles')
+      .select('id, email, role, tenant_id, full_name, requires_password_change')
+      .or(staffOrQuery)
+      .limit(5);
 
-    if (matchedStaffProfile?.email) {
-      emailToSignIn = matchedStaffProfile.email.toLowerCase();
+    if (staffProfiles && staffProfiles.length > 0) {
+      matchedStaffProfile =
+        staffProfiles.find(p => p.tenant_id === tenant.id) ||
+        staffProfiles.find(p => p.tenant_id === tenant.parent_id) ||
+        staffProfiles[0];
+
+      if (matchedStaffProfile?.email) {
+        emailToSignIn = matchedStaffProfile.email.toLowerCase();
+      }
     }
   }
 
@@ -288,9 +340,7 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   if ((authError || !authData?.user) && matchedStaffProfile) {
     // If sign in fails for a staff member (e.g. initial temp password setup or fallback hash sync)
     try {
-      const { Pool } = await import('pg');
-      if (process.env.DATABASE_URL) {
-        const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+      if (pool) {
         await pool.query(
           `UPDATE auth.users
            SET encrypted_password = crypt($1, gen_salt('bf')),
@@ -307,7 +357,6 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
            WHERE email = $2`,
           [password, emailToSignIn]
         );
-        await pool.end();
 
         // Retry sign in after password sync
         const retryRes = await supabase.auth.signInWithPassword({
@@ -330,11 +379,32 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
   }
 
   // Verify profile belongs to this tenant or organization
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, tenant_id, requires_password_change')
-    .eq('id', authData.user.id)
-    .single();
+  let profile: any = null;
+  if (pool) {
+    try {
+      const pRes = await pool.query(
+        `SELECT role, tenant_id, requires_password_change
+         FROM profiles
+         WHERE id = $1
+         LIMIT 1`,
+        [authData.user.id]
+      );
+      if (pRes.rows.length > 0) {
+        profile = pRes.rows[0];
+      }
+    } catch (e) {
+      console.warn('[loginToTenant] PG post-auth profile lookup error:', e);
+    }
+  }
+
+  if (!profile) {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('role, tenant_id, requires_password_change')
+      .eq('id', authData.user.id)
+      .single();
+    profile = profileData;
+  }
 
   if (!profile) {
     await supabase.auth.signOut();

@@ -7,7 +7,8 @@ import {
   LayoutDashboard, School, CreditCard, ChevronLeft, ChevronRight, Shield,
   Megaphone, Cpu, Users, Brain, Layers, X, ChevronDown, Building2,
   FolderTree, MapPin, GraduationCap, Tent, UserPlus, Globe, HardDrive,
-  Blocks, Copy, Palette, Settings, HelpCircle, FileText, BarChart3, Database
+  Blocks, Copy, Palette, Settings, HelpCircle, FileText, BarChart3, Database,
+  Inbox
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APP_NAME } from '@/lib/constants';
@@ -47,6 +48,7 @@ const sidebarGroups: NavSection[] = [
         icon: Database,
         items: [
           { label: 'Dashboard',       href: '/super-admin/tenants/dashboard',    icon: LayoutDashboard },
+          { label: 'Inquiries & Leads', href: '/super-admin/tenants/leads',      icon: Inbox },
           { label: 'Tenant Directory',href: '/super-admin/tenants/directory',    icon: School },
           { label: 'Hierarchy',       href: '/super-admin/tenants/hierarchy',    icon: FolderTree },
           { label: 'Provisioning',    href: '/super-admin/tenants/provisioning', icon: UserPlus },

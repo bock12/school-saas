@@ -21,10 +21,10 @@ export async function GET() {
     // 1. Try REST fetch with 3-second timeout guard
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch(
-        `${SUPA_URL}/rest/v1/tenants?select=id,name,slug,type,logo_url,city,country,contact_email,primary_color&order=name.asc`,
+        `${SUPA_URL}/rest/v1/tenants?select=id,name,slug,type,logo_url,city,country,contact_email,contact_phone,address,region,school_type,primary_color&order=name.asc`,
         {
           headers: {
             apikey: SUPA_KEY,
@@ -54,7 +54,7 @@ export async function GET() {
     const dbPool = getPgPool();
     if (dbPool) {
       const { rows } = await dbPool.query(
-        `SELECT id, name, slug, type, logo_url, city, country, contact_email, primary_color
+        `SELECT id, name, slug, type, logo_url, city, country, contact_email, contact_phone, address, region, school_type, primary_color
          FROM tenants
          ORDER BY name ASC`
       );

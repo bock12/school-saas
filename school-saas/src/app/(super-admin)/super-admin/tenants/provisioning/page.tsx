@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import React, { Suspense, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { AlertCircle, CheckCircle2, Inbox } from 'lucide-react';
 import { useProvisionWizard } from '@/features/tenant-management/hooks/useProvisionWizard';
 import { StepProgress } from '@/features/tenant-management/components/provisioning/StepProgress';
 import { TypeStep } from '@/features/tenant-management/components/provisioning/TypeStep';
@@ -12,8 +13,32 @@ import { ModulesStep } from '@/features/tenant-management/components/provisionin
 import { AdminStep } from '@/features/tenant-management/components/provisioning/AdminStep';
 import { ReviewStep } from '@/features/tenant-management/components/provisioning/ReviewStep';
 import { WizardNavigation } from '@/features/tenant-management/components/provisioning/WizardNavigation';
+import { OrgMode } from '@/features/tenant-management/types/provisioning';
 
-export default function ProvisioningWizardPage() {
+function ProvisioningWizardContent() {
+  const searchParams = useSearchParams();
+
+  // Read pre-fill parameters if originating from an onboarding inquiry lead
+  const initialOverrides = useMemo(() => {
+    const name = searchParams?.get('name') || undefined;
+    const email = searchParams?.get('email') || undefined;
+    const contactName = searchParams?.get('contactName') || undefined;
+    const type = (searchParams?.get('type') as OrgMode) || undefined;
+    const region = searchParams?.get('region') || undefined;
+    const leadId = searchParams?.get('leadId') || undefined;
+
+    if (!name && !email && !leadId) return undefined;
+
+    return {
+      orgName: name,
+      adminEmail: email,
+      adminName: contactName,
+      orgMode: type || 'standalone',
+      region: region,
+      leadId: leadId,
+    };
+  }, [searchParams]);
+
   const {
     state,
     visibleSteps,
@@ -34,7 +59,7 @@ export default function ProvisioningWizardPage() {
     next,
     reset,
     provision,
-  } = useProvisionWizard();
+  } = useProvisionWizard(initialOverrides);
 
   const { step, data, isProvisioning, provisionProgress, provisionDone, provisionError, invitesSent } = state;
 
@@ -48,6 +73,12 @@ export default function ProvisioningWizardPage() {
         <p className="text-sm text-[hsl(var(--text-secondary))]">
           Step-by-step setup for a new organization and its schools.
         </p>
+
+        {data.leadId && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold mt-2">
+            <Inbox className="w-3.5 h-3.5" /> Pre-filled from Institutional Inquiry
+          </div>
+        )}
       </div>
 
       {/* Step progress bar */}
@@ -86,12 +117,18 @@ export default function ProvisioningWizardPage() {
                 ))}
               </div>
             )}
-            <div className="flex gap-3 mt-2">
+            <div className="flex flex-wrap gap-3 mt-2 justify-center">
               <a
-                href="/super-admin/tenants/hierarchy"
-                className="px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-xs font-bold hover:opacity-90 transition-opacity"
+                href="/super-admin/tenants/directory"
+                className="px-4 py-2 rounded-lg bg-[hsl(var(--accent))] text-white text-xs font-bold hover:opacity-95 transition-opacity"
               >
-                View in Hierarchy
+                View in Tenant Directory
+              </a>
+              <a
+                href="/super-admin/tenants/leads"
+                className="px-4 py-2 rounded-lg border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+              >
+                Back to Leads
               </a>
               <button
                 onClick={reset}
@@ -104,7 +141,10 @@ export default function ProvisioningWizardPage() {
         ) : (
           <>
             {currentStepDef?.id === 'type' && (
-              <TypeStep orgMode={data.orgMode} setOrgMode={setOrgMode} />
+              <TypeStep
+                orgMode={data.orgMode}
+                setOrgMode={setOrgMode}
+              />
             )}
 
             {currentStepDef?.id === 'identity' && (
@@ -170,5 +210,17 @@ export default function ProvisioningWizardPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function ProvisioningWizardPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-4xl mx-auto p-12 text-center text-xs text-[hsl(var(--text-secondary))] animate-pulse">
+        Loading provisioning wizard...
+      </div>
+    }>
+      <ProvisioningWizardContent />
+    </Suspense>
   );
 }

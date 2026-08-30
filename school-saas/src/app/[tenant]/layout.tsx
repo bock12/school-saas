@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
+import { getPgPool } from '@/lib/db/pg-fallback';
+
 export default async function TenantLayout({
   children,
   params,
@@ -13,19 +15,50 @@ export default async function TenantLayout({
 }) {
   const { tenant } = await params;
 
-  // ── Use the admin (service-role) client ONLY to look up the tenant.
-  // This bypasses RLS so unauthenticated visitors (e.g. the login page)
-  // can still see the school's name and status without a session cookie.
-  const adminSupabase = createAdminClient();
+  let school: {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    primary_color: string | null;
+    logo_url: string | null;
+  } | null = null;
 
-  const { data: school, error } = await adminSupabase
-    .from('tenants')
-    .select('id, name, slug, status, primary_color, logo_url')
-    .eq('slug', tenant)
-    .single();
+  // 1. Direct PG Pool lookup (fastest & robust against Supabase key format issues)
+  const pool = getPgPool();
+  if (pool) {
+    try {
+      const res = await pool.query(
+        `SELECT id, name, slug, status, primary_color, logo_url
+         FROM tenants
+         WHERE slug = $1
+         LIMIT 1`,
+        [tenant]
+      );
+      if (res.rows.length > 0) {
+        school = res.rows[0];
+      }
+    } catch (pgErr) {
+      console.warn('[TenantLayout] Direct PG lookup failed, falling back to Supabase client:', pgErr);
+    }
+  }
+
+  // 2. Supabase client fallback
+  if (!school) {
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from('tenants')
+      .select('id, name, slug, status, primary_color, logo_url')
+      .eq('slug', tenant)
+      .maybeSingle();
+
+    if (data && !error) {
+      school = data;
+    }
+  }
 
   // If the school slug doesn't exist at all, redirect to the main platform homepage
-  if (error || !school) {
+  if (!school) {
     const rootUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     redirect(rootUrl);
   }

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, Suspense } from 'react';
 import { loginToTenant } from './actions';
 
-export function TenantLoginForm({
+function LoginFormContent({
   tenantSlug,
   tenantName,
   schoolId,
@@ -240,5 +240,21 @@ export function TenantLoginForm({
         </p>
       </div>
     </div>
+  );
+}
+
+export function TenantLoginForm(props: {
+  tenantSlug: string;
+  tenantName: string;
+  schoolId: string;
+}) {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen p-6">
+        <Loader2 className="w-8 h-8 animate-spin text-[hsl(var(--accent))]" />
+      </div>
+    }>
+      <LoginFormContent {...props} />
+    </Suspense>
   );
 }

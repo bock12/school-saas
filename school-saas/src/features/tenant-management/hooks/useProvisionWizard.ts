@@ -309,8 +309,24 @@ export function validateCurrentStep(stepId: string, data: WizardData): { valid: 
   }
 }
 
-export function useProvisionWizard() {
-  const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
+export function useProvisionWizard(initialOverrides?: Partial<WizardData>) {
+  const mergedInitialData = useMemo(() => {
+    if (!initialOverrides) return INITIAL_DATA;
+    const orgName = initialOverrides.orgName || INITIAL_DATA.orgName;
+    const orgSlug = initialOverrides.orgSlug || (orgName ? orgName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') : '');
+    return {
+      ...INITIAL_DATA,
+      ...initialOverrides,
+      orgName,
+      orgSlug,
+      schools: initialOverrides.schools || INITIAL_DATA.schools,
+    };
+  }, [initialOverrides]);
+
+  const [state, dispatch] = useReducer(wizardReducer, {
+    ...INITIAL_STATE,
+    data: mergedInitialData,
+  });
 
   const visibleSteps = useMemo(() => {
     return STEPS.filter((s) =>
@@ -465,6 +481,27 @@ export function useProvisionWizard() {
       }
 
       if (ticker) clearInterval(ticker);
+
+      // Auto-update lead status to provisioned if originating from an inquiry
+      if (state.data.leadId) {
+        try {
+          const primaryTenantId = state.data.orgMode === 'standalone'
+            ? (schoolIds[0] ?? orgId)
+            : orgId;
+          await fetch('/api/super-admin/leads', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: state.data.leadId,
+              status: 'provisioned',
+              provisionedTenantId: primaryTenantId,
+            }),
+          });
+        } catch (leadErr) {
+          console.warn('[provision] Failed to update lead status:', leadErr);
+        }
+      }
+
       dispatch({ type: 'PROVISION_SUCCESS', payload: invitesSent });
     } catch (err: any) {
       if (ticker) clearInterval(ticker);
