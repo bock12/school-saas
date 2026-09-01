@@ -19,6 +19,13 @@ import {
   AcademicSessionRecord
 } from '@/app/actions/academic-sessions';
 
+function formatDateDisplay(d: any): string {
+  if (!d) return '';
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date) return d.toISOString().split('T')[0];
+  return String(d);
+}
+
 export default function AcademicTermsPage() {
   const params = useParams();
   const tenant = (params?.tenant as string) || 'demo';
@@ -349,7 +356,7 @@ export default function AcademicTermsPage() {
                       Term Duration ({weeks} Weeks)
                     </span>
                     <p className="font-bold text-[hsl(var(--text-primary))] flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-[hsl(var(--accent))]" /> {t.start_date} → {t.end_date}
+                      <Calendar className="w-3.5 h-3.5 text-[hsl(var(--accent))]" /> {formatDateDisplay(t.start_date)} → {formatDateDisplay(t.end_date)}
                     </p>
                   </div>
                   <div className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary)/0.4)] border border-[hsl(var(--border)/0.5)]">
@@ -524,11 +531,11 @@ export default function AcademicTermsPage() {
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))]">
                 <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold block">Start Date</span>
-                <span className="font-bold text-[hsl(var(--text-primary))]">{viewingTerm.start_date}</span>
+                <span className="font-bold text-[hsl(var(--text-primary))]">{formatDateDisplay(viewingTerm.start_date)}</span>
               </div>
               <div className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))]">
                 <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold block">End Date</span>
-                <span className="font-bold text-[hsl(var(--text-primary))]">{viewingTerm.end_date}</span>
+                <span className="font-bold text-[hsl(var(--text-primary))]">{formatDateDisplay(viewingTerm.end_date)}</span>
               </div>
             </div>
 

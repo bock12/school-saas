@@ -12,6 +12,7 @@ import {
 import SubjectAnalyticsSummary from '@/components/academics/SubjectAnalyticsSummary';
 import { getSubjects, SubjectRecord } from '@/app/actions/subjects';
 import { getUnassignedSubjects } from '@/app/actions/offerings';
+import { getSimpleAcademicYears } from '@/app/actions/academic-sessions';
 
 interface ModuleAction {
   id: string;
@@ -42,22 +43,7 @@ export default function AcademicsDashboardPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const { createAdminClient } = await import('@/lib/supabase/admin');
-      const admin = createAdminClient();
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant);
-      let tenantId = tenant;
-
-      if (!isUuid) {
-        const { data } = await admin.from('tenants').select('id').eq('slug', tenant).maybeSingle();
-        tenantId = data?.id || tenant;
-      }
-
-      const { data: years } = await admin
-        .from('academic_years')
-        .select('id, name, is_current')
-        .eq('tenant_id', tenantId)
-        .order('start_date', { ascending: false });
-
+      const years = await getSimpleAcademicYears(tenant);
       let currentYearId = '';
       if (years && years.length > 0) {
         setAcademicYears(years);

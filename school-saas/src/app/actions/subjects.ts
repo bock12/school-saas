@@ -206,8 +206,13 @@ export async function getSubjects(
           LIMIT $${pIdx} OFFSET $${pIdx + 1}`,
         [...params, limit, offset]
       );
+      const formatted = dataRes.rows.map((s: any) => ({
+        ...s,
+        created_at: s.created_at instanceof Date ? s.created_at.toISOString() : (s.created_at ? String(s.created_at) : undefined),
+        updated_at: s.updated_at instanceof Date ? s.updated_at.toISOString() : (s.updated_at ? String(s.updated_at) : undefined),
+      }));
 
-      return { success: true, data: dataRes.rows, total };
+      return { success: true, data: formatted, total };
     }
 
     // Supabase fallback
@@ -262,7 +267,13 @@ export async function getSubjectById(
         [subjectId, tenantId]
       );
       if (res.rows.length === 0) return { success: false, error: 'Subject not found.' };
-      return { success: true, data: res.rows[0] };
+      const row = res.rows[0];
+      const formatted = {
+        ...row,
+        created_at: row.created_at instanceof Date ? row.created_at.toISOString() : (row.created_at ? String(row.created_at) : undefined),
+        updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : (row.updated_at ? String(row.updated_at) : undefined),
+      };
+      return { success: true, data: formatted };
     }
 
     const { data, error } = await createAdminClient()

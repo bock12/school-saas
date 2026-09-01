@@ -8,7 +8,7 @@ import {
   Megaphone, Cpu, Users, Brain, Layers, X, ChevronDown, Building2,
   FolderTree, MapPin, GraduationCap, Tent, UserPlus, Globe, HardDrive,
   Blocks, Copy, Palette, Settings, HelpCircle, FileText, BarChart3, Database,
-  Inbox
+  Inbox, LayoutTemplate, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APP_NAME } from '@/lib/constants';
@@ -37,6 +37,13 @@ const sidebarGroups: NavSection[] = [
     items: [
       { label: 'Executive Dashboard', href: '/super-admin?console=executive', icon: LayoutDashboard },
       { label: 'AI Platform Insights', href: '/super-admin?console=ai', icon: Brain },
+    ],
+  },
+  {
+    title: 'Public Platform CMS',
+    items: [
+      { label: 'Landing Page CMS', href: '/super-admin/cms', icon: LayoutTemplate },
+      { label: 'Lead Inquiries', href: '/super-admin/tenants/leads', icon: Inbox },
     ],
   },
   {

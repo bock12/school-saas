@@ -1,9 +1,7 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabase = createAdminClient();
 
 function getWaecGrade(totalScore: number): { grade: string; points: number; remark: string } {
   if (totalScore >= 75) return { grade: 'A1', points: 4.0, remark: 'Excellent' };

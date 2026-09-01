@@ -30,11 +30,12 @@ export interface AcademicCalendarEvent {
 }
 
 export interface CalendarEventPayload {
+  id?: string;
   academicYearId?: string;
   termId?: string;
   title: string;
   description?: string;
-  category: 'Academic' | 'Holiday' | 'Examinations' | 'Meeting' | 'Sports' | 'Administrative';
+  category: 'Academic' | 'Holiday' | 'Holidays' | 'Examinations' | 'Meeting' | 'Sports' | 'Co-Curricular' | 'Administrative';
   startDate: string;
   endDate: string;
   startTime?: string;
@@ -44,6 +45,19 @@ export interface CalendarEventPayload {
   audience?: 'all' | 'students' | 'teachers' | 'parents' | 'staff';
   isPublished?: boolean;
   color?: string;
+}
+
+function formatDateStr(d: any): string {
+  if (!d) return '';
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date) return d.toISOString().split('T')[0];
+  return String(d);
+}
+
+function formatIsoStr(d: any): string {
+  if (!d) return '';
+  if (d instanceof Date) return d.toISOString();
+  return String(d);
 }
 
 async function resolveTenantId(slugOrId?: string | null): Promise<string | null> {
@@ -183,8 +197,8 @@ export async function getAcademicCalendarEvents(
             title: e.title,
             description: e.description,
             category: e.category,
-            start_date: e.start_date,
-            end_date: e.end_date,
+            start_date: formatDateStr(e.start_date),
+            end_date: formatDateStr(e.end_date),
             start_time: e.start_time,
             end_time: e.end_time,
             is_all_day: !!e.is_all_day,
@@ -192,7 +206,7 @@ export async function getAcademicCalendarEvents(
             audience: e.audience,
             is_published: !!e.is_published,
             color: e.color,
-            created_at: e.created_at,
+            created_at: formatIsoStr(e.created_at),
           }));
           return { success: true, data: formatted };
         }
@@ -320,8 +334,8 @@ export async function getAcademicCalendarEvents(
       title: e.title,
       description: e.description,
       category: e.category,
-      start_date: e.start_date,
-      end_date: e.end_date,
+      start_date: formatDateStr(e.start_date),
+      end_date: formatDateStr(e.end_date),
       start_time: e.start_time,
       end_time: e.end_time,
       is_all_day: !!e.is_all_day,
@@ -329,7 +343,7 @@ export async function getAcademicCalendarEvents(
       audience: e.audience,
       is_published: !!e.is_published,
       color: e.color,
-      created_at: e.created_at,
+      created_at: formatIsoStr(e.created_at),
     }));
 
     return { success: true, data: formatted };

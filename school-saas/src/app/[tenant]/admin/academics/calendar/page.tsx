@@ -28,6 +28,13 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
   Administrative: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20', badge: 'bg-slate-500' },
 };
 
+function formatDateDisplay(d: any): string {
+  if (!d) return '';
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date) return d.toISOString().split('T')[0];
+  return String(d);
+}
+
 export default function AcademicCalendarPage() {
   const params = useParams();
   const tenant = (params?.tenant as string) || 'demo';
@@ -388,7 +395,7 @@ export default function AcademicCalendarPage() {
                       <div className="flex items-center gap-4 text-[11px] text-[hsl(var(--text-tertiary))] pt-1 flex-wrap font-medium">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
-                          {evt.start_date} {evt.start_date !== evt.end_date ? `→ ${evt.end_date}` : ''}
+                          {formatDateDisplay(evt.start_date)} {formatDateDisplay(evt.start_date) !== formatDateDisplay(evt.end_date) ? `→ ${formatDateDisplay(evt.end_date)}` : ''}
                         </span>
                         {!evt.is_all_day && evt.start_time && (
                           <span className="flex items-center gap-1">
@@ -728,11 +735,11 @@ export default function AcademicCalendarPage() {
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))]">
                 <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold block">Start Date</span>
-                <span className="font-bold text-[hsl(var(--text-primary))]">{viewingEvent.start_date}</span>
+                <span className="font-bold text-[hsl(var(--text-primary))]">{formatDateDisplay(viewingEvent.start_date)}</span>
               </div>
               <div className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))]">
                 <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold block">End Date</span>
-                <span className="font-bold text-[hsl(var(--text-primary))]">{viewingEvent.end_date}</span>
+                <span className="font-bold text-[hsl(var(--text-primary))]">{formatDateDisplay(viewingEvent.end_date)}</span>
               </div>
             </div>
 

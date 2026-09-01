@@ -6,7 +6,9 @@
    Premium dark-first aesthetic
    ============================================ */
 
-:root {
+:root,
+html[data-theme="dark"],
+[data-bs-theme="dark"] {
   /* Core backgrounds */
   --bg-primary: 224 71% 4%;
   --bg-secondary: 222 47% 8%;
@@ -66,6 +68,61 @@
   --input: hsl(var(--border));
   --ring: hsl(var(--accent));
   --radius: var(--radius-lg);
+}
+
+/* Light Mode Theme Overrides */
+html[data-theme="light"],
+[data-bs-theme="light"] {
+  /* Core backgrounds */
+  --bg-primary: 210 40% 98%;
+  --bg-secondary: 0 0% 100%;
+  --bg-tertiary: 214 32% 93%;
+  --bg-elevated: 214 32% 88%;
+
+  /* Accent */
+  --accent: 250 84% 54%;
+  --accent-hover: 250 84% 46%;
+  --accent-soft: 250 84% 54%;
+
+  /* Semantic colors */
+  --success: 142 76% 36%;
+  --warning: 38 92% 44%;
+  --danger: 0 72% 51%;
+  --info: 217 91% 50%;
+
+  /* Text */
+  --text-primary: 222 47% 11%;
+  --text-secondary: 215 25% 32%;
+  --text-tertiary: 215 16% 50%;
+
+  /* Borders */
+  --border: 214 32% 85%;
+  --border-hover: 214 32% 72%;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.08);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 12px 24px -4px rgb(0 0 0 / 0.12);
+  --shadow-glow: 0 0 20px rgb(99 102 241 / 0.12);
+
+  /* Compatibility */
+  --background: hsl(var(--bg-primary));
+  --foreground: hsl(var(--text-primary));
+  --card: hsl(var(--bg-secondary));
+  --card-foreground: hsl(var(--text-primary));
+  --popover: hsl(var(--bg-secondary));
+  --popover-foreground: hsl(var(--text-primary));
+  --primary: hsl(var(--accent));
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(var(--bg-tertiary));
+  --secondary-foreground: hsl(var(--text-primary));
+  --muted: hsl(var(--bg-tertiary));
+  --muted-foreground: hsl(var(--text-secondary));
+  --accent-bg: hsl(var(--bg-tertiary));
+  --accent-foreground: hsl(var(--text-primary));
+  --border-color: hsl(var(--border));
+  --input: hsl(var(--border));
+  --ring: hsl(var(--accent));
 }
 
 @theme inline {

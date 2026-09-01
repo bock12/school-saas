@@ -15,6 +15,7 @@ import {
   AllocationMatrixRow
 } from '@/app/actions/offerings';
 import { getSubjects, getCurriculumStreams, SubjectRecord } from '@/app/actions/subjects';
+import { getSimpleAcademicYears } from '@/app/actions/academic-sessions';
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -267,22 +268,7 @@ export default function TeacherAllocationPage() {
 
   const loadYears = useCallback(async () => {
     try {
-      const { createAdminClient } = await import('@/lib/supabase/admin');
-      const admin = createAdminClient();
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant);
-      let tenantId = tenant;
-
-      if (!isUuid) {
-        const { data } = await admin.from('tenants').select('id').eq('slug', tenant).maybeSingle();
-        tenantId = data?.id || tenant;
-      }
-
-      const { data } = await admin
-        .from('academic_years')
-        .select('id, name, is_current')
-        .eq('tenant_id', tenantId)
-        .order('start_date', { ascending: false });
-
+      const data = await getSimpleAcademicYears(tenant);
       if (data && data.length > 0) {
         setAcademicYears(data);
         const current = data.find(y => y.is_current) || data[0];

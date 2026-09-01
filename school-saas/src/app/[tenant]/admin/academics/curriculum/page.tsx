@@ -15,6 +15,7 @@ import {
   CurriculumVersionRecord, CurriculumStatus
 } from '@/app/actions/curriculum';
 import { getSubjects, SubjectRecord } from '@/app/actions/subjects';
+import { getSimpleAcademicYears } from '@/app/actions/academic-sessions';
 
 // ─────────────────────────────────────────────────────────────
 // Status config
@@ -327,16 +328,8 @@ export default function CurriculumLibraryPage() {
 
     // Load academic years separately
     try {
-      const { createAdminClient } = await import('@/lib/supabase/admin');
-      const admin = createAdminClient();
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant);
-      let tenantId = tenant;
-      if (!isUuid) {
-        const { data } = await admin.from('tenants').select('id').eq('slug', tenant).maybeSingle();
-        tenantId = data?.id || tenant;
-      }
-      const { data } = await admin.from('academic_years').select('id, name').eq('tenant_id', tenantId).order('start_date', { ascending: false });
-      setAcademicYears(data || []);
+      const years = await getSimpleAcademicYears(tenant);
+      setAcademicYears(years || []);
     } catch {}
 
     setLoading(false);

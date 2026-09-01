@@ -1,4 +1,4 @@
-import { requireTeacher } from '@/lib/auth/guards';
+import { requireSchoolAdmin } from '@/lib/auth/guards';
 import { TenantSidebar } from '@/components/tenant/sidebar';
 import { OrgSidebar } from '@/components/tenant/org-sidebar';
 import { TenantTopbar } from '@/components/tenant/topbar';
@@ -13,7 +13,7 @@ export default async function TenantDashboardLayout({
   params: Promise<{ tenant: string }>;
 }) {
   const { tenant } = await params;
-  const { user, profile, school } = await requireTeacher(tenant);
+  const { user, profile, school } = await requireSchoolAdmin(tenant);
 
   const displayName =
     profile.full_name || user.email?.split('@')[0] || 'School User';

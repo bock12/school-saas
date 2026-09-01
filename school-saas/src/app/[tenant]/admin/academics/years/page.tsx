@@ -18,6 +18,13 @@ import {
   TermPayload
 } from '@/app/actions/academic-sessions';
 
+function formatDateDisplay(d: any): string {
+  if (!d) return '';
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date) return d.toISOString().split('T')[0];
+  return String(d);
+}
+
 export default function AcademicYearsPage() {
   const params = useParams();
   const tenant = (params?.tenant as string) || 'demo';
@@ -256,7 +263,7 @@ export default function AcademicYearsPage() {
                     )}
                   </div>
                   <p className="text-xs text-[hsl(var(--text-tertiary))] flex items-center gap-1 font-medium">
-                    <Clock className="w-3.5 h-3.5" /> {session.start_date} → {session.end_date}
+                    <Clock className="w-3.5 h-3.5" /> {formatDateDisplay(session.start_date)} → {formatDateDisplay(session.end_date)}
                   </p>
                 </div>
 
@@ -307,7 +314,7 @@ export default function AcademicYearsPage() {
                         )}
                       </div>
                       <p className="text-[10px] text-[hsl(var(--text-tertiary))] truncate">
-                        {term.start_date} - {term.end_date}
+                        {formatDateDisplay(term.start_date)} - {formatDateDisplay(term.end_date)}
                       </p>
                     </div>
                   ))}
@@ -500,11 +507,11 @@ export default function AcademicYearsPage() {
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))]">
                 <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold block">Start Date</span>
-                <span className="font-bold text-[hsl(var(--text-primary))]">{viewingSession.start_date}</span>
+                <span className="font-bold text-[hsl(var(--text-primary))]">{formatDateDisplay(viewingSession.start_date)}</span>
               </div>
               <div className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))]">
                 <span className="text-[10px] text-[hsl(var(--text-tertiary))] uppercase font-bold block">End Date</span>
-                <span className="font-bold text-[hsl(var(--text-primary))]">{viewingSession.end_date}</span>
+                <span className="font-bold text-[hsl(var(--text-primary))]">{formatDateDisplay(viewingSession.end_date)}</span>
               </div>
             </div>
 
@@ -517,7 +524,7 @@ export default function AcademicYearsPage() {
                   <div key={term.id || i} className="p-3 rounded-2xl bg-[hsl(var(--bg-tertiary)/0.4)] border border-[hsl(var(--border))] flex items-center justify-between text-xs">
                     <div>
                       <p className="font-bold text-[hsl(var(--text-primary))]">{term.name}</p>
-                      <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{term.start_date} → {term.end_date}</p>
+                      <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{formatDateDisplay(term.start_date)} → {formatDateDisplay(term.end_date)}</p>
                     </div>
                     {term.is_current && (
                       <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">

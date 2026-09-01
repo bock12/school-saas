@@ -3,21 +3,42 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  Shield, School, Users, CreditCard, BarChart3, ArrowRight, ChevronRight, ChevronLeft,
+  Shield, School, Users, User, CreditCard, BarChart3, ArrowRight, ChevronRight, ChevronLeft,
   Check, Zap, Lock, Globe, X, LogIn, Menu, Building2, Search, GraduationCap,
   MapPin, Star, Phone, Mail, Sparkles, BookOpen, Trophy, Heart, Calendar,
   CheckCircle2, Clock, Layers, Award, HelpCircle, Send, ExternalLink, Activity,
   Sliders, UserCheck, CheckCheck, RefreshCw, Filter, ChevronDown, Database,
   Smartphone, FileText, CheckSquare, MessageSquare, PieChart, ShieldAlert,
-  Server, Cpu, WifiOff, AlertTriangle, ArrowUpRight
+  Server, Cpu, WifiOff, AlertTriangle, ArrowUpRight, Sun, Moon
 } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
+import {
+  DEFAULT_LANDING_SECTIONS,
+  DEFAULT_CMS_PLUGINS,
+  type LandingPageSectionRecord,
+  type CmsPluginRecord,
+  type CmsGlobalSettings,
+  type CmsPageRecord,
+} from '@/lib/types/landing-cms';
+import { PublicPluginInjector } from '@/components/cms/PublicPluginInjector';
+
+type MemberSchool = {
+  id: string;
+  name: string;
+  slug: string;
+  school_type?: string | null;
+};
 
 type Tenant = {
   id: string;
   name: string;
   slug: string;
   type: string;
+  parent_id?: string | null;
+  is_standalone_school?: boolean;
+  parent_name?: string | null;
+  parent_is_standalone?: boolean | null;
+  member_schools?: MemberSchool[] | null;
   logo_url: string | null;
   city: string | null;
   country: string | null;
@@ -58,7 +79,8 @@ function SchoolCard({
   index: number;
   tenantUrl: string;
 }) {
-  const isOrg = tenant.type === 'organization';
+  const isOrg = tenant.type === 'organization' && !tenant.is_standalone_school;
+  const isMemberSchool = !isOrg && Boolean(tenant.parent_name) && !tenant.parent_is_standalone;
   const accent = tenant.primary_color || '#6366f1';
   
   const gallery = SCHOOL_GALLERIES[index % SCHOOL_GALLERIES.length];
@@ -86,18 +108,19 @@ function SchoolCard({
   };
 
   const description = isOrg
-    ? `${tenant.name} is an educational governing body managing member school campuses, academic quality control, and shared institutional services.`
-    : `${tenant.name} is a premier educational institution committed to academic excellence, 6-3-3-4 national curriculum standards, and holistic student development.`;
+    ? `${tenant.name} is an educational governing board managing regional sister campuses and central administration.`
+    : isMemberSchool
+    ? `${tenant.name} is an accredited member campus under the ${tenant.parent_name} network.`
+    : `${tenant.name} is a premier educational institution committed to academic excellence and national 6-3-3-4 standards.`;
 
-  const displayAddress = tenant.address || (tenant.city ? `${tenant.city}, Sierra Leone` : 'Main Campus Road, Freetown');
-  const displayEmail = tenant.contact_email || `admissions@${tenant.slug}.edu.sl`;
-  const displayPhone = tenant.contact_phone || '+232 76 000 000';
+  const displayAddress = tenant.address || (tenant.city ? `${tenant.city}, Sierra Leone` : 'Freetown, Sierra Leone');
+  const displayEmail = tenant.contact_email || `info@${tenant.slug}.edu.sl`;
 
   return (
-    <div className="glass-card rounded-3xl overflow-hidden flex flex-col justify-between border border-[hsl(var(--border))] hover:border-[hsl(var(--accent)/0.45)] hover:-translate-y-1.5 hover:shadow-2xl transition-all duration-300 group bg-[hsl(var(--bg-secondary)/0.6)] h-full">
+    <div className="glass-card rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col justify-between border border-[hsl(var(--border))] hover:border-[hsl(var(--accent)/0.45)] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 group bg-[hsl(var(--bg-secondary)/0.6)] h-full">
       
-      {/* ── TOP SECTION: Auto-Sliding Images Carousel ─────────────── */}
-      <div className="relative aspect-[16/10] overflow-hidden bg-neutral-900 select-none">
+      {/* ── TOP SECTION: Compact Auto-Sliding Images Carousel ─────────────── */}
+      <div className="relative aspect-[16/9] overflow-hidden bg-neutral-900 select-none">
         
         {gallery.map((img, i) => (
           <div
@@ -116,22 +139,24 @@ function SchoolCard({
               className="w-full h-full object-cover"
               loading="lazy"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/35" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/30" />
           </div>
         ))}
 
         {/* Top Badges */}
-        <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between z-10">
-          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-lg ${
+        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between z-10">
+          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider backdrop-blur-md shadow-md ${
             isOrg
-              ? 'bg-purple-900/80 text-purple-200 border border-purple-400/30'
-              : 'bg-blue-900/80 text-blue-200 border border-blue-400/30'
+              ? 'bg-purple-900/90 text-purple-200 border border-purple-400/40'
+              : isMemberSchool
+              ? 'bg-emerald-900/90 text-emerald-200 border border-emerald-400/40'
+              : 'bg-blue-900/90 text-blue-200 border border-blue-400/40'
           }`}>
-            {isOrg ? <Building2 className="w-3 h-3 text-purple-300" /> : <School className="w-3 h-3 text-blue-300" />}
-            {isOrg ? 'Group Board' : 'Campus / School'}
+            {isOrg ? <Building2 className="w-2.5 h-2.5 text-purple-300" /> : <School className="w-2.5 h-2.5 text-blue-300" />}
+            {isOrg ? 'Group Board' : isMemberSchool ? 'Member Campus' : 'Standalone School'}
           </span>
 
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-black/60 backdrop-blur-md text-emerald-300 border border-emerald-500/30 shadow-lg">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-black/65 backdrop-blur-md text-emerald-300 border border-emerald-500/30 shadow-md">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Portal
           </span>
         </div>
@@ -139,26 +164,26 @@ function SchoolCard({
         {/* Manual Navigation Arrows */}
         <button
           onClick={prevSlide}
-          className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10 border border-white/20"
+          className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10 border border-white/20"
           aria-label="Previous image"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="w-3.5 h-3.5" />
         </button>
 
         <button
           onClick={nextSlide}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10 border border-white/20"
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10 border border-white/20"
           aria-label="Next image"
         >
-          <ChevronRight className="w-4 h-4" />
+          <ChevronRight className="w-3.5 h-3.5" />
         </button>
 
         {/* Bottom Caption & Pagination Dots */}
-        <div className="absolute bottom-3 left-3.5 right-3.5 flex items-center justify-between z-10">
-          <span className="text-[11px] font-bold text-white/90 drop-shadow truncate">
+        <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between z-10">
+          <span className="text-[10px] font-bold text-white/90 drop-shadow truncate max-w-[70%]">
             {gallery[currentSlide].caption}
           </span>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1">
             {gallery.map((_, dotIdx) => (
               <button
                 key={dotIdx}
@@ -167,8 +192,8 @@ function SchoolCard({
                   e.stopPropagation();
                   setCurrentSlide(dotIdx);
                 }}
-                className={`h-1.5 rounded-full transition-all ${
-                  dotIdx === currentSlide ? 'w-5 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/75'
+                className={`h-1 rounded-full transition-all ${
+                  dotIdx === currentSlide ? 'w-4 bg-white' : 'w-1 bg-white/50 hover:bg-white/75'
                 }`}
                 aria-label={`Go to slide ${dotIdx + 1}`}
               />
@@ -178,30 +203,39 @@ function SchoolCard({
 
       </div>
 
-      {/* ── CARD BODY: Detail & Contact Info ──────────────────────── */}
-      <div className="p-6 space-y-4 flex-1 flex flex-col justify-between">
+      {/* ── CARD BODY: Streamlined Info & Contact ──────────────────────── */}
+      <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3">
         
-        <div className="space-y-3.5">
-          <div className="flex items-start gap-3.5">
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-3">
             {tenant.logo_url ? (
               <img
                 src={tenant.logo_url}
                 alt={tenant.name}
-                className="w-12 h-12 rounded-2xl object-cover border border-[hsl(var(--border))] flex-shrink-0 shadow-sm"
+                className="w-10 h-10 rounded-xl object-cover border border-[hsl(var(--border))] flex-shrink-0 shadow-xs"
               />
             ) : (
               <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-base flex-shrink-0 shadow-md"
+                className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-white text-sm flex-shrink-0 shadow-sm"
                 style={{ background: `linear-gradient(135deg, ${accent}, ${accent}cc)` }}
               >
                 {tenant.name.substring(0, 2).toUpperCase()}
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-black text-[hsl(var(--text-primary))] group-hover:text-[hsl(var(--accent))] transition-colors leading-tight">
+              <h3 className="text-sm sm:text-base font-black text-[hsl(var(--text-primary))] group-hover:text-[hsl(var(--accent))] transition-colors leading-tight truncate">
                 {tenant.name}
               </h3>
-              <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))] block mt-0.5 truncate">
+              
+              {/* Parent Group Affiliation Badge */}
+              {isMemberSchool && tenant.parent_name && (
+                <div className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[9px] font-bold text-purple-400">
+                  <Building2 className="w-2.5 h-2.5 shrink-0" />
+                  <span className="truncate">Part of {tenant.parent_name}</span>
+                </div>
+              )}
+
+              <span className="text-[10px] font-mono text-[hsl(var(--text-tertiary))] block truncate">
                 {tenant.slug}.localhost:3000
               </span>
             </div>
@@ -211,36 +245,30 @@ function SchoolCard({
             {description}
           </p>
 
-          <div className="p-3.5 rounded-2xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] space-y-2 text-xs text-[hsl(var(--text-secondary))]">
-            <div className="flex items-start gap-2.5">
-              <MapPin className="w-3.5 h-3.5 text-[hsl(var(--accent))] shrink-0 mt-0.5" />
+          <div className="p-2.5 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] flex flex-col gap-1.5 text-[11px] text-[hsl(var(--text-secondary))]">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-3 h-3 text-[hsl(var(--accent))] shrink-0" />
               <span className="truncate">{displayAddress}</span>
             </div>
-
-            <div className="flex items-center gap-2.5">
-              <Mail className="w-3.5 h-3.5 text-[hsl(var(--accent))] shrink-0" />
-              <a href={`mailto:${displayEmail}`} className="truncate hover:text-[hsl(var(--accent))] transition-colors">
-                {displayEmail}
-              </a>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <Phone className="w-3.5 h-3.5 text-[hsl(var(--accent))] shrink-0" />
-              <a href={`tel:${displayPhone}`} className="truncate hover:text-[hsl(var(--accent))] transition-colors font-medium">
-                {displayPhone}
-              </a>
+            <div className="flex items-center gap-2">
+              <Mail className="w-3 h-3 text-[hsl(var(--accent))] shrink-0" />
+              <span className="truncate">{displayEmail}</span>
             </div>
           </div>
         </div>
 
-        {/* ── CARD FOOTER: "Visit School" Action Button ────────────── */}
-        <div className="pt-2">
+        {/* ── CARD FOOTER: "Visit School" / "Visit Governing Board" Action Button ── */}
+        <div className="pt-1">
           <a
             href={tenantUrl}
-            className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] via-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-black text-xs shadow-lg shadow-[hsl(var(--accent)/0.25)] hover:opacity-95 hover:shadow-xl hover:shadow-[hsl(var(--accent)/0.35)] transition-all flex items-center justify-center gap-2 group-hover:scale-[1.01]"
+            className={`w-full py-2.5 px-4 rounded-xl text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 group-hover:scale-[1.01] ${
+              isOrg
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 shadow-purple-600/20 hover:opacity-95'
+                : 'bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] shadow-[hsl(var(--accent)/0.2)] hover:opacity-95'
+            }`}
           >
-            <span>Visit School</span>
-            <ExternalLink className="w-4 h-4" />
+            <span>{isOrg ? 'Visit Governing Board' : 'Visit School'}</span>
+            <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
 
@@ -252,7 +280,37 @@ function SchoolCard({
 
 export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<'all' | 'school' | 'organization'>('all');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  // Initialize theme from localStorage or system preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('schoolsaas-theme') as 'dark' | 'light' | null;
+      if (stored) {
+        setTheme(stored);
+        document.documentElement.setAttribute('data-theme', stored);
+        document.documentElement.setAttribute('data-bs-theme', stored);
+      } else {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const initial = prefersDark ? 'dark' : 'light';
+        setTheme(initial);
+        document.documentElement.setAttribute('data-theme', initial);
+        document.documentElement.setAttribute('data-bs-theme', initial);
+      }
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('schoolsaas-theme', next);
+      document.documentElement.setAttribute('data-theme', next);
+      document.documentElement.setAttribute('data-bs-theme', next);
+    }
+  };
+
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<'all' | 'standalone' | 'organization' | 'member'>('all');
   const [selectedRegionFilter, setSelectedRegionFilter] = useState<'all' | 'western' | 'eastern' | 'southern' | 'northern'>('all');
   const [cardSlideIndex, setCardSlideIndex] = useState(0);
   const [itemsPerPage, setItemsPerPage] = useState(3);
@@ -303,8 +361,10 @@ export default function HomePage() {
           setItemsPerPage(1);
         } else if (window.innerWidth < 1024) {
           setItemsPerPage(2);
-        } else {
+        } else if (window.innerWidth < 1440) {
           setItemsPerPage(3);
+        } else {
+          setItemsPerPage(4);
         }
       }
     };
@@ -312,6 +372,49 @@ export default function HomePage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Dynamic Landing Page CMS state
+  const [cmsSections, setCmsSections] = useState<Record<string, LandingPageSectionRecord>>(() => {
+    const map: Record<string, LandingPageSectionRecord> = {};
+    DEFAULT_LANDING_SECTIONS.forEach(s => { map[s.section_key] = s; });
+    return map;
+  });
+  const [cmsPlugins, setCmsPlugins] = useState<CmsPluginRecord[]>(DEFAULT_CMS_PLUGINS);
+  const [cmsSettings, setCmsSettings] = useState<CmsGlobalSettings | undefined>(undefined);
+  const [cmsPages, setCmsPages] = useState<CmsPageRecord[]>([]);
+
+  useEffect(() => {
+    async function loadCmsContent() {
+      try {
+        const res = await fetch('/api/public/landing-sections');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sections && Array.isArray(data.sections)) {
+            const map: Record<string, LandingPageSectionRecord> = {};
+            data.sections.forEach((s: LandingPageSectionRecord) => {
+              map[s.section_key] = s;
+            });
+            setCmsSections(map);
+          }
+          if (data.plugins && Array.isArray(data.plugins)) {
+            setCmsPlugins(data.plugins);
+          }
+          if (data.settings) {
+            setCmsSettings(data.settings);
+          }
+          if (data.pages && Array.isArray(data.pages)) {
+            setCmsPages(data.pages);
+          }
+        }
+      } catch {
+        // use defaults
+      }
+    }
+    loadCmsContent();
+  }, []);
+
+  const isSectionVisible = (key: string) => cmsSections[key]?.is_published !== false;
+  const getSection = (key: string) => cmsSections[key] || DEFAULT_LANDING_SECTIONS.find(s => s.section_key === key);
 
   // Fetch all publicly visible tenants via API
   useEffect(() => {
@@ -333,10 +436,15 @@ export default function HomePage() {
 
   // Filter tenants
   const filtered = tenants.filter(t => {
+    const isOrg = t.type === 'organization' && !t.is_standalone_school;
+    const isMember = !isOrg && Boolean(t.parent_name) && !tenant_parent_is_standalone(t);
+    const isStandalone = !isOrg && (!t.parent_name || t.parent_is_standalone || t.is_standalone_school);
+
     const matchesType =
       selectedTypeFilter === 'all' ||
-      (selectedTypeFilter === 'school' && t.type !== 'organization') ||
-      (selectedTypeFilter === 'organization' && t.type === 'organization');
+      (selectedTypeFilter === 'standalone' && isStandalone) ||
+      (selectedTypeFilter === 'organization' && isOrg) ||
+      (selectedTypeFilter === 'member' && isMember);
 
     const locationStr = `${t.city || ''} ${t.region || ''} ${t.address || ''}`.toLowerCase();
     const matchesRegion =
@@ -348,6 +456,10 @@ export default function HomePage() {
 
     return matchesType && matchesRegion;
   });
+
+  function tenant_parent_is_standalone(t: Tenant) {
+    return t.parent_is_standalone;
+  }
 
   useEffect(() => {
     setCardSlideIndex(0);
@@ -373,11 +485,12 @@ export default function HomePage() {
     return `${window.location.protocol}//${slug}.${cleanHost}${port}`;
   };
 
-  const schoolCount = tenants.filter(t => t.type !== 'organization').length;
-  const orgCount = tenants.filter(t => t.type === 'organization').length;
+  const standaloneCount = tenants.filter(t => t.type !== 'organization' && (!t.parent_name || t.parent_is_standalone || t.is_standalone_school)).length;
+  const orgCount = tenants.filter(t => t.type === 'organization' && !t.is_standalone_school).length;
+  const memberCount = tenants.filter(t => t.type === 'school' && t.parent_name && !tenant_parent_is_standalone(t)).length;
 
   const stats = [
-    { value: schoolCount > 0 ? `${schoolCount}` : '50+', label: 'Schools Onboarded', desc: 'Active standalone campuses' },
+    { value: (standaloneCount + memberCount) > 0 ? `${standaloneCount + memberCount}` : '50+', label: 'Schools Onboarded', desc: 'Accredited standalone & member campuses' },
     { value: orgCount > 0 ? `${orgCount}` : '12+', label: 'Educational Groups', desc: 'Diocesan & multi-school networks' },
     { value: '99.9%', label: 'Uptime SLA', desc: 'High-availability infrastructure' },
     { value: '100%', label: 'Data Isolation', desc: 'PostgreSQL Row-Level Security' },
@@ -395,9 +508,9 @@ export default function HomePage() {
         body: JSON.stringify({
           contactName: demoForm.name,
           email: demoForm.email,
-          phone: demoForm.phone,
           institutionName: demoForm.institutionName,
           institutionType: demoForm.type,
+          phone: demoForm.phone,
           region: demoForm.region,
           estimatedStudents: demoForm.estimatedStudents,
           requirements: demoForm.message,
@@ -406,24 +519,27 @@ export default function HomePage() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit demonstration request.');
+        throw new Error(data.error || 'Failed to submit demo request');
       }
 
       setDemoSubmitted(true);
-      setDemoSuccessData(data.request);
+      setDemoSuccessData(data);
     } catch (err: any) {
-      setDemoError(err.message || 'An unexpected error occurred. Please try again.');
+      setDemoError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setSubmittingDemo(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--bg-primary))] text-[hsl(var(--text-primary))] font-sans antialiased overflow-x-hidden selection:bg-[hsl(var(--accent)/0.25)] selection:text-[hsl(var(--accent))]">
+    <div className="min-h-screen bg-[hsl(var(--bg-primary))] text-[hsl(var(--text-primary))] flex flex-col selection:bg-[hsl(var(--accent)/0.25)] w-full overflow-x-hidden">
+      
+      {/* ── 0. Active Public CMS Plugins (Banner, WhatsApp, Cookie, Social Proof) ── */}
+      <PublicPluginInjector plugins={cmsPlugins} settings={cmsSettings} />
 
-      {/* ── 1. Top Academic Utility Bar ─────────────────────────────── */}
-      <div className="bg-[hsl(var(--bg-secondary))] border-b border-[hsl(var(--border))] py-2.5 px-4 text-xs">
-        <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-3">
+      {/* ── 1. Top Enterprise Ribbon ────────────────────────────────── */}
+      <div className="bg-[hsl(var(--bg-secondary))] border-b border-[hsl(var(--border))] py-2.5 px-4 sm:px-8 lg:px-12 xl:px-16 text-xs w-full">
+        <div className="w-full flex flex-wrap justify-between items-center gap-3">
           <div className="flex items-center gap-2 text-[hsl(var(--text-secondary))] font-medium">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -447,8 +563,8 @@ export default function HomePage() {
       </div>
 
       {/* ── 2. Site Header & Navbar ─────────────────────────────────── */}
-      <header className="sticky top-0 z-50 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg-primary)/0.92)] backdrop-blur-2xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-50 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg-primary)/0.92)] backdrop-blur-2xl w-full">
+        <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 h-20 flex items-center justify-between gap-4">
           
           {/* Brand */}
           <Link href="/" className="flex items-center gap-3.5 flex-shrink-0 group">
@@ -473,7 +589,18 @@ export default function HomePage() {
           </nav>
 
           {/* Header Action Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Theme Mode Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2.5 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--bg-tertiary))] transition-all cursor-pointer flex items-center justify-center touch-manipulation"
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+              aria-label="Toggle color theme mode"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-500" />}
+            </button>
+
             <Link
               href="/register"
               className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-black text-xs shadow-md shadow-[hsl(var(--accent)/0.25)] hover:opacity-95 hover:shadow-lg hover:shadow-[hsl(var(--accent)/0.35)] transition-all"
@@ -489,9 +616,11 @@ export default function HomePage() {
             </a>
 
             <button
+              type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2.5 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+              className="lg:hidden p-2.5 rounded-xl border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors cursor-pointer touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Toggle navigation menu"
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -501,6 +630,22 @@ export default function HomePage() {
         {/* Mobile Slide-down Drawer */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] px-5 py-6 space-y-4 shadow-2xl animate-in slide-in-from-top-3 duration-200">
+            
+            {/* Theme Toggle Pill inside Mobile Drawer */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="w-full flex items-center justify-between p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-primary))] text-xs font-bold text-[hsl(var(--text-primary))] cursor-pointer touch-manipulation"
+            >
+              <span className="flex items-center gap-2">
+                {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-500" />}
+                <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+              </span>
+              <span className="text-[10px] text-[hsl(var(--text-tertiary))] font-mono uppercase">
+                {theme === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
+              </span>
+            </button>
+
             <nav className="flex flex-col gap-3 text-sm font-bold text-[hsl(var(--text-secondary))]">
               <a onClick={() => setMobileMenuOpen(false)} href="#institutions" className="hover:text-[hsl(var(--text-primary))] py-1.5 flex items-center justify-between">
                 <span>Registered Institutions</span> <ChevronRight className="w-4 h-4 text-[hsl(var(--text-tertiary))]" />
@@ -545,60 +690,61 @@ export default function HomePage() {
         )}
       </header>
 
-      <main>
+      <main className="w-full">
         {/* ── 3. High-Impact Hero Section ───────────────────────────── */}
-        <section className="relative pt-12 pb-20 sm:pt-20 sm:pb-28 overflow-hidden">
-          
-          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[450px] bg-gradient-to-tr from-[hsl(var(--accent)/0.15)] to-violet-500/10 blur-[130px] pointer-events-none -z-10" />
+        {isSectionVisible('hero') && (
+          <section className="relative pt-12 pb-20 sm:pt-20 sm:pb-28 overflow-hidden w-full">
+            
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[450px] bg-gradient-to-tr from-[hsl(var(--accent)/0.15)] to-violet-500/10 blur-[130px] pointer-events-none -z-10" />
 
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-14 items-center">
-              
-              {/* Left Column: Headlines & CTAs */}
-              <div className="lg:col-span-6 space-y-7">
+            <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-14 items-center">
                 
-                <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-[hsl(var(--accent)/0.1)] border border-[hsl(var(--accent)/0.25)] text-[hsl(var(--accent))] text-xs font-black shadow-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
-                  <span>Next-Generation Academic Administration</span>
-                </div>
+                {/* Left Column: Headlines & CTAs */}
+                <div className="lg:col-span-6 space-y-7 order-2 lg:order-1">
+                  
+                  <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-[hsl(var(--accent)/0.1)] border border-[hsl(var(--accent)/0.25)] text-[hsl(var(--accent))] text-xs font-black shadow-sm">
+                    <Sparkles className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+                    <span>{getSection('hero')?.badge || 'Next-Generation Academic Administration'}</span>
+                  </div>
 
-                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-[hsl(var(--text-primary))] leading-[1.06]">
-                  An education platform that fits <span className="text-transparent bg-clip-text bg-gradient-to-r from-[hsl(var(--accent))] via-indigo-400 to-violet-400">every institution</span>
-                </h1>
+                  <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-[hsl(var(--text-primary))] leading-[1.06]">
+                    {getSection('hero')?.title || 'An education platform that fits every institution'}
+                  </h1>
 
-                <p className="text-base sm:text-lg text-[hsl(var(--text-secondary))] leading-relaxed max-w-xl">
-                  {APP_NAME} is the unified multi-tenant operating system for schools, colleges, and educational boards. Deliver isolated student portals, 6-3-3-4 curriculum trees, AI lesson plans, faculty matrices, and financial audits from one resilient cloud platform.
-                </p>
+                  <p className="text-base sm:text-lg text-[hsl(var(--text-secondary))] leading-relaxed max-w-xl">
+                    {getSection('hero')?.subtitle || `${APP_NAME} is the unified multi-tenant operating system for schools, colleges, and educational boards.`}
+                  </p>
 
-                <div className="flex flex-col sm:flex-row items-center gap-3.5 pt-1">
-                  <Link
-                    href="/register"
-                    className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] via-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-black text-sm shadow-xl shadow-[hsl(var(--accent)/0.25)] hover:opacity-95 hover:scale-[1.02] transition-all flex items-center justify-center gap-2.5"
-                  >
-                    <Zap className="w-4 h-4" /> Register Your School Free <ArrowRight className="w-4 h-4" />
-                  </Link>
-                  <a
-                    href="#institutions"
-                    className="w-full sm:w-auto px-8 py-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--text-primary))] font-black text-sm hover:bg-[hsl(var(--bg-tertiary))] hover:border-[hsl(var(--accent)/0.4)] transition-all flex items-center justify-center gap-2"
-                  >
-                    <School className="w-4 h-4" /> Browse Portals
-                  </a>
-                </div>
-
-                <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/25 text-xs text-[hsl(var(--text-primary))]">
-                  <Sparkles className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <div className="leading-relaxed">
-                    <strong className="font-black text-amber-400">AI Curriculum Engine 2026/2027 Active:</strong> Real-time lesson plans constrained to approved school syllabuses with zero hallucinations.{' '}
-                    <a href="#curriculum" className="text-[hsl(var(--accent))] font-bold hover:underline inline-flex items-center gap-0.5">
-                      Explore WAEC Suite &rarr;
+                  <div className="flex flex-col sm:flex-row items-center gap-3.5 pt-1">
+                    <Link
+                      href={getSection('hero')?.primary_cta_url || '/register'}
+                      className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] via-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-black text-sm shadow-xl shadow-[hsl(var(--accent)/0.25)] hover:opacity-95 hover:scale-[1.02] transition-all flex items-center justify-center gap-2.5"
+                    >
+                      <Zap className="w-4 h-4" /> {getSection('hero')?.primary_cta_text || 'Register Your School Free'} <ArrowRight className="w-4 h-4" />
+                    </Link>
+                    <a
+                      href={getSection('hero')?.secondary_cta_url || '#institutions'}
+                      className="w-full sm:w-auto px-8 py-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] text-[hsl(var(--text-primary))] font-black text-sm hover:bg-[hsl(var(--bg-tertiary))] hover:border-[hsl(var(--accent)/0.4)] transition-all flex items-center justify-center gap-2"
+                    >
+                      <School className="w-4 h-4" /> {getSection('hero')?.secondary_cta_text || 'Browse Portals'}
                     </a>
                   </div>
+
+                  <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/25 text-xs text-[hsl(var(--text-primary))]">
+                    <Sparkles className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div className="leading-relaxed">
+                      <strong className="font-black text-amber-400">AI Curriculum Engine 2026/2027 Active:</strong> Real-time lesson plans constrained to approved school syllabuses with zero hallucinations.{' '}
+                      <a href="#curriculum" className="text-[hsl(var(--accent))] font-bold hover:underline inline-flex items-center gap-0.5">
+                        Explore WAEC Suite &rarr;
+                      </a>
+                    </div>
+                  </div>
+
                 </div>
 
-              </div>
-
               {/* Right Column: 3-Image Photographic Mosaic */}
-              <div className="lg:col-span-6 relative">
+              <div className="lg:col-span-6 relative order-1 lg:order-2 mb-4 lg:mb-0">
                 
                 <div className="absolute -top-4 -left-4 z-20 hidden sm:flex items-center gap-3 p-3.5 rounded-2xl glass-card border border-white/10 shadow-2xl bg-[hsl(var(--bg-secondary)/0.9)] backdrop-blur-xl">
                   <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
@@ -671,119 +817,97 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* ── 4. Key Facts & Live Statistics Band ───────────────────── */}
-        <section className="border-y border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] py-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-              {stats.map((s, idx) => (
-                <div key={idx} className="space-y-1.5">
-                  <p className="text-3xl sm:text-4xl lg:text-5xl font-black text-[hsl(var(--accent))] tracking-tight">{s.value}</p>
-                  <p className="text-xs font-black text-[hsl(var(--text-primary))] uppercase tracking-wider">{s.label}</p>
-                  <p className="text-[11px] text-[hsl(var(--text-tertiary))]">{s.desc}</p>
-                </div>
-              ))}
+        {isSectionVisible('stats') && (
+          <section className="border-y border-[hsl(var(--border))] bg-[hsl(var(--bg-secondary))] py-10 w-full">
+            <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+                {(getSection('stats')?.items && getSection('stats')!.items.length > 0
+                  ? getSection('stats')!.items.map(item => ({
+                      value: item.statValue || '100%',
+                      label: item.statLabel || item.title || 'Metric',
+                      desc: item.description || '',
+                    }))
+                  : stats
+                ).map((s, idx) => (
+                  <div key={idx} className="space-y-1.5">
+                    <p className="text-3xl sm:text-4xl lg:text-5xl font-black text-[hsl(var(--accent))] tracking-tight">{s.value}</p>
+                    <p className="text-xs font-black text-[hsl(var(--text-primary))] uppercase tracking-wider">{s.label}</p>
+                    <p className="text-[11px] text-[hsl(var(--text-tertiary))]">{s.desc}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
-        {/* ── 5. Registered Institutions & Portals (3-Card Slider & Filter Dropdowns) ── */}
+        {/* ── 5. Registered Institutions & Portals (Card Slider & Left/Right Side Arrows) ── */}
+        {isSectionVisible('institutions') && (
         <section id="institutions" className="py-16 sm:py-24">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
             
             <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-10">
               <div className="space-y-2 max-w-2xl">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-bold">
-                  <School className="w-3.5 h-3.5" /> Institutional Network Directory
+                  <School className="w-3.5 h-3.5" /> {getSection('institutions')?.badge || 'Institutional Network Directory'}
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-black text-[hsl(var(--text-primary))] tracking-tight">
-                  Registered Institutions &amp; Portals
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[hsl(var(--text-primary))] tracking-tight">
+                  {getSection('institutions')?.title || 'Registered Institutions & Portals'}
                 </h2>
                 <p className="text-xs sm:text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
-                  Browse accredited schools, colleges, and educational groups. Slide through campus galleries, explore curriculum details, and enter your institution's portal.
+                  {getSection('institutions')?.subtitle || "Browse accredited schools, colleges, and educational groups. Slide through campus galleries, explore curriculum details, and enter your institution's portal."}
                 </p>
               </div>
 
-              {/* Filter Dropdowns + Slide Controls */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex flex-wrap items-center gap-2.5 bg-[hsl(var(--bg-secondary))] p-2 rounded-2xl border border-[hsl(var(--border))] shadow-md">
-                  
-                  <div className="relative">
-                    <select
-                      value={selectedTypeFilter}
-                      onChange={(e) => setSelectedTypeFilter(e.target.value as any)}
-                      className="appearance-none h-10 pl-3.5 pr-8 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors cursor-pointer"
-                    >
-                      <option value="all">All Types ({tenants.length})</option>
-                      <option value="school">🏫 Standalone Schools ({schoolCount})</option>
-                      <option value="organization">🏢 Educational Groups ({orgCount})</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-
-                  <div className="relative">
-                    <select
-                      value={selectedRegionFilter}
-                      onChange={(e) => setSelectedRegionFilter(e.target.value as any)}
-                      className="appearance-none h-10 pl-3.5 pr-8 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors cursor-pointer"
-                    >
-                      <option value="all">All Jurisdictions</option>
-                      <option value="western">📍 Western Area (Freetown)</option>
-                      <option value="eastern">📍 Eastern Province</option>
-                      <option value="southern">📍 Southern Province</option>
-                      <option value="northern">📍 Northern Province</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-
-                  {(selectedTypeFilter !== 'all' || selectedRegionFilter !== 'all') && (
-                    <button
-                      onClick={() => {
-                        setSelectedTypeFilter('all');
-                        setSelectedRegionFilter('all');
-                      }}
-                      className="h-10 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-bold flex items-center gap-1 transition-colors"
-                      title="Reset all filters"
-                    >
-                      <RefreshCw className="w-3 h-3" /> Reset
-                    </button>
-                  )}
+              {/* Responsive Filter Toolbar */}
+              <div className="flex flex-wrap items-center gap-2.5 bg-[hsl(var(--bg-secondary))] p-2 rounded-2xl border border-[hsl(var(--border))] shadow-md">
+                <div className="relative">
+                  <select
+                    value={selectedTypeFilter}
+                    onChange={(e) => setSelectedTypeFilter(e.target.value as any)}
+                    className="appearance-none h-10 pl-3.5 pr-8 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors cursor-pointer"
+                  >
+                    <option value="all">All Portals ({tenants.length})</option>
+                    <option value="standalone">🏫 Standalone Schools ({standaloneCount})</option>
+                    <option value="organization">🏢 Educational Groups &amp; Boards ({orgCount})</option>
+                    <option value="member">🎓 Member Campuses ({memberCount})</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
-                {filtered.length > itemsPerPage && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handlePrevCards}
-                      disabled={!canSlidePrev}
-                      className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${
-                        canSlidePrev
-                          ? 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--accent))] hover:text-white hover:border-[hsl(var(--accent))] shadow-md'
-                          : 'bg-[hsl(var(--bg-secondary)/0.5)] border-[hsl(var(--border)/0.4)] text-[hsl(var(--text-tertiary))] opacity-40 cursor-not-allowed'
-                      }`}
-                      aria-label="Slide previous schools"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
+                <div className="relative">
+                  <select
+                    value={selectedRegionFilter}
+                    onChange={(e) => setSelectedRegionFilter(e.target.value as any)}
+                    className="appearance-none h-10 pl-3.5 pr-8 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors cursor-pointer"
+                  >
+                    <option value="all">All Jurisdictions</option>
+                    <option value="western">📍 Western Area (Freetown)</option>
+                    <option value="eastern">📍 Eastern Province</option>
+                    <option value="southern">📍 Southern Province</option>
+                    <option value="northern">📍 Northern Province</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-[hsl(var(--text-tertiary))] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
 
-                    <button
-                      onClick={handleNextCards}
-                      disabled={!canSlideNext}
-                      className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${
-                        canSlideNext
-                          ? 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--accent))] hover:text-white hover:border-[hsl(var(--accent))] shadow-md'
-                          : 'bg-[hsl(var(--bg-secondary)/0.5)] border-[hsl(var(--border)/0.4)] text-[hsl(var(--text-tertiary))] opacity-40 cursor-not-allowed'
-                      }`}
-                      aria-label="Slide next schools"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
+                {(selectedTypeFilter !== 'all' || selectedRegionFilter !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setSelectedTypeFilter('all');
+                      setSelectedRegionFilter('all');
+                    }}
+                    className="h-10 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-bold flex items-center gap-1 transition-colors"
+                    title="Reset all filters"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Reset
+                  </button>
                 )}
-
               </div>
             </div>
 
-            {/* 3-Card Sliding Track */}
+            {/* 3-Card Sliding Track with Left & Right Side Navigation Arrows */}
             {loading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(3)].map((_, i) => (
@@ -823,10 +947,46 @@ export default function HomePage() {
                 </button>
               </div>
             ) : (
-              <div className="relative">
-                <div className="overflow-hidden -mx-3 px-3 py-2">
+              <div className="relative group/slider px-12 sm:px-16 lg:px-20 xl:px-24">
+                
+                {/* ── Left Side Slide Arrow (with generous spacing from cards) ─── */}
+                {filtered.length > itemsPerPage && (
+                  <button
+                    type="button"
+                    onClick={handlePrevCards}
+                    disabled={!canSlidePrev}
+                    className={`absolute -left-2 sm:-left-4 lg:-left-6 top-1/2 -translate-y-1/2 z-30 w-11 h-11 sm:w-13 sm:h-13 rounded-2xl border flex items-center justify-center transition-all shadow-2xl backdrop-blur-xl touch-manipulation ${
+                      canSlidePrev
+                        ? 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--accent))] hover:text-white hover:border-[hsl(var(--accent))] hover:scale-110 active:scale-95 cursor-pointer opacity-100'
+                        : 'opacity-0 pointer-events-none'
+                    }`}
+                    aria-label="Slide previous schools"
+                  >
+                    <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </button>
+                )}
+
+                {/* ── Right Side Slide Arrow (with generous spacing from cards) ── */}
+                {filtered.length > itemsPerPage && (
+                  <button
+                    type="button"
+                    onClick={handleNextCards}
+                    disabled={!canSlideNext}
+                    className={`absolute -right-2 sm:-right-4 lg:-right-6 top-1/2 -translate-y-1/2 z-30 w-11 h-11 sm:w-13 sm:h-13 rounded-2xl border flex items-center justify-center transition-all shadow-2xl backdrop-blur-xl touch-manipulation ${
+                      canSlideNext
+                        ? 'bg-[hsl(var(--bg-secondary))] border-[hsl(var(--border))] text-[hsl(var(--text-primary))] hover:bg-[hsl(var(--accent))] hover:text-white hover:border-[hsl(var(--accent))] hover:scale-110 active:scale-95 cursor-pointer opacity-100'
+                        : 'opacity-0 pointer-events-none'
+                    }`}
+                    aria-label="Slide next schools"
+                  >
+                    <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </button>
+                )}
+
+                {/* ── Sliding Track ─────────────────────────────────────── */}
+                <div className="overflow-hidden py-2">
                   <div
-                    className="flex transition-transform duration-500 ease-out"
+                    className="flex transition-transform duration-500 ease-out -mx-3"
                     style={{
                       transform: `translateX(-${cardSlideIndex * (100 / itemsPerPage)}%)`,
                     }}
@@ -847,6 +1007,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
+                {/* ── Pagination Dots & Status Footer ────────────────────── */}
                 <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[hsl(var(--text-tertiary))]">
                   <p className="font-semibold">
                     Showing {Math.min(filtered.length, cardSlideIndex + 1)}–{Math.min(filtered.length, cardSlideIndex + itemsPerPage)} of {filtered.length} institutions
@@ -875,24 +1036,28 @@ export default function HomePage() {
 
           </div>
         </section>
+        )}
 
         {/* ── 6. [NEW SECTION] Role-Based Stakeholder Experience Showcase ── */}
+        {isSectionVisible('stakeholders') && (
         <section id="stakeholders" className="py-20 sm:py-28 bg-[hsl(var(--bg-secondary))] border-y border-[hsl(var(--border))]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
             
             <div className="text-center max-w-3xl mx-auto mb-14 space-y-3">
-              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">Tailored Personas</p>
+              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">
+                {getSection('stakeholders')?.badge || 'Tailored Personas'}
+              </p>
               <h2 className="text-2xl sm:text-3xl font-black text-[hsl(var(--text-primary))] tracking-tight">
-                Designed for Every Educational Stakeholder
+                {getSection('stakeholders')?.title || 'Designed for Every Educational Stakeholder'}
               </h2>
               <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
-                Dedicated, role-isolated portals engineered for the distinct workflows of students, parents, educators, and institutional leadership.
+                {getSection('stakeholders')?.subtitle || 'Dedicated, role-isolated portals engineered for the distinct workflows of students, parents, educators, and institutional leadership.'}
               </p>
             </div>
 
             {/* Persona Switcher Tabs */}
-            <div className="flex justify-center mb-10">
-              <div className="flex p-1.5 rounded-2xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] max-w-full overflow-x-auto gap-1 shadow-md">
+            <div className="flex justify-center mb-10 w-full">
+              <div className="flex p-1.5 rounded-2xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] max-w-full overflow-x-auto gap-1 shadow-md touch-pan-x flex-nowrap scroll-smooth">
                 {[
                   { id: 'teacher', label: 'Teachers & Faculty', icon: Users },
                   { id: 'student', label: 'Students & Scholars', icon: GraduationCap },
@@ -902,8 +1067,9 @@ export default function HomePage() {
                 ].map(tab => (
                   <button
                     key={tab.id}
+                    type="button"
                     onClick={() => setActivePersona(tab.id as any)}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap shrink-0 cursor-pointer touch-manipulation min-h-[42px] ${
                       activePersona === tab.id
                         ? 'bg-[hsl(var(--accent))] text-white shadow-lg shadow-[hsl(var(--accent)/0.25)]'
                         : 'text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text-primary))]'
@@ -1163,18 +1329,22 @@ export default function HomePage() {
 
           </div>
         </section>
+        )}
 
         {/* ── 7. [NEW SECTION] National Curriculum & WAEC Compliance Matrix ── */}
+        {isSectionVisible('curriculum') && (
         <section id="curriculum" className="py-20 sm:py-28">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
             
             <div className="text-center max-w-3xl mx-auto mb-14 space-y-3">
-              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">National Standards</p>
+              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">
+                {getSection('curriculum')?.badge || 'National Standards'}
+              </p>
               <h2 className="text-2xl sm:text-3xl font-black text-[hsl(var(--text-primary))] tracking-tight">
-                Sierra Leone 6-3-3-4 &amp; WAEC Compliance
+                {getSection('curriculum')?.title || 'Sierra Leone 6-3-3-4 & WAEC Compliance'}
               </h2>
               <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
-                Engineered from the ground up for the West African Examinations Council (WAEC) and Ministry of Basic and Senior Secondary Education (MBSSE) standards.
+                {getSection('curriculum')?.subtitle || 'Engineered from the ground up for the West African Examinations Council (WAEC) and Ministry of Basic and Senior Secondary Education (MBSSE) standards.'}
               </p>
             </div>
 
@@ -1212,18 +1382,22 @@ export default function HomePage() {
 
           </div>
         </section>
+        )}
 
         {/* ── 8. [NEW SECTION] Enterprise Security & Data Sovereignty ── */}
+        {isSectionVisible('security') && (
         <section id="security" className="py-20 sm:py-28 bg-[hsl(var(--bg-secondary))] border-y border-[hsl(var(--border))]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
             
             <div className="text-center max-w-3xl mx-auto mb-14 space-y-3">
-              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">Enterprise Trust</p>
+              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">
+                {getSection('security')?.badge || 'Enterprise Trust'}
+              </p>
               <h2 className="text-2xl sm:text-3xl font-black text-[hsl(var(--text-primary))] tracking-tight">
-                Institutional Data Sovereignty &amp; Security
+                {getSection('security')?.title || 'Institutional Data Sovereignty & Security'}
               </h2>
               <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
-                Your institution’s records, student transcripts, and financial ledgers are protected by cryptographic multi-tenant separation and high-availability African cloud nodes.
+                {getSection('security')?.subtitle || 'Your institution’s records, student transcripts, and financial ledgers are protected by cryptographic multi-tenant separation and high-availability African cloud nodes.'}
               </p>
             </div>
 
@@ -1271,34 +1445,40 @@ export default function HomePage() {
 
           </div>
         </section>
+        )}
 
         {/* ── 9. [NEW SECTION] Institutional Pricing & Subscription Tiers ── */}
+        {isSectionVisible('pricing') && (
         <section id="pricing" className="py-20 sm:py-28">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
             
             <div className="text-center max-w-3xl mx-auto mb-12 space-y-3">
-              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">Subscription Tiers</p>
+              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">
+                {getSection('pricing')?.badge || 'Subscription Tiers'}
+              </p>
               <h2 className="text-2xl sm:text-3xl font-black text-[hsl(var(--text-primary))] tracking-tight">
-                Transparent Institutional Pricing
+                {getSection('pricing')?.title || 'Transparent Institutional Pricing'}
               </h2>
               <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
-                Simple per-term or annual pricing scaled for standalone campuses and multi-school networks. No hidden setup fees.
+                {getSection('pricing')?.subtitle || 'Simple per-term or annual pricing scaled for standalone campuses and multi-school networks. No hidden setup fees.'}
               </p>
 
               {/* Billing Toggle & Currency Switcher */}
               <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
                 <div className="flex p-1 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]">
                   <button
+                    type="button"
                     onClick={() => setBillingPeriod('term')}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer touch-manipulation min-h-[38px] ${
                       billingPeriod === 'term' ? 'bg-[hsl(var(--accent))] text-white shadow' : 'text-[hsl(var(--text-secondary))]'
                     }`}
                   >
                     Per Term (3 / Year)
                   </button>
                   <button
+                    type="button"
                     onClick={() => setBillingPeriod('annual')}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer touch-manipulation min-h-[38px] ${
                       billingPeriod === 'annual' ? 'bg-[hsl(var(--accent))] text-white shadow' : 'text-[hsl(var(--text-secondary))]'
                     }`}
                   >
@@ -1308,16 +1488,18 @@ export default function HomePage() {
 
                 <div className="flex p-1 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]">
                   <button
+                    type="button"
                     onClick={() => setPricingCurrency('NLe')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer touch-manipulation min-h-[38px] ${
                       pricingCurrency === 'NLe' ? 'bg-[hsl(var(--accent))] text-white shadow' : 'text-[hsl(var(--text-secondary))]'
                     }`}
                   >
                     Leone (NLe)
                   </button>
                   <button
+                    type="button"
                     onClick={() => setPricingCurrency('USD')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer touch-manipulation min-h-[38px] ${
                       pricingCurrency === 'USD' ? 'bg-[hsl(var(--accent))] text-white shadow' : 'text-[hsl(var(--text-secondary))]'
                     }`}
                   >
@@ -1423,18 +1605,22 @@ export default function HomePage() {
 
           </div>
         </section>
+        )}
 
         {/* ── 10. [NEW SECTION] Institutional Impact Metrics & Endorsements ── */}
+        {isSectionVisible('impact') && (
         <section id="impact" className="py-20 sm:py-28 bg-[hsl(var(--bg-secondary))] border-y border-[hsl(var(--border))]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
             
             <div className="text-center max-w-3xl mx-auto mb-14 space-y-3">
-              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">Measured Outcomes</p>
+              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">
+                {getSection('impact')?.badge || 'Measured Outcomes'}
+              </p>
               <h2 className="text-2xl sm:text-3xl font-black text-[hsl(var(--text-primary))] tracking-tight">
-                Proven Impact on Academic Administration
+                {getSection('impact')?.title || 'Proven Impact on Academic Administration'}
               </h2>
               <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
-                Transforming educational management across Sierra Leone with quantified time savings and enhanced compliance.
+                {getSection('impact')?.subtitle || 'Transforming educational management across Sierra Leone with quantified time savings and enhanced compliance.'}
               </p>
             </div>
 
@@ -1461,57 +1647,71 @@ export default function HomePage() {
 
             {/* Testimonial Quote Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="glass-card p-8 rounded-3xl border border-[hsl(var(--border))] space-y-4">
-                <div className="flex text-amber-400 gap-1 text-xs">
-                  <Star className="w-4 h-4 fill-amber-400" /><Star className="w-4 h-4 fill-amber-400" /><Star className="w-4 h-4 fill-amber-400" /><Star className="w-4 h-4 fill-amber-400" /><Star className="w-4 h-4 fill-amber-400" />
-                </div>
-                <p className="text-xs sm:text-sm text-[hsl(var(--text-secondary))] leading-relaxed italic">
-                  "{APP_NAME} eliminated grade calculation errors across our 1,200 Senior Secondary students. The automated WAEC CASS computation gave our examination officers total confidence."
-                </p>
-                <div className="pt-2 border-t border-[hsl(var(--border))] flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[hsl(var(--accent)/0.2)] text-[hsl(var(--accent))] flex items-center justify-center font-bold text-xs">
-                    AK
+              {(getSection('impact')?.items && getSection('impact')!.items.length > 0
+                ? getSection('impact')!.items.map(item => ({
+                    stars: item.rating || 5,
+                    quote: item.description || '',
+                    initials: (item.author || 'User').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+                    name: item.author || 'Educator',
+                    role: `${item.role || 'Staff'}${item.school ? ` · ${item.school}` : ''}`,
+                  }))
+                : [
+                    {
+                      stars: 5,
+                      quote: `${APP_NAME} eliminated grade calculation errors across our 1,200 Senior Secondary students. The automated WAEC CASS computation gave our examination officers total confidence.`,
+                      initials: 'AK',
+                      name: 'Alhaji Koroma',
+                      role: 'Principal · Freetown Secondary Academy',
+                    },
+                    {
+                      stars: 5,
+                      quote: 'Managing eight diocesan schools previously required manual physical paper returns. Now our governing board monitors termly fee collections and teacher allocations from one screen.',
+                      initials: 'MT',
+                      name: 'Rev. Michael Turay',
+                      role: 'Education Secretary · Diocesan Schools Board',
+                    },
+                  ]
+              ).map((t, idx) => (
+                <div key={idx} className="glass-card p-8 rounded-3xl border border-[hsl(var(--border))] space-y-4">
+                  <div className="flex text-amber-400 gap-1 text-xs">
+                    {[...Array(t.stars)].map((_, si) => (
+                      <Star key={si} className="w-4 h-4 fill-amber-400" />
+                    ))}
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-[hsl(var(--text-primary))]">Alhaji Koroma</h4>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Principal &middot; Freetown Secondary Academy</p>
+                  <p className="text-xs sm:text-sm text-[hsl(var(--text-secondary))] leading-relaxed italic">
+                    "{t.quote}"
+                  </p>
+                  <div className="pt-2 border-t border-[hsl(var(--border))] flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[hsl(var(--accent)/0.2)] text-[hsl(var(--accent))] flex items-center justify-center font-bold text-xs">
+                      {t.initials}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-[hsl(var(--text-primary))]">{t.name}</h4>
+                      <p className="text-[10px] text-[hsl(var(--text-tertiary))]">{t.role}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="glass-card p-8 rounded-3xl border border-[hsl(var(--border))] space-y-4">
-                <div className="flex text-amber-400 gap-1 text-xs">
-                  <Star className="w-4 h-4 fill-amber-400" /><Star className="w-4 h-4 fill-amber-400" /><Star className="w-4 h-4 fill-amber-400" /><Star className="w-4 h-4 fill-amber-400" /><Star className="w-4 h-4 fill-amber-400" />
-                </div>
-                <p className="text-xs sm:text-sm text-[hsl(var(--text-secondary))] leading-relaxed italic">
-                  "Managing eight diocesan schools previously required manual physical paper returns. Now our governing board monitors termly fee collections and teacher allocations from one screen."
-                </p>
-                <div className="pt-2 border-t border-[hsl(var(--border))] flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs">
-                    MT
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-[hsl(var(--text-primary))]">Rev. Michael Turay</h4>
-                    <p className="text-[10px] text-[hsl(var(--text-tertiary))]">Education Secretary &middot; Diocesan Schools Board</p>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
 
           </div>
         </section>
+        )}
 
         {/* ── 11. Onboarding Stepper & Academic Dates ─────────────────── */}
+        {isSectionVisible('faq') && (
         <section id="admissions" className="py-20 sm:py-28">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
             
             <div className="text-center max-w-2xl mx-auto mb-14 space-y-3">
-              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">Implementation Pathway</p>
+              <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">
+                {getSection('faq')?.badge || 'Implementation Pathway & FAQ'}
+              </p>
               <h2 className="text-2xl sm:text-3xl font-black text-[hsl(var(--text-primary))] tracking-tight">
-                Four Steps, Zero Friction
+                {getSection('faq')?.title || 'Everything You Need to Know'}
               </h2>
               <p className="text-sm text-[hsl(var(--text-secondary))]">
-                We make provisioning and onboarding seamless for both standalone academies and multi-school networks.
+                {getSection('faq')?.subtitle || 'We make provisioning and onboarding seamless for both standalone academies and multi-school networks.'}
               </p>
             </div>
 
@@ -1535,35 +1735,36 @@ export default function HomePage() {
               <div className="lg:col-span-7 space-y-4">
                 <h3 className="text-lg font-black text-[hsl(var(--text-primary))] mb-3">Frequently Asked Questions</h3>
                 
-                <details className="glass-card rounded-2xl border border-[hsl(var(--border))] p-5 group [&_summary::-webkit-details-marker]:hidden" open>
-                  <summary className="font-bold text-sm text-[hsl(var(--text-primary))] cursor-pointer flex justify-between items-center">
-                    How does multi-tenant data isolation work?
-                    <ChevronRight className="w-4 h-4 text-[hsl(var(--text-tertiary))] group-open:rotate-90 transition-transform" />
-                  </summary>
-                  <p className="text-xs text-[hsl(var(--text-secondary))] mt-3 leading-relaxed">
-                    Each school operates in total isolation using PostgreSQL Row-Level Security (RLS) policies. School administrators and teachers can only query data tagged to their tenant UUID.
-                  </p>
-                </details>
-
-                <details className="glass-card rounded-2xl border border-[hsl(var(--border))] p-5 group [&_summary::-webkit-details-marker]:hidden">
-                  <summary className="font-bold text-sm text-[hsl(var(--text-primary))] cursor-pointer flex justify-between items-center">
-                    Can we use our own school custom domain?
-                    <ChevronRight className="w-4 h-4 text-[hsl(var(--text-tertiary))] group-open:rotate-90 transition-transform" />
-                  </summary>
-                  <p className="text-xs text-[hsl(var(--text-secondary))] mt-3 leading-relaxed">
-                    Yes. Every school is allocated a subdomain by default (e.g. <code>albert-academy.localhost:3000</code> or <code>albert-academy.yoursaas.com</code>), and can map custom apex domains.
-                  </p>
-                </details>
-
-                <details className="glass-card rounded-2xl border border-[hsl(var(--border))] p-5 group [&_summary::-webkit-details-marker]:hidden">
-                  <summary className="font-bold text-sm text-[hsl(var(--text-primary))] cursor-pointer flex justify-between items-center">
-                    Is the AI lesson plan generator constrained to our syllabus?
-                    <ChevronRight className="w-4 h-4 text-[hsl(var(--text-tertiary))] group-open:rotate-90 transition-transform" />
-                  </summary>
-                  <p className="text-xs text-[hsl(var(--text-secondary))] mt-3 leading-relaxed">
-                    Yes. Our Gemini-powered AI engine is strictly instructed to only operationalize published learning outcomes and approved topic structures created by your academic board.
-                  </p>
-                </details>
+                {(getSection('faq')?.items && getSection('faq')!.items.length > 0
+                  ? getSection('faq')!.items.map(item => ({
+                      q: item.question || item.title || '',
+                      a: item.answer || item.description || '',
+                    }))
+                  : [
+                      {
+                        q: 'How does multi-tenant data isolation work?',
+                        a: 'Each school operates in total isolation using PostgreSQL Row-Level Security (RLS) policies. School administrators and teachers can only query data tagged to their tenant UUID.',
+                      },
+                      {
+                        q: 'Can we use our own school custom domain?',
+                        a: 'Yes. Every school is allocated a subdomain by default (e.g. albert-academy.localhost:3000 or albert-academy.yoursaas.com), and can map custom apex domains.',
+                      },
+                      {
+                        q: 'Is the AI lesson plan generator constrained to our syllabus?',
+                        a: 'Yes. Our Gemini-powered AI engine is strictly instructed to only operationalize published learning outcomes and approved topic structures created by your academic board.',
+                      },
+                    ]
+                ).map((faqItem, fi) => (
+                  <details key={fi} className="glass-card rounded-2xl border border-[hsl(var(--border))] p-5 group [&_summary::-webkit-details-marker]:hidden" open={fi === 0}>
+                    <summary className="font-bold text-sm text-[hsl(var(--text-primary))] cursor-pointer flex justify-between items-center">
+                      {faqItem.q}
+                      <ChevronRight className="w-4 h-4 text-[hsl(var(--text-tertiary))] group-open:rotate-90 transition-transform" />
+                    </summary>
+                    <p className="text-xs text-[hsl(var(--text-secondary))] mt-3 leading-relaxed">
+                      {faqItem.a}
+                    </p>
+                  </details>
+                ))}
               </div>
 
               <div className="lg:col-span-5 glass-card rounded-3xl border border-[hsl(var(--border))] p-6 space-y-4">
@@ -1597,60 +1798,92 @@ export default function HomePage() {
 
           </div>
         </section>
+        )}
 
         {/* ── 12. Request a Demonstration & Contact Form ─────────────── */}
-        <section id="contact" className="py-20 sm:py-28 bg-[hsl(var(--bg-secondary))] border-t border-[hsl(var(--border))]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+        {isSectionVisible('contact') && (
+        <section id="contact" className="py-16 sm:py-24 lg:py-28 bg-[hsl(var(--bg-secondary))] border-t border-[hsl(var(--border))] relative overflow-hidden">
+          <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
               
+              {/* Left Column: Contact info & Trust Points */}
               <div className="lg:col-span-5 space-y-6">
-                <p className="text-xs font-black text-[hsl(var(--accent))] uppercase tracking-widest">Connect With Us</p>
-                <h2 className="text-2xl sm:text-3xl font-black text-[hsl(var(--text-primary))] tracking-tight">
-                  Experience {APP_NAME} in Action
-                </h2>
-                <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
-                  Request a guided walkthrough tailored to your institution’s size, national curriculum requirements, and administrative goals.
-                </p>
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[hsl(var(--accent)/0.1)] border border-[hsl(var(--accent)/0.25)] text-[hsl(var(--accent))] text-xs font-bold">
+                    <Sparkles className="w-3.5 h-3.5" /> {getSection('contact')?.badge || 'Direct Implementation Support'}
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[hsl(var(--text-primary))] tracking-tight">
+                    {getSection('contact')?.title || `Experience ${APP_NAME} in Action`}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[hsl(var(--text-secondary))] leading-relaxed">
+                    {getSection('contact')?.subtitle || 'Request a live walkthrough tailored to your institution’s size, national curriculum requirements, and administrative workflows.'}
+                  </p>
+                </div>
 
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center gap-3.5 text-sm text-[hsl(var(--text-secondary))]">
-                    <div className="w-9 h-9 rounded-xl bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))] flex items-center justify-center flex-shrink-0">
-                      <MapPin className="w-4 h-4" />
+                <div className="space-y-3.5 pt-1">
+                  <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs sm:text-sm text-[hsl(var(--text-secondary))]">
+                    <div className="w-10 h-10 rounded-xl bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))] flex items-center justify-center shrink-0">
+                      <MapPin className="w-5 h-5" />
                     </div>
-                    <span>Freetown, Sierra Leone &middot; Global Cloud Deployments</span>
-                  </div>
-                  <div className="flex items-center gap-3.5 text-sm text-[hsl(var(--text-secondary))]">
-                    <div className="w-9 h-9 rounded-xl bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))] flex items-center justify-center flex-shrink-0">
-                      <Mail className="w-4 h-4" />
+                    <div>
+                      <span className="font-bold text-[hsl(var(--text-primary))] block">Headquarters &amp; Deployments</span>
+                      <span className="text-[11px] text-[hsl(var(--text-tertiary))]">Freetown, Sierra Leone &middot; Global Cloud Hubs</span>
                     </div>
-                    <span>contact@schoolsaas.com</span>
                   </div>
-                  <div className="flex items-center gap-3.5 text-sm text-[hsl(var(--text-secondary))]">
-                    <div className="w-9 h-9 rounded-xl bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))] flex items-center justify-center flex-shrink-0">
-                      <Phone className="w-4 h-4" />
+
+                  <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs sm:text-sm text-[hsl(var(--text-secondary))]">
+                    <div className="w-10 h-10 rounded-xl bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))] flex items-center justify-center shrink-0">
+                      <Mail className="w-5 h-5" />
                     </div>
-                    <span>+232 76 000 000 / +232 78 000 000</span>
+                    <div>
+                      <span className="font-bold text-[hsl(var(--text-primary))] block">Email Advisory</span>
+                      <a href="mailto:contact@schoolsaas.com" className="text-[11px] text-[hsl(var(--accent))] hover:underline">
+                        contact@schoolsaas.com
+                      </a>
+                    </div>
                   </div>
+
+                  <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs sm:text-sm text-[hsl(var(--text-secondary))]">
+                    <div className="w-10 h-10 rounded-xl bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))] flex items-center justify-center shrink-0">
+                      <Phone className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-[hsl(var(--text-primary))] block">Direct WhatsApp &amp; Hotlines</span>
+                      <span className="text-[11px] text-[hsl(var(--text-tertiary))]">+232 76 000 000 / +232 78 000 000</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-3 text-xs text-emerald-400">
+                  <Shield className="w-5 h-5 shrink-0" />
+                  <span className="font-medium leading-relaxed">
+                    Zero-downtime transition &middot; We assist in migrating your existing spreadsheets and student records at no extra cost.
+                  </span>
                 </div>
               </div>
 
+              {/* Right Column: Responsive Demonstration Form Card */}
               <div className="lg:col-span-7">
-                <div className="glass-card rounded-3xl p-7 sm:p-9 border border-[hsl(var(--border))] shadow-2xl">
+                <div className="glass-card rounded-3xl p-5 sm:p-8 lg:p-9 border border-[hsl(var(--border))] shadow-2xl bg-[hsl(var(--bg-secondary))]">
                   {demoSubmitted ? (
-                    <div className="text-center py-10 space-y-4 animate-in fade-in">
+                    <div className="text-center py-8 sm:py-10 space-y-4 animate-in fade-in">
                       <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
                         <CheckCircle2 className="w-8 h-8" />
                       </div>
-                      <h3 className="text-xl font-black text-[hsl(var(--text-primary))]">Demonstration Request Received!</h3>
-                      <p className="text-xs text-[hsl(var(--text-secondary))] max-w-md mx-auto leading-relaxed">
-                        Thank you for reaching out. We have logged your institutional onboarding request for <strong className="text-[hsl(var(--text-primary))]">{demoForm.institutionName}</strong>. One of our academic implementation consultants will contact you at <strong className="text-[hsl(var(--text-primary))]">{demoForm.email}</strong> within 24 hours.
+                      <h3 className="text-xl sm:text-2xl font-black text-[hsl(var(--text-primary))]">
+                        Demonstration Request Received!
+                      </h3>
+                      <p className="text-xs sm:text-sm text-[hsl(var(--text-secondary))] max-w-md mx-auto leading-relaxed">
+                        Thank you for reaching out. We have logged your onboarding request for <strong className="text-[hsl(var(--text-primary))]">{demoForm.institutionName}</strong>. An implementation specialist will reach out to <strong className="text-[hsl(var(--text-primary))]">{demoForm.email}</strong> within 24 hours.
                       </p>
+                      
                       <div className="p-4 rounded-2xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] max-w-md mx-auto text-left text-xs space-y-1.5 text-[hsl(var(--text-secondary))]">
                         <p><strong className="text-[hsl(var(--text-primary))]">Contact:</strong> {demoForm.name} {demoForm.phone && `(${demoForm.phone})`}</p>
                         <p><strong className="text-[hsl(var(--text-primary))]">Institution:</strong> {demoForm.institutionName} ({demoForm.type === 'organization' ? 'Group / Diocesan Board' : 'Standalone School'})</p>
                         <p><strong className="text-[hsl(var(--text-primary))]">Jurisdiction:</strong> {demoForm.region}</p>
                         {demoForm.estimatedStudents && <p><strong className="text-[hsl(var(--text-primary))]">Est. Students:</strong> {demoForm.estimatedStudents}</p>}
                       </div>
+
                       <button
                         onClick={() => {
                           setDemoSubmitted(false);
@@ -1679,74 +1912,101 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                         <div>
-                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">Contact Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={demoForm.name}
-                            onChange={e => setDemoForm({ ...demoForm, name: e.target.value })}
-                            placeholder="Dr. Samuel Koroma"
-                            className="w-full h-12 px-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-                          />
+                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">
+                            Contact Name *
+                          </label>
+                          <div className="relative">
+                            <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--text-tertiary))]" />
+                            <input
+                              type="text"
+                              required
+                              value={demoForm.name}
+                              onChange={e => setDemoForm({ ...demoForm, name: e.target.value })}
+                              placeholder="Dr. Samuel Koroma"
+                              className="w-full h-11 sm:h-12 pl-10 pr-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs sm:text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors font-medium"
+                            />
+                          </div>
                         </div>
+
                         <div>
-                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">Email Address *</label>
-                          <input
-                            type="email"
-                            required
-                            value={demoForm.email}
-                            onChange={e => setDemoForm({ ...demoForm, email: e.target.value })}
-                            placeholder="samuel@institution.edu.sl"
-                            className="w-full h-12 px-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-                          />
+                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">
+                            Email Address *
+                          </label>
+                          <div className="relative">
+                            <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--text-tertiary))]" />
+                            <input
+                              type="email"
+                              required
+                              value={demoForm.email}
+                              onChange={e => setDemoForm({ ...demoForm, email: e.target.value })}
+                              placeholder="samuel@institution.edu.sl"
+                              className="w-full h-11 sm:h-12 pl-10 pr-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs sm:text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors font-medium"
+                            />
+                          </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                         <div>
-                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">Institution Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={demoForm.institutionName}
-                            onChange={e => setDemoForm({ ...demoForm, institutionName: e.target.value })}
-                            placeholder="e.g. St. Edwards Secondary School"
-                            className="w-full h-12 px-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-                          />
+                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">
+                            Institution Name *
+                          </label>
+                          <div className="relative">
+                            <Building2 className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--text-tertiary))]" />
+                            <input
+                              type="text"
+                              required
+                              value={demoForm.institutionName}
+                              onChange={e => setDemoForm({ ...demoForm, institutionName: e.target.value })}
+                              placeholder="e.g. St. Edward's Secondary"
+                              className="w-full h-11 sm:h-12 pl-10 pr-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs sm:text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors font-medium"
+                            />
+                          </div>
                         </div>
+
                         <div>
-                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">Phone Number</label>
-                          <input
-                            type="tel"
-                            value={demoForm.phone}
-                            onChange={e => setDemoForm({ ...demoForm, phone: e.target.value })}
-                            placeholder="+232 76 000 000"
-                            className="w-full h-12 px-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-                          />
+                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">
+                            Phone / WhatsApp Number
+                          </label>
+                          <div className="relative">
+                            <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--text-tertiary))]" />
+                            <input
+                              type="tel"
+                              value={demoForm.phone}
+                              onChange={e => setDemoForm({ ...demoForm, phone: e.target.value })}
+                              placeholder="+232 76 000 000"
+                              className="w-full h-11 sm:h-12 pl-10 pr-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs sm:text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors font-medium"
+                            />
+                          </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
                         <div>
-                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">Institution Type</label>
+                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">
+                            Institution Type
+                          </label>
                           <select
                             value={demoForm.type}
                             onChange={e => setDemoForm({ ...demoForm, type: e.target.value })}
-                            className="w-full h-12 px-3 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors font-medium"
+                            className="w-full h-11 sm:h-12 px-3 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors font-medium"
                           >
                             <option value="school">Standalone School / College</option>
                             <option value="organization">Multi-School Group / Diocesan Board</option>
                             <option value="vocational">Vocational / Technical Institute</option>
                           </select>
                         </div>
+
                         <div>
-                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">Region / Jurisdiction</label>
+                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">
+                            Region / Jurisdiction
+                          </label>
                           <select
                             value={demoForm.region}
                             onChange={e => setDemoForm({ ...demoForm, region: e.target.value })}
-                            className="w-full h-12 px-3 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors font-medium"
+                            className="w-full h-11 sm:h-12 px-3 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors font-medium"
                           >
                             <option value="Western Area (Freetown)">Western Area (Freetown)</option>
                             <option value="Eastern Province (Kenema/Kono)">Eastern Province</option>
@@ -1756,44 +2016,54 @@ export default function HomePage() {
                             <option value="International / Other">International / Other</option>
                           </select>
                         </div>
+
                         <div>
-                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">Est. Students</label>
-                          <input
-                            type="number"
-                            value={demoForm.estimatedStudents}
-                            onChange={e => setDemoForm({ ...demoForm, estimatedStudents: e.target.value })}
-                            placeholder="e.g. 1200"
-                            className="w-full h-12 px-3 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-                          />
+                          <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">
+                            Est. Students
+                          </label>
+                          <div className="relative">
+                            <Users className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--text-tertiary))]" />
+                            <input
+                              type="number"
+                              value={demoForm.estimatedStudents}
+                              onChange={e => setDemoForm({ ...demoForm, estimatedStudents: e.target.value })}
+                              placeholder="e.g. 1200"
+                              className="w-full h-11 sm:h-12 pl-9 pr-3 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs sm:text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors font-medium"
+                            />
+                          </div>
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">Requirements / Message</label>
+                        <label className="block text-xs font-bold text-[hsl(var(--text-secondary))] mb-1.5">
+                          Special Requirements / Note
+                        </label>
                         <textarea
                           rows={3}
                           value={demoForm.message}
                           onChange={e => setDemoForm({ ...demoForm, message: e.target.value })}
                           placeholder="Tell us about your student enrollment size, grading requirements, or data migration needs..."
-                          className="w-full p-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                          className="w-full p-3.5 sm:p-4 rounded-xl bg-[hsl(var(--bg-primary))] border border-[hsl(var(--border))] text-xs sm:text-sm text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
                         />
                       </div>
 
-                      <button
-                        type="submit"
-                        disabled={submittingDemo}
-                        className="w-full h-13 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-black text-sm shadow-xl shadow-[hsl(var(--accent)/0.25)] hover:opacity-95 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                      >
-                        {submittingDemo ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin" /> Submitting Request...
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-4 h-4" /> Submit Demo &amp; Onboarding Request
-                          </>
-                        )}
-                      </button>
+                      <div className="pt-2">
+                        <button
+                          type="submit"
+                          disabled={submittingDemo}
+                          className="w-full h-12 sm:h-13 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white font-black text-xs sm:text-sm shadow-xl shadow-[hsl(var(--accent)/0.25)] hover:opacity-95 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {submittingDemo ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" /> Submitting Request...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="w-4 h-4" /> Submit Demo &amp; Onboarding Request
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </form>
                   )}
                 </div>
@@ -1802,11 +2072,12 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        )}
       </main>
 
       {/* ── 13. Academic Platform Footer ────────────────────────────── */}
-      <footer className="bg-[hsl(var(--bg-primary))] border-t border-[hsl(var(--border))] py-14">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <footer className="bg-[hsl(var(--bg-primary))] border-t border-[hsl(var(--border))] py-14 w-full">
+        <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
             
             <div className="col-span-2 space-y-3.5">

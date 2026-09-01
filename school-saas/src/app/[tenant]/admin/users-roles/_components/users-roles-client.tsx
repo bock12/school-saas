@@ -207,7 +207,7 @@ export function UsersRolesClient({ tenantSlug, profiles, isOrgAdmin }: UsersRole
       {resetPasswordUser && (
         <PasswordResetModal
           user={resetPasswordUser}
-          tenantSlug={tenantSlug}
+          tenantSlug={resetPasswordUser.schoolSlug || tenantSlug}
           onClose={() => setResetPasswordUser(null)}
         />
       )}

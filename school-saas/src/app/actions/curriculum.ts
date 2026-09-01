@@ -77,6 +77,19 @@ export interface CoverageStats {
 // Helper: resolve tenant UUID
 // ─────────────────────────────────────────────────────────────
 
+function formatDateStr(d: any): string | undefined {
+  if (!d) return undefined;
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date) return d.toISOString().split('T')[0];
+  return String(d);
+}
+
+function formatIsoStr(d: any): string | undefined {
+  if (!d) return undefined;
+  if (d instanceof Date) return d.toISOString();
+  return String(d);
+}
+
 async function resolveTenantId(slugOrId: string): Promise<string | null> {
   const pool = getPgPool();
   if (!pool) return null;
@@ -135,7 +148,18 @@ export async function getCurriculumVersions(
       params
     );
 
-    return { success: true, data: res.rows };
+    const formatted = res.rows.map((cv: any) => ({
+      ...cv,
+      effective_from: formatDateStr(cv.effective_from),
+      effective_to: formatDateStr(cv.effective_to),
+      submitted_at: formatIsoStr(cv.submitted_at),
+      approved_at: formatIsoStr(cv.approved_at),
+      published_at: formatIsoStr(cv.published_at),
+      created_at: formatIsoStr(cv.created_at) || new Date().toISOString(),
+      updated_at: formatIsoStr(cv.updated_at) || new Date().toISOString(),
+    }));
+
+    return { success: true, data: formatted };
   } catch (err: any) {
     return { success: false, data: [], error: err.message };
   }

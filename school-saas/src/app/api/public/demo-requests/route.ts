@@ -15,16 +15,14 @@ function getPgPool() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const {
-      contactName,
-      email,
-      institutionName,
-      institutionType = 'school',
-      phone,
-      region,
-      estimatedStudents,
-      requirements,
-    } = body;
+    const contactName = body.contactName ?? body.name;
+    const email = body.email;
+    const institutionName = body.institutionName;
+    const institutionType = body.institutionType ?? body.type ?? 'school';
+    const phone = body.phone;
+    const region = body.region;
+    const estimatedStudents = body.estimatedStudents;
+    const requirements = body.requirements ?? body.message;
 
     // Validate required fields
     if (!contactName || !email || !institutionName) {
@@ -124,10 +122,11 @@ export async function POST(req: Request) {
       { error: 'Unable to save demonstration request. Please try again or contact support.' },
       { status: 500 }
     );
-  } catch (err: any) {
+  } catch (err) {
     console.error('Demo request API error:', err);
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
     return NextResponse.json(
-      { error: err.message || 'An unexpected error occurred.' },
+      { error: message },
       { status: 500 }
     );
   }

@@ -53,6 +53,13 @@ export interface DetailedTermRecord {
   sort_order: number;
 }
 
+function formatDt(d: any): string {
+  if (!d) return '';
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date) return d.toISOString().split('T')[0];
+  return String(d);
+}
+
 /**
  * Helper to resolve tenant UUID from slug or UUID.
  */
@@ -632,8 +639,8 @@ export async function getAllTerms(
         academic_year_id: t.academic_year_id,
         academic_year_name: t.academic_year_name || 'Unknown Session',
         name: t.name,
-        start_date: t.start_date,
-        end_date: t.end_date,
+        start_date: formatDt(t.start_date),
+        end_date: formatDt(t.end_date),
         is_current: !!t.is_current,
         sort_order: t.sort_order || 1,
       }));
@@ -662,8 +669,8 @@ export async function getAllTerms(
       academic_year_id: t.academic_year_id,
       academic_year_name: t.academic_years?.name || 'Unknown Session',
       name: t.name,
-      start_date: t.start_date,
-      end_date: t.end_date,
+      start_date: formatDt(t.start_date),
+      end_date: formatDt(t.end_date),
       is_current: !!t.is_current,
       sort_order: t.sort_order || 1,
     }));
@@ -915,5 +922,21 @@ export async function setActiveSingleTerm(
   } catch (err: any) {
     console.error('setActiveSingleTerm error:', err);
     return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Lightweight helper to get academic years for dropdowns without direct client DB imports.
+ */
+export async function getSimpleAcademicYears(
+  tenantSlug: string
+): Promise<{ id: string; name: string; is_current: boolean }[]> {
+  try {
+    const res = await getAcademicSessions(tenantSlug);
+    if (!res.success || !res.data) return [];
+    return res.data.map((y) => ({ id: y.id, name: y.name, is_current: y.is_current }));
+  } catch (err) {
+    console.error('getSimpleAcademicYears error:', err);
+    return [];
   }
 }
