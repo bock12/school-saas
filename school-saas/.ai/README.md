@@ -17,4 +17,10 @@ The actual repository implementation and Git history are authoritative. `.ai/` r
 6. `05-WORKFLOW/TASK-QUEUE.md`
 7. Active task + linked review/risk/ADR records.
 
-Legacy duplicate records are being consolidated under the AI-EOS migration branch. Do not create new competing top-level policy files.
+## Canonical structure
+Each governance topic has one active canonical record under the numbered AI-EOS directories. Historical records are explicitly marked as legacy/reference and must not override active governance.
+
+## Security posture
+The repository carries open critical/high findings. Do not begin remediation implicitly; use an approved task, required security review, safe test environment and human approval for privileged, database, RLS, credential or destructive operations.
+
+Do not create new competing top-level policy files.
