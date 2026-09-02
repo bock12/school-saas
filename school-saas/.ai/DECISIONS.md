@@ -1,29 +1,23 @@
 # Architecture Decisions
 
-## ADR-0001 - Canonical AI governance records use underscore filenames
-
-**Date:** 2026-09-01
-
-**Status:** Proposed - pending human acceptance
-
-**Authority:** Codex recommendation; human approval required
+## ADR-0001 — AI-EOS authority migration
+**Date:** 2026-09-02  
+**Status:** Proposed — human acceptance required  
+**Authority:** ChatGPT recommendation; human approval required
 
 ### Context
-
-The requested structure specifies underscore filenames (`PROJECT_CONTEXT.md`, `CODING_STANDARDS.md`, `SECURITY_POLICY.md`, `DEFINITION_OF_DONE.md`), while pre-existing hyphen-named counterparts contain starter guidance. Keeping both as active records would create drift.
+The original collaboration model made Codex Chief Software Architect/Project Supervisor. Codex availability is no longer sufficient for the project. The repository must remain provider-independent while preserving Gemini/Antigravity implementation and human final authority.
 
 ### Decision
-
-Use the requested underscore-named records as canonical from 2026-09-01. Preserve hyphen-named counterparts as legacy/reference documentation; do not delete them. `.ai/AGENTS.md` directs agents to canonical records.
-
-### Alternatives
-
-Delete/rename legacy files (rejected: loses history); keep both active (rejected: conflicts drift); retain only hyphen files (rejected: does not meet requested structure).
+Use ChatGPT as Chief Software Architect and Project Supervisor. Gemini/Antigravity remains Implementation Engineer. GitHub is source of truth. Human retains final authority over merge/release, production, credentials, destructive operations, migration execution and material architecture/security exceptions.
 
 ### Consequences
+AI-EOS governance can continue without Codex. No application behavior changes are implied by this governance migration.
 
-New work updates canonical records. A future human-approved cleanup may archive legacy documents after checking external references.
+## ADR-0002 — Canonical `.ai` structure
+**Status:** Proposed — human acceptance required
+
+Consolidate duplicate top-level policy files into the AI-EOS categorized structure. Preserve substantive project/security/task history; do not maintain competing active copies.
 
 ## ADR protocol
-
-New ADRs cover material architecture, schema/RLS, dependency, integration, boundary, and compatibility choices. Record evidence, options, decision, consequences, security/data impact, rollout/rollback, authority, and links. A human accepts material operational decisions.
+New ADRs cover material architecture, schema/RLS, dependency, integration, boundary and compatibility choices. Record evidence, alternatives, decision, consequences, security/data impact, rollout/rollback, authority and links. Human acceptance is required for material operational decisions.
