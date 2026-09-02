@@ -273,6 +273,12 @@ export default function StudentStreamAssignmentsPage() {
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <Link
+            href={`/${tenant}/admin/academics/electives`}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-secondary))] hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] transition-colors"
+          >
+            <BookMarked className="w-3.5 h-3.5" /> Elective Approvals
+          </Link>
+          <Link
             href={`/${tenant}/admin/academics/streams`}
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-secondary))] hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] transition-colors"
           >

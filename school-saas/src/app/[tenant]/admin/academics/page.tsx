@@ -146,6 +146,16 @@ export default function AcademicsDashboardPage() {
       badge: 'Auto-Enroll'
     },
     {
+      id: 'elective-approvals',
+      label: 'Elective Selections & Approvals',
+      desc: 'Review secondary elective choices, check credit rules & waitlists',
+      href: `/${tenant}/admin/academics/electives`,
+      icon: BookMarked,
+      category: 'allocation',
+      primary: true,
+      badge: 'Tier 2'
+    },
+    {
       id: 'timetable',
       label: 'Master Timetable',
       desc: 'Generate & publish automated weekly class schedules',

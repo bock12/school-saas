@@ -345,6 +345,84 @@ export interface StudentEnrolledSubjectDetail {
   periods_per_week?: number;
   teacher_name?: string;
   enrolled_at: string;
+  waitlist_position?: number | null;
+}
+
+export interface ElectiveSubjectOption {
+  offering_id: string;
+  subject_id: string;
+  subject_name: string;
+  subject_code: string;
+  periods_per_week: number;
+  duration_minutes: number;
+  teacher_name?: string;
+  capacity: number;
+  enrolled_count: number;
+  is_full: boolean;
+  syllabus_summary?: string;
+}
+
+export interface StreamElectiveGroupOption {
+  elective_group: string;
+  min_selections: number;
+  max_selections: number;
+  options: ElectiveSubjectOption[];
+}
+
+export interface StudentElectivePackage {
+  student_id: string;
+  student_name: string;
+  admission_number: string;
+  class_name: string;
+  section_name: string;
+  stream_id: string;
+  stream_name: string;
+  stream_code: string;
+  academic_year_id: string;
+  academic_year_name: string;
+  core_subjects: StudentEnrolledSubjectDetail[];
+  elective_groups: StreamElectiveGroupOption[];
+  selected_offering_ids: string[];
+  electives_submitted: boolean;
+  electives_approved: boolean;
+  electives_locked: boolean;
+  submitted_at?: string;
+}
+
+export interface SubmitElectivesPayload {
+  student_id: string;
+  academic_year_id: string;
+  selections: Array<{ offering_id: string; elective_group: string }>;
+}
+
+export interface ElectiveSubmissionAdminRow {
+  assignment_id: string;
+  student_id: string;
+  student_name: string;
+  admission_number: string;
+  class_name: string;
+  section_name: string;
+  stream_name: string;
+  stream_code: string;
+  electives_submitted: boolean;
+  electives_approved: boolean;
+  electives_locked: boolean;
+  submitted_at?: string;
+  chosen_electives: Array<{
+    enrollment_id: string;
+    subject_name: string;
+    subject_code: string;
+    elective_group: string;
+    approval_status: string;
+    waitlist_position?: number | null;
+  }>;
+}
+
+export interface ReviewStudentElectivesPayload {
+  assignment_id: string;
+  student_id: string;
+  action: 'approve' | 'reject';
+  review_comment?: string;
 }
 
 // ─────────────────────────────────────────────────────────────

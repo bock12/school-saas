@@ -467,8 +467,8 @@ export async function syncStreamCoreEnrollments(
         ssa.student_id,
         so.id AS offering_id,
         'active'::enrollment_status,
-        'stream_core'::enrollment_type,
-        'approved'::enrollment_approval_status,
+        'stream_core',
+        'approved',
         ssa.id AS stream_assignment_id,
         NOW()
       FROM student_stream_assignments ssa
@@ -575,29 +575,58 @@ export async function seedSampleStudentsAndStreams(
     const langStreamId = langStream.rows[0]?.id;
     const comStreamId = comStream.rows[0]?.id;
 
-    // 5. Ensure core rules exist for Science Stream
-    if (sciStreamId) {
-      // Link core subjects: Mathematics, English, Biology, Chemistry, Physics
-      const sciSubjs = await pool.query(
-        `SELECT id, name FROM subjects WHERE tenant_id = $1 AND code IN ('MTH-01', 'ENG-01', 'BIO-01', 'CHM-01', 'PHY-01')`,
-        [tenantId]
+    // 5. Seed Core Subjects if not present
+    const defaultSubjects = [
+      { code: 'MTH-01', name: 'General Mathematics', examinable: true },
+      { code: 'ENG-01', name: 'English Language', examinable: true },
+      { code: 'BIO-01', name: 'Biology', examinable: true },
+      { code: 'CHM-01', name: 'Chemistry', examinable: true },
+      { code: 'PHY-01', name: 'Physics', examinable: true },
+      { code: 'LIT-01', name: 'Literature in English', examinable: true },
+      { code: 'GOV-01', name: 'Government', examinable: true },
+      { code: 'ACC-01', name: 'Financial Accounting', examinable: true },
+      { code: 'ECN-01', name: 'Economics', examinable: true },
+    ];
+
+    const subjectMap: Record<string, string> = {};
+    for (const s of defaultSubjects) {
+      const ins = await pool.query(
+        `INSERT INTO subjects (tenant_id, code, name, is_examinable, is_active)
+         VALUES ($1, $2, $3, $4, true)
+         ON CONFLICT (tenant_id, code) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id`,
+        [tenantId, s.code, s.name, s.examinable]
       );
-      for (const subj of sciSubjs.rows) {
+      subjectMap[s.code] = ins.rows[0].id;
+    }
+
+    // Helper to configure stream core rules & offerings
+    const configureStream = async (streamId: string | undefined, codes: string[], sectionId: string) => {
+      if (!streamId || !sectionId) return;
+      for (const code of codes) {
+        const subjId = subjectMap[code];
+        if (!subjId) continue;
         await pool.query(
           `INSERT INTO stream_subject_rules (tenant_id, stream_id, subject_id, rule_type, min_selections, max_selections, is_active)
            VALUES ($1, $2, $3, 'core', 1, 1, true)
            ON CONFLICT DO NOTHING`,
-          [tenantId, sciStreamId, subj.id]
+          [tenantId, streamId, subjId]
         );
-        // Create subject offering for sectionSciId so trigger can resolve offering
         await pool.query(
           `INSERT INTO subject_offerings (tenant_id, academic_year_id, subject_id, section_id, periods_per_week, duration_minutes, status, is_compulsory, requirement_type)
-           VALUES ($1, $2, $3, $4, 5, 40, 'active', true, 'core')
-           ON CONFLICT DO NOTHING`,
-          [tenantId, academicYearId, subj.id, sectionSciId]
+           SELECT $1, $2, $3, $4, 5, 40, 'active', true, 'core'
+           WHERE NOT EXISTS (
+             SELECT 1 FROM subject_offerings
+             WHERE academic_year_id = $2 AND subject_id = $3 AND section_id = $4 AND term_id IS NULL
+           )`,
+          [tenantId, academicYearId, subjId, sectionId]
         );
       }
-    }
+    };
+
+    await configureStream(sciStreamId, ['MTH-01', 'ENG-01', 'BIO-01', 'CHM-01', 'PHY-01'], sectionSciId);
+    await configureStream(langStreamId, ['MTH-01', 'ENG-01', 'LIT-01', 'GOV-01'], sectionArtId);
+    await configureStream(comStreamId, ['MTH-01', 'ENG-01', 'ACC-01', 'ECN-01'], sectionComId);
 
     // 6. Seed Sample Students
     const sampleStudents = [
