@@ -30,7 +30,7 @@ The human has final authority and controls secrets, real environments, database 
 
 ## Mandatory startup procedure
 
-Before substantive work, read root `AGENTS.md` and `CLAUDE.md`; then `.ai/PROJECT-CONTEXT.md`, `.ai/ARCHITECTURE.md`, `.ai/CODING-STANDARDS.md`, `.ai/SECURITY-POLICY.md`, the active task, relevant ADRs/risks/module status, and open review findings. Inspect affected implementation before proposing or implementing change.
+Before substantive work, read root `AGENTS.md` and `CLAUDE.md`; then `.ai/00-GOVERNANCE/AI-GOVERNANCE.md`, `.ai/01-PROJECT/PROJECT-CONTEXT.md`, `.ai/02-ARCHITECTURE/ARCHITECTURE.md`, `.ai/03-ENGINEERING/CODING-STANDARDS.md`, `.ai/04-SECURITY/SECURITY-POLICY.md`, `.ai/05-WORKFLOW/TASK-QUEUE.md`, relevant ADRs/risks/module status, and open review findings. Inspect affected implementation before proposing or implementing change.
 
 ## Repository-truth protocol
 
