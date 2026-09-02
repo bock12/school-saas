@@ -1,27 +1,34 @@
-# ROADMAP.md
+# Development Roadmap
 
-## Current milestone
+This roadmap is not implementation authorization; every item requires a scoped task and required human approval.
 
-### Milestone 1 — AI Collaboration Foundation
-- [ ] Add `.ai` documentation
-- [ ] Add Codex prompt
-- [ ] Add Gemini prompt
-- [ ] Establish task/report/review workflow
-- [ ] Test workflow with a small feature
+## Milestone G - Governance baseline
 
-## Future milestones
+- [x] Canonical governance, authority, task/report/review, ADR, risk, module, and security records.
+- [ ] Human accepts ADR-0001 and operating model.
 
-### Milestone 2 — Core school modules
-Define project-specific modules here.
+## Milestone 1 - Security and tenant boundaries
 
-### Milestone 3 — Quality automation
-- [ ] CI checks
-- [ ] Automated tests
-- [ ] Security scanning
-- [ ] Build verification
+- [ ] Inventory service-role calls and protected APIs.
+- [ ] Prove role authorization and cross-tenant RLS denial.
+- [ ] Review public exposure and abuse controls.
+- [ ] Remediate verified high/critical findings by separate approved tasks.
 
-### Milestone 4 — Staging and deployment
-- [ ] Staging environment
-- [ ] Deployment checklist
-- [ ] Backup/recovery procedure
-- [ ] Production monitoring
+## Milestone 2 - Priority real-data binding
+
+- [ ] Triage prototype modules.
+- [ ] Bind students, staff, parents, admissions, classes/subjects, attendance, billing, and audit logs to trusted data paths.
+- [ ] Add usable empty/create flows and replace demo actions with validated server operations.
+
+## Milestone 3 - Operational hardening
+
+- [ ] Standardize migration execution and compensation/rollback procedure.
+- [ ] Resolve build capacity and establish type/lint/test/migration/build gates.
+- [ ] Add material privileged-action audit events and safe test-environment rules.
+
+## Milestone 4 - Enterprise readiness
+
+- [ ] Verify plan/feature quotas and storage/user/student limits.
+- [ ] Design backup/export, retention/privacy, notification reliability, and observability controls.
+
+Security and tenant isolation outrank feature breadth.

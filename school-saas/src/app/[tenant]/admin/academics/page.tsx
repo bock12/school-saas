@@ -127,11 +127,23 @@ export default function AcademicsDashboardPage() {
     },
     {
       id: 'course-allocation',
-      label: 'Course Allocation',
-      desc: 'Link subject curricula to timetable period slots',
-      href: `/${tenant}/admin/academics/course-allocation`,
+      label: 'Subject Offerings & Operations',
+      desc: 'Annual course contracts & operational per-term execution bridge',
+      href: `/${tenant}/admin/academics/offerings`,
       icon: BookOpen,
-      category: 'allocation'
+      category: 'allocation',
+      primary: true,
+      badge: 'Hybrid Model'
+    },
+    {
+      id: 'stream-assignments',
+      label: 'Student Stream Assignments',
+      desc: 'Assign secondary cohorts to streams & auto-enroll core subjects',
+      href: `/${tenant}/admin/academics/stream-assignments`,
+      icon: GraduationCap,
+      category: 'allocation',
+      primary: true,
+      badge: 'Auto-Enroll'
     },
     {
       id: 'timetable',

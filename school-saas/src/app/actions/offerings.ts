@@ -32,8 +32,48 @@ export interface SubjectOfferingRecord {
   enrollment_capacity?: number;
   current_enrollment?: number;
   is_compulsory: boolean;
+  requirement_type?: 'core' | 'elective';
+  elective_group?: string;
+  overload_flag?: boolean;
   status: string;
   created_at: string;
+}
+
+export interface TermOfferingRecord {
+  id: string;
+  tenant_id: string;
+  subject_offering_id: string;
+  term_id: string;
+  term_name?: string;
+  subject_id?: string;
+  subject_name?: string;
+  subject_code?: string;
+  class_name?: string;
+  section_name?: string;
+  teacher_id?: string;
+  teacher_name?: string;
+  assistant_teacher_id?: string;
+  assistant_teacher_name?: string;
+  periods_per_week: number;
+  duration_minutes: number;
+  timetable_status: 'draft' | 'scheduled' | 'active' | 'cancelled';
+  status: 'active' | 'completed' | 'suspended';
+  overload_flag: boolean;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OfferingMutationResult {
+  success: boolean;
+  offering?: SubjectOfferingRecord;
+  error?: string;
+  overload_warning?: boolean;
+  current_periods?: number;
+  projected_periods?: number;
+  max_periods?: number;
+  teacher_name?: string;
+  overloaded?: boolean;
 }
 
 export interface TeacherWorkloadRecord {
@@ -42,12 +82,14 @@ export interface TeacherWorkloadRecord {
   department_name?: string;
   total_periods: number;
   offering_count: number;
+  overload_flag?: boolean;
   offerings: {
     offering_id: string;
     subject_name: string;
     section_name: string;
     class_name: string;
     periods_per_week: number;
+    overload_flag?: boolean;
   }[];
 }
 
@@ -58,6 +100,7 @@ export interface AllocationMatrixRow {
   department_name?: string;
   total_periods: number;
   max_periods: number;
+  is_overloaded?: boolean;
   assignments: {
     section_id: string;
     section_name: string;
@@ -68,6 +111,7 @@ export interface AllocationMatrixRow {
     subject_code?: string;
     periods_per_week?: number;
     is_form_tutor?: boolean;
+    overload_flag?: boolean;
   }[];
 }
 
@@ -180,8 +224,11 @@ export async function createSubjectOffering(
     duration_minutes?: number;
     enrollment_capacity?: number;
     is_compulsory?: boolean;
+    requirement_type?: 'core' | 'elective';
+    elective_group?: string;
+    override_overload?: boolean;
   }
-): Promise<{ success: boolean; offering?: SubjectOfferingRecord; error?: string }> {
+): Promise<OfferingMutationResult> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -190,17 +237,31 @@ export async function createSubjectOffering(
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
-    // Validate teacher workload if teacher is assigned
+    let isOverloaded = false;
+
+    // Validate teacher workload if teacher is assigned (Option B: Warn but allow)
     if (payload.teacher_id) {
       const workload = await getTeacherWorkload(tenantSlug, payload.teacher_id, payload.academic_year_id);
       if (workload.success && workload.data) {
-        const projectedPeriods = workload.data.total_periods + (payload.periods_per_week || 4);
-        const maxPeriods = 30; // configurable in future
+        const addedPeriods = payload.periods_per_week || 4;
+        const projectedPeriods = workload.data.total_periods + addedPeriods;
+        const maxPeriods = 30; // configurable standard threshold
+
         if (projectedPeriods > maxPeriods) {
-          return {
-            success: false,
-            error: `This allocation would give the teacher ${projectedPeriods} periods/week, exceeding the maximum of ${maxPeriods}. Current load: ${workload.data.total_periods} periods/week.`
-          };
+          isOverloaded = true;
+          if (!payload.override_overload) {
+            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1', [payload.teacher_id]);
+            const teacherName = tRes.rows[0] ? `${tRes.rows[0].first_name} ${tRes.rows[0].last_name}` : 'Teacher';
+            return {
+              success: false,
+              overload_warning: true,
+              current_periods: workload.data.total_periods,
+              projected_periods: projectedPeriods,
+              max_periods: maxPeriods,
+              teacher_name: teacherName,
+              error: `Assigning this offering will give ${teacherName} ${projectedPeriods} periods/week, exceeding the standard threshold of ${maxPeriods} periods/week.`
+            };
+          }
         }
       }
     }
@@ -210,8 +271,8 @@ export async function createSubjectOffering(
           tenant_id, academic_year_id, term_id, subject_id, section_id, stream_id,
           teacher_id, assistant_teacher_id, curriculum_version_id,
           periods_per_week, duration_minutes, enrollment_capacity,
-          is_compulsory, status, created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'active',$14)
+          is_compulsory, requirement_type, elective_group, overload_flag, status, created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'active',$17)
         RETURNING id`,
       [
         tenantId,
@@ -227,6 +288,9 @@ export async function createSubjectOffering(
         payload.duration_minutes || 40,
         payload.enrollment_capacity || null,
         payload.is_compulsory ?? true,
+        payload.requirement_type || 'core',
+        payload.elective_group || null,
+        isOverloaded,
         userId,
       ]
     );
@@ -235,15 +299,25 @@ export async function createSubjectOffering(
 
     await pool.query(
       `INSERT INTO academic_audit_logs (tenant_id, actor_id, action, entity, entity_id, new_values)
-       VALUES ($1, $2, 'offering.created', 'subject_offering', $3, $4)`,
-      [tenantId, userId, offeringId, JSON.stringify({
-        subject_id: payload.subject_id, section_id: payload.section_id, teacher_id: payload.teacher_id
-      })]
+       VALUES ($1, $2, $3, 'subject_offering', $4, $5)`,
+      [
+        tenantId,
+        userId,
+        isOverloaded ? 'offering.created_with_overload_override' : 'offering.created',
+        offeringId,
+        JSON.stringify({
+          subject_id: payload.subject_id,
+          section_id: payload.section_id,
+          teacher_id: payload.teacher_id,
+          overload_flag: isOverloaded,
+        })
+      ]
     );
 
     revalidatePath(`/${tenantSlug}/admin/academics/teacher-allocation`);
     revalidatePath(`/${tenantSlug}/admin/academics/subjects`);
-    return { success: true };
+    revalidatePath(`/${tenantSlug}/admin/academics/offerings`);
+    return { success: true, overloaded: isOverloaded };
   } catch (err: any) {
     if (err.code === '23505') {
       return { success: false, error: 'This subject is already assigned to this class for the selected year/term.' };
@@ -266,8 +340,9 @@ export async function updateSubjectOffering(
     enrollment_capacity?: number | null;
     status?: string;
     curriculum_version_id?: string | null;
+    override_overload?: boolean;
   }
-): Promise<{ success: boolean; error?: string }> {
+): Promise<OfferingMutationResult> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -276,19 +351,40 @@ export async function updateSubjectOffering(
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
-    // Re-validate workload if changing teacher
+    let isOverloaded = false;
+
+    // Re-validate workload if changing teacher or changing periods
     if (payload.teacher_id !== undefined && payload.teacher_id !== null) {
       const current = await pool.query(
-        `SELECT academic_year_id, periods_per_week FROM subject_offerings WHERE id = $1`,
+        `SELECT academic_year_id, periods_per_week, teacher_id FROM subject_offerings WHERE id = $1`,
         [offeringId]
       );
       if (current.rows.length > 0) {
         const workload = await getTeacherWorkload(tenantSlug, payload.teacher_id, current.rows[0].academic_year_id);
         if (workload.success && workload.data) {
           const periodsForThisOffering = payload.periods_per_week ?? current.rows[0].periods_per_week;
-          const projectedPeriods = workload.data.total_periods + periodsForThisOffering;
-          if (projectedPeriods > 30) {
-            return { success: false, error: `Assigning this would result in ${projectedPeriods} periods/week (max 30).` };
+          // If the teacher was already assigned to this offering, subtract current periods to get net added
+          const alreadyAssigned = current.rows[0].teacher_id === payload.teacher_id;
+          const netTotal = alreadyAssigned
+            ? (workload.data.total_periods - current.rows[0].periods_per_week + periodsForThisOffering)
+            : (workload.data.total_periods + periodsForThisOffering);
+
+          const maxPeriods = 30;
+          if (netTotal > maxPeriods) {
+            isOverloaded = true;
+            if (!payload.override_overload) {
+              const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1', [payload.teacher_id]);
+              const teacherName = tRes.rows[0] ? `${tRes.rows[0].first_name} ${tRes.rows[0].last_name}` : 'Teacher';
+              return {
+                success: false,
+                overload_warning: true,
+                current_periods: workload.data.total_periods,
+                projected_periods: netTotal,
+                max_periods: maxPeriods,
+                teacher_name: teacherName,
+                error: `Assigning this offering will give ${teacherName} ${netTotal} periods/week, exceeding the standard threshold of ${maxPeriods} periods/week.`
+              };
+            }
           }
         }
       }
@@ -304,6 +400,10 @@ export async function updateSubjectOffering(
     if (payload.enrollment_capacity !== undefined)   { sets.push(`enrollment_capacity = $${p++}`);   params.push(payload.enrollment_capacity); }
     if (payload.status !== undefined)                { sets.push(`status = $${p++}`);                params.push(payload.status); }
     if (payload.curriculum_version_id !== undefined) { sets.push(`curriculum_version_id = $${p++}`); params.push(payload.curriculum_version_id); }
+    if (isOverloaded || payload.override_overload !== undefined) {
+      sets.push(`overload_flag = $${p++}`);
+      params.push(isOverloaded);
+    }
 
     params.push(offeringId, tenantId);
     await pool.query(
@@ -315,11 +415,12 @@ export async function updateSubjectOffering(
     await pool.query(
       `INSERT INTO academic_audit_logs (tenant_id, actor_id, action, entity, entity_id, new_values)
        VALUES ($1, $2, 'offering.updated', 'subject_offering', $3, $4)`,
-      [tenantId, userId, offeringId, JSON.stringify(payload)]
+      [tenantId, userId, offeringId, JSON.stringify({ ...payload, overload_flag: isOverloaded })]
     );
 
     revalidatePath(`/${tenantSlug}/admin/academics/teacher-allocation`);
-    return { success: true };
+    revalidatePath(`/${tenantSlug}/admin/academics/offerings`);
+    return { success: true, overloaded: isOverloaded };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
@@ -442,6 +543,7 @@ export async function getAllocationMatrix(
 
     const offeringsRes = await pool.query(
       `SELECT so.id, so.teacher_id, so.section_id, so.subject_id, so.periods_per_week,
+              so.overload_flag,
               s.name AS subject_name, s.code AS subject_code,
               sec.name AS section_name, cl.name AS class_name
        FROM subject_offerings so
@@ -488,6 +590,7 @@ export async function getAllocationMatrix(
           subject_code: offering?.subject_code,
           periods_per_week: offering?.periods_per_week,
           is_form_tutor: isFormTutor,
+          overload_flag: offering?.overload_flag || false,
         };
       });
 
@@ -498,6 +601,7 @@ export async function getAllocationMatrix(
         department_name: teacher.department_name,
         total_periods: totalPeriods,
         max_periods: 30,
+        is_overloaded: totalPeriods > 30 || teacherOfferings.some(o => o.overload_flag),
         assignments,
       };
     });
@@ -604,5 +708,254 @@ export async function getUnassignedSubjects(
     return { success: true, data: res.rows };
   } catch (err: any) {
     return { success: false, data: [], error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: generateTermOfferingsFromYear (Operational Bridge)
+// ─────────────────────────────────────────────────────────────
+
+export async function generateTermOfferingsFromYear(
+  tenantSlug: string,
+  academicYearId: string,
+  termId: string
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    const tenantId = await resolveTenantId(tenantSlug);
+    if (!tenantId) return { success: false, error: 'Tenant not found.' };
+
+    const pool = getPgPool();
+    if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    // Batch insert term offerings for all active subject offerings of the year that do not yet exist
+    const res = await pool.query(
+      `INSERT INTO term_offerings (
+         tenant_id, subject_offering_id, term_id, term_teacher_id, assistant_teacher_id,
+         periods_per_week, duration_minutes, timetable_status, status, overload_flag
+       )
+       SELECT
+         so.tenant_id,
+         so.id AS subject_offering_id,
+         $1 AS term_id,
+         so.teacher_id AS term_teacher_id,
+         so.assistant_teacher_id,
+         so.periods_per_week,
+         so.duration_minutes,
+         'scheduled'::timetable_status,
+         'active'::term_offering_status,
+         so.overload_flag
+       FROM subject_offerings so
+       WHERE so.tenant_id = $2
+         AND so.academic_year_id = $3
+         AND so.status = 'active'
+       ON CONFLICT (subject_offering_id, term_id) DO NOTHING
+       RETURNING id`,
+      [termId, tenantId, academicYearId]
+    );
+
+    revalidatePath(`/${tenantSlug}/admin/academics/offerings`);
+    return { success: true, count: res.rowCount ?? 0 };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: getTermOfferings
+// ─────────────────────────────────────────────────────────────
+
+export async function getTermOfferings(
+  tenantSlug: string,
+  filters: {
+    term_id?: string;
+    academic_year_id?: string;
+    subject_id?: string;
+    teacher_id?: string;
+    section_id?: string;
+    timetable_status?: string;
+    status?: string;
+  } = {}
+): Promise<{ success: boolean; data: TermOfferingRecord[]; error?: string }> {
+  try {
+    const tenantId = await resolveTenantId(tenantSlug);
+    if (!tenantId) return { success: false, data: [], error: 'Tenant not found.' };
+
+    const pool = getPgPool();
+    if (!pool) return { success: false, data: [], error: 'Database unavailable.' };
+
+    const conditions = ['tro.tenant_id = $1'];
+    const params: unknown[] = [tenantId];
+    let p = 2;
+
+    if (filters.term_id)          { conditions.push(`tro.term_id = $${p++}`);          params.push(filters.term_id); }
+    if (filters.academic_year_id) { conditions.push(`so.academic_year_id = $${p++}`);  params.push(filters.academic_year_id); }
+    if (filters.subject_id)       { conditions.push(`so.subject_id = $${p++}`);        params.push(filters.subject_id); }
+    if (filters.teacher_id)       { conditions.push(`(tro.term_teacher_id = $${p} OR (tro.term_teacher_id IS NULL AND so.teacher_id = $${p}))`); params.push(filters.teacher_id); p++; }
+    if (filters.section_id)       { conditions.push(`so.section_id = $${p++}`);        params.push(filters.section_id); }
+    if (filters.timetable_status) { conditions.push(`tro.timetable_status = $${p++}`); params.push(filters.timetable_status); }
+    if (filters.status)           { conditions.push(`tro.status = $${p++}`);           params.push(filters.status); }
+
+    const res = await pool.query(
+      `SELECT
+         tro.*,
+         t.name AS term_name,
+         s.id AS subject_id, s.name AS subject_name, s.code AS subject_code,
+         sec.name AS section_name, cl.name AS class_name,
+         COALESCE(te.first_name || ' ' || te.last_name, ste.first_name || ' ' || ste.last_name) AS teacher_name,
+         COALESCE(tro.term_teacher_id, so.teacher_id) AS effective_teacher_id,
+         (ate.first_name || ' ' || ate.last_name) AS assistant_teacher_name
+       FROM term_offerings tro
+       JOIN subject_offerings so ON so.id = tro.subject_offering_id
+       JOIN subjects s ON s.id = so.subject_id
+       JOIN sections sec ON sec.id = so.section_id
+       JOIN classes cl ON cl.id = sec.class_id
+       JOIN terms t ON t.id = tro.term_id
+       LEFT JOIN teachers te ON te.id = tro.term_teacher_id
+       LEFT JOIN teachers ste ON ste.id = so.teacher_id
+       LEFT JOIN teachers ate ON ate.id = tro.assistant_teacher_id
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY cl.sort_order, sec.name, s.name`,
+      params
+    );
+
+    return { success: true, data: res.rows };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: updateTermOffering
+// ─────────────────────────────────────────────────────────────
+
+export async function updateTermOffering(
+  tenantSlug: string,
+  termOfferingId: string,
+  payload: {
+    term_teacher_id?: string | null;
+    assistant_teacher_id?: string | null;
+    periods_per_week?: number;
+    duration_minutes?: number;
+    timetable_status?: 'draft' | 'scheduled' | 'active' | 'cancelled';
+    status?: 'active' | 'completed' | 'suspended';
+    notes?: string | null;
+    override_overload?: boolean;
+  }
+): Promise<OfferingMutationResult> {
+  try {
+    const tenantId = await resolveTenantId(tenantSlug);
+    const userId = await resolveUserId();
+    if (!tenantId) return { success: false, error: 'Tenant not found.' };
+
+    const pool = getPgPool();
+    if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    let isOverloaded = false;
+
+    // Check term teacher workload if updating teacher
+    if (payload.term_teacher_id) {
+      const current = await pool.query(
+        `SELECT term_id, periods_per_week, term_teacher_id FROM term_offerings WHERE id = $1`,
+        [termOfferingId]
+      );
+      if (current.rows.length > 0) {
+        const termId = current.rows[0].term_id;
+        const wkRes = await pool.query(
+          `SELECT total_periods, is_overloaded FROM get_teacher_term_workload($1, $2, $3)`,
+          [payload.term_teacher_id, termId, termOfferingId]
+        );
+        const currentLoad = parseInt(wkRes.rows[0]?.total_periods || '0');
+        const added = payload.periods_per_week ?? current.rows[0].periods_per_week;
+        const projected = currentLoad + added;
+        const maxPeriods = 30;
+
+        if (projected > maxPeriods) {
+          isOverloaded = true;
+          if (!payload.override_overload) {
+            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1', [payload.term_teacher_id]);
+            const teacherName = tRes.rows[0] ? `${tRes.rows[0].first_name} ${tRes.rows[0].last_name}` : 'Teacher';
+            return {
+              success: false,
+              overload_warning: true,
+              current_periods: currentLoad,
+              projected_periods: projected,
+              max_periods: maxPeriods,
+              teacher_name: teacherName,
+              error: `Term allocation will give ${teacherName} ${projected} periods/week, exceeding standard limit of ${maxPeriods}.`
+            };
+          }
+        }
+      }
+    }
+
+    const sets: string[] = ['updated_at = NOW()'];
+    const params: unknown[] = [];
+    let p = 1;
+
+    if (payload.term_teacher_id !== undefined)      { sets.push(`term_teacher_id = $${p++}`);      params.push(payload.term_teacher_id); }
+    if (payload.assistant_teacher_id !== undefined) { sets.push(`assistant_teacher_id = $${p++}`); params.push(payload.assistant_teacher_id); }
+    if (payload.periods_per_week !== undefined)     { sets.push(`periods_per_week = $${p++}`);     params.push(payload.periods_per_week); }
+    if (payload.duration_minutes !== undefined)     { sets.push(`duration_minutes = $${p++}`);     params.push(payload.duration_minutes); }
+    if (payload.timetable_status !== undefined)     { sets.push(`timetable_status = $${p++}`);     params.push(payload.timetable_status); }
+    if (payload.status !== undefined)               { sets.push(`status = $${p++}`);               params.push(payload.status); }
+    if (payload.notes !== undefined)                { sets.push(`notes = $${p++}`);                params.push(payload.notes); }
+    if (isOverloaded || payload.override_overload !== undefined) {
+      sets.push(`overload_flag = $${p++}`);
+      params.push(isOverloaded);
+    }
+
+    params.push(termOfferingId, tenantId);
+    await pool.query(
+      `UPDATE term_offerings SET ${sets.join(', ')} WHERE id = $${p} AND tenant_id = $${p + 1}`,
+      params
+    );
+
+    await pool.query(
+      `INSERT INTO academic_audit_logs (tenant_id, actor_id, action, entity, entity_id, new_values)
+       VALUES ($1, $2, 'term_offering.updated', 'term_offering', $3, $4)`,
+      [tenantId, userId, termOfferingId, JSON.stringify({ ...payload, overload_flag: isOverloaded })]
+    );
+
+    revalidatePath(`/${tenantSlug}/admin/academics/offerings`);
+    return { success: true, overloaded: isOverloaded };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: getTeacherTermWorkloadDetailed
+// ─────────────────────────────────────────────────────────────
+
+export async function getTeacherTermWorkloadDetailed(
+  tenantSlug: string,
+  teacherId: string,
+  termId: string
+): Promise<{ success: boolean; data?: { total_periods: number; offering_count: number; is_overloaded: boolean }; error?: string }> {
+  try {
+    const pool = getPgPool();
+    if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    const res = await pool.query(
+      `SELECT total_periods, offering_count, is_overloaded
+       FROM get_teacher_term_workload($1, $2, NULL)`,
+      [teacherId, termId]
+    );
+
+    if (res.rows.length === 0) {
+      return { success: true, data: { total_periods: 0, offering_count: 0, is_overloaded: false } };
+    }
+
+    const row = res.rows[0];
+    return {
+      success: true,
+      data: {
+        total_periods: parseInt(row.total_periods || '0'),
+        offering_count: parseInt(row.offering_count || '0'),
+        is_overloaded: row.is_overloaded ?? false,
+      }
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 }

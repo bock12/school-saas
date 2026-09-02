@@ -1,5 +1,7 @@
 # AI Governance Framework
 
+> Status: legacy/reference framework retained for history. As of 2026-09-01, the canonical operational rules are in `AGENTS.md`, `SECURITY_POLICY.md`, `DEFINITION_OF_DONE.md`, `TASK_QUEUE.md`, `REVIEW_QUEUE.md`, and `DECISIONS.md`. This file is preserved because it contains the original collaboration intent; it is not a competing policy source.
+
 ## Purpose
 
 This framework defines how multiple AI agents collaborate on one software project without conflicting decisions or uncontrolled changes.

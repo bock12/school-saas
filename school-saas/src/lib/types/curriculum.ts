@@ -267,13 +267,16 @@ export interface StreamRulesSummary {
 // ─────────────────────────────────────────────────────────────
 
 export interface StudentStreamAssignmentRecord {
-  id: string;
+  id?: string;
   tenant_id: string;
   student_id: string;
   student_name?: string;
-  stream_id: string;
+  admission_number?: string;
+  gender?: string;
+  stream_id?: string;
   stream_name?: string;
   stream_code?: string;
+  stream_level?: string;
   academic_year_id: string;
   academic_year_name?: string;
   section_id?: string;
@@ -281,7 +284,7 @@ export interface StudentStreamAssignmentRecord {
   class_name?: string;
   assigned_by?: string;
   assigned_by_name?: string;
-  assigned_at: string;
+  assigned_at?: string;
   status: StreamAssignmentStatus;
   previous_stream_id?: string;
   previous_stream_name?: string;
@@ -292,6 +295,8 @@ export interface StudentStreamAssignmentRecord {
   // Computed
   enrolled_subjects?: number;
   pending_electives?: number;
+  core_subjects_count?: number;
+  elective_subjects_count?: number;
 }
 
 export interface StudentStreamAssignmentPayload {
@@ -300,6 +305,46 @@ export interface StudentStreamAssignmentPayload {
   academic_year_id: string;
   section_id?: string;
   change_reason?: string;
+}
+
+export interface AssignStudentStreamPayload {
+  student_id: string;
+  stream_id: string;
+  academic_year_id: string;
+  section_id?: string | null;
+  change_reason?: string;
+}
+
+export interface BatchAssignStreamPayload {
+  student_ids: string[];
+  stream_id: string;
+  academic_year_id: string;
+  section_id?: string | null;
+  change_reason?: string;
+}
+
+export interface StreamAssignmentFilters {
+  academic_year_id?: string;
+  stream_id?: string;
+  class_id?: string;
+  section_id?: string;
+  status?: StreamAssignmentStatus | 'all';
+  elective_status?: 'not_started' | 'submitted' | 'approved' | 'locked';
+  search?: string;
+}
+
+export interface StudentEnrolledSubjectDetail {
+  enrollment_id: string;
+  subject_id: string;
+  subject_name: string;
+  subject_code?: string;
+  offering_id: string;
+  enrollment_type: EnrollmentType;
+  approval_status: EnrollmentApprovalStatus;
+  elective_group?: string;
+  periods_per_week?: number;
+  teacher_name?: string;
+  enrolled_at: string;
 }
 
 // ─────────────────────────────────────────────────────────────

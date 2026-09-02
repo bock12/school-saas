@@ -22,12 +22,17 @@ export interface SubjectRecord {
   short_name?: string;
   code?: string;
   national_code?: string;
+  exam_board_code?: string;
   description?: string;
   category: SubjectCategory;
   subject_type: SubjectTypeVal;
   department_id?: string;
   department_name?: string;
   is_elective: boolean;
+  is_examinable: boolean;
+  default_periods_per_week: number;
+  default_period_duration: number;
+  max_class_size?: number;
   is_active: boolean;
   archived_at?: string;
   created_at: string;
@@ -40,11 +45,16 @@ export interface SubjectPayload {
   short_name?: string;
   code?: string;
   national_code?: string;
+  exam_board_code?: string;
   description?: string;
   category?: SubjectCategory;
   subject_type?: SubjectTypeVal;
   department_id?: string;
   is_elective?: boolean;
+  is_examinable?: boolean;
+  default_periods_per_week?: number;
+  default_period_duration?: number;
+  max_class_size?: number;
   stream_ids?: string[];  // curriculum_streams ids
 }
 
@@ -57,6 +67,8 @@ export interface CurriculumStreamRecord {
   level?: string;
   sort_order: number;
   is_active: boolean;
+  subject_count?: number;
+  student_count?: number;
 }
 
 export interface SubjectFilters {
@@ -64,6 +76,7 @@ export interface SubjectFilters {
   department_id?: string;
   category?: string;
   is_active?: boolean;
+  is_examinable?: boolean;
   stream_id?: string;
   limit?: number;
   offset?: number;
@@ -162,6 +175,11 @@ export async function getSubjects(
       if (filters.is_active !== undefined) {
         conditions.push(`s.is_active = $${pIdx}`);
         params.push(filters.is_active);
+        pIdx++;
+      }
+      if (filters.is_examinable !== undefined) {
+        conditions.push(`s.is_examinable = $${pIdx}`);
+        params.push(filters.is_examinable);
         pIdx++;
       }
       if (filters.stream_id) {
@@ -310,9 +328,10 @@ export async function createSubject(
 
     const res = await pool.query(
       `INSERT INTO subjects (
-          tenant_id, name, short_name, code, national_code, description,
-          category, subject_type_col, department_id, is_elective, is_active
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
+          tenant_id, name, short_name, code, national_code, exam_board_code, description,
+          category, subject_type_col, department_id, is_elective, is_examinable,
+          default_periods_per_week, default_period_duration, max_class_size, is_active
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,true)
         RETURNING *`,
       [
         tenantId,
@@ -320,11 +339,16 @@ export async function createSubject(
         payload.short_name?.trim() || null,
         code,
         payload.national_code?.trim() || null,
+        payload.exam_board_code?.trim() || null,
         payload.description?.trim() || null,
         payload.category || 'general',
         payload.subject_type || 'academic',
         payload.department_id || null,
         payload.is_elective ?? false,
+        payload.is_examinable ?? false,
+        payload.default_periods_per_week ?? 4,
+        payload.default_period_duration ?? 40,
+        payload.max_class_size ?? null,
       ]
     );
 
@@ -385,11 +409,16 @@ export async function updateSubject(
     if (payload.short_name !== undefined)   { sets.push(`short_name = $${pIdx++}`);      params.push(payload.short_name?.trim() || null); }
     if (payload.code !== undefined)         { sets.push(`code = $${pIdx++}`);            params.push(payload.code.trim().toUpperCase()); }
     if (payload.national_code !== undefined){ sets.push(`national_code = $${pIdx++}`);   params.push(payload.national_code?.trim() || null); }
+    if (payload.exam_board_code !== undefined){ sets.push(`exam_board_code = $${pIdx++}`);params.push(payload.exam_board_code?.trim() || null); }
     if (payload.description !== undefined)  { sets.push(`description = $${pIdx++}`);     params.push(payload.description?.trim() || null); }
     if (payload.category !== undefined)     { sets.push(`category = $${pIdx++}`);        params.push(payload.category); }
     if (payload.subject_type !== undefined) { sets.push(`subject_type_col = $${pIdx++}`);params.push(payload.subject_type); }
     if (payload.department_id !== undefined){ sets.push(`department_id = $${pIdx++}`);   params.push(payload.department_id || null); }
     if (payload.is_elective !== undefined)  { sets.push(`is_elective = $${pIdx++}`);     params.push(payload.is_elective); }
+    if (payload.is_examinable !== undefined){ sets.push(`is_examinable = $${pIdx++}`);   params.push(payload.is_examinable); }
+    if (payload.default_periods_per_week !== undefined) { sets.push(`default_periods_per_week = $${pIdx++}`); params.push(payload.default_periods_per_week); }
+    if (payload.default_period_duration !== undefined)  { sets.push(`default_period_duration = $${pIdx++}`);  params.push(payload.default_period_duration); }
+    if (payload.max_class_size !== undefined)           { sets.push(`max_class_size = $${pIdx++}`);           params.push(payload.max_class_size || null); }
 
     params.push(subjectId, tenantId);
     await pool.query(
@@ -539,10 +568,23 @@ export async function bulkCreateSubjects(
 
         const res = await client.query(
           `INSERT INTO subjects (
-              tenant_id, name, short_name, code, national_code, description,
-              category, subject_type_col, department_id, is_elective, is_active
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
-            ON CONFLICT (tenant_id, code) DO UPDATE SET updated_at = NOW()
+              tenant_id, name, short_name, code, national_code, exam_board_code, description,
+              category, subject_type_col, department_id, is_elective, is_examinable,
+              default_periods_per_week, default_period_duration, max_class_size, is_active
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,true)
+            ON CONFLICT (tenant_id, code) DO UPDATE SET
+              name = EXCLUDED.name,
+              short_name = EXCLUDED.short_name,
+              national_code = EXCLUDED.national_code,
+              exam_board_code = EXCLUDED.exam_board_code,
+              category = EXCLUDED.category,
+              subject_type_col = EXCLUDED.subject_type_col,
+              is_elective = EXCLUDED.is_elective,
+              is_examinable = EXCLUDED.is_examinable,
+              default_periods_per_week = EXCLUDED.default_periods_per_week,
+              default_period_duration = EXCLUDED.default_period_duration,
+              max_class_size = EXCLUDED.max_class_size,
+              updated_at = NOW()
             RETURNING id`,
           [
             tenantId,
@@ -550,11 +592,16 @@ export async function bulkCreateSubjects(
             payload.short_name?.trim() || null,
             code,
             payload.national_code?.trim() || null,
+            payload.exam_board_code?.trim() || null,
             payload.description?.trim() || null,
             payload.category || 'general',
             payload.subject_type || 'academic',
             payload.department_id || null,
             payload.is_elective ?? false,
+            payload.is_examinable ?? false,
+            payload.default_periods_per_week ?? 4,
+            payload.default_period_duration ?? 40,
+            payload.max_class_size ?? null,
           ]
         );
 
@@ -608,9 +655,12 @@ export async function getCurriculumStreams(
     const pool = getPgPool();
     if (pool) {
       const res = await pool.query(
-        `SELECT * FROM curriculum_streams
-         WHERE tenant_id = $1 AND is_active = true
-         ORDER BY sort_order ASC`,
+        `SELECT cs.*,
+            (SELECT COUNT(*) FROM subject_streams ss WHERE ss.stream_id = cs.id) AS subject_count,
+            (SELECT COUNT(*) FROM student_stream_assignments ssa WHERE ssa.stream_id = cs.id AND ssa.status = 'active') AS student_count
+         FROM curriculum_streams cs
+         WHERE cs.tenant_id = $1 AND cs.is_active = true
+         ORDER BY cs.sort_order ASC`,
         [tenantId]
       );
       return { success: true, data: res.rows };
@@ -626,6 +676,296 @@ export async function getCurriculumStreams(
     return { success: true, data: (data || []) as any };
   } catch (err: any) {
     return { success: false, data: [], error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: createCurriculumStream
+// ─────────────────────────────────────────────────────────────
+
+export async function createCurriculumStream(
+  tenantSlug: string,
+  payload: {
+    code: string;
+    name: string;
+    description?: string;
+    level?: string;
+    sort_order?: number;
+  }
+): Promise<{ success: boolean; stream?: CurriculumStreamRecord; error?: string }> {
+  try {
+    const tenantId = await resolveTenantId(tenantSlug);
+    if (!tenantId) return { success: false, error: 'Tenant not found.' };
+
+    const pool = getPgPool();
+    if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    const res = await pool.query(
+      `INSERT INTO curriculum_streams (tenant_id, code, name, description, level, sort_order, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, true)
+       RETURNING *`,
+      [
+        tenantId,
+        payload.code.trim().toUpperCase(),
+        payload.name.trim(),
+        payload.description?.trim() || null,
+        payload.level || 'SSS',
+        payload.sort_order ?? 0,
+      ]
+    );
+
+    revalidatePath(`/${tenantSlug}/admin/academics/streams`);
+    revalidatePath(`/${tenantSlug}/admin/academics/subjects`);
+    return { success: true, stream: res.rows[0] };
+  } catch (err: any) {
+    if (err.code === '23505') {
+      return { success: false, error: `A stream with code "${payload.code}" already exists.` };
+    }
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: updateCurriculumStream
+// ─────────────────────────────────────────────────────────────
+
+export async function updateCurriculumStream(
+  tenantSlug: string,
+  streamId: string,
+  payload: Partial<{
+    code: string;
+    name: string;
+    description?: string;
+    level?: string;
+    sort_order?: number;
+    is_active?: boolean;
+  }>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const tenantId = await resolveTenantId(tenantSlug);
+    if (!tenantId) return { success: false, error: 'Tenant not found.' };
+
+    const pool = getPgPool();
+    if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    const sets: string[] = ['updated_at = NOW()'];
+    const params: unknown[] = [];
+    let pIdx = 1;
+
+    if (payload.code !== undefined)        { sets.push(`code = $${pIdx++}`);        params.push(payload.code.trim().toUpperCase()); }
+    if (payload.name !== undefined)        { sets.push(`name = $${pIdx++}`);        params.push(payload.name.trim()); }
+    if (payload.description !== undefined) { sets.push(`description = $${pIdx++}`); params.push(payload.description?.trim() || null); }
+    if (payload.level !== undefined)       { sets.push(`level = $${pIdx++}`);       params.push(payload.level); }
+    if (payload.sort_order !== undefined)  { sets.push(`sort_order = $${pIdx++}`);  params.push(payload.sort_order); }
+    if (payload.is_active !== undefined)   { sets.push(`is_active = $${pIdx++}`);   params.push(payload.is_active); }
+
+    params.push(streamId, tenantId);
+    await pool.query(
+      `UPDATE curriculum_streams SET ${sets.join(', ')} WHERE id = $${pIdx} AND tenant_id = $${pIdx + 1}`,
+      params
+    );
+
+    revalidatePath(`/${tenantSlug}/admin/academics/streams`);
+    return { success: true };
+  } catch (err: any) {
+    if (err.code === '23505') return { success: false, error: 'A stream with that code already exists.' };
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: deleteCurriculumStream
+// ─────────────────────────────────────────────────────────────
+
+export async function deleteCurriculumStream(
+  tenantSlug: string,
+  streamId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const tenantId = await resolveTenantId(tenantSlug);
+    if (!tenantId) return { success: false, error: 'Tenant not found.' };
+
+    const pool = getPgPool();
+    if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    // Check if students are assigned to this stream
+    const studentCheck = await pool.query(
+      `SELECT COUNT(*) FROM student_stream_assignments WHERE stream_id = $1 AND status = 'active'`,
+      [streamId]
+    );
+    if (parseInt(studentCheck.rows[0].count) > 0) {
+      return {
+        success: false,
+        error: `Cannot delete stream: ${studentCheck.rows[0].count} student(s) are currently enrolled in it.`
+      };
+    }
+
+    await pool.query(
+      `UPDATE curriculum_streams SET is_active = false, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+      [streamId, tenantId]
+    );
+
+    revalidatePath(`/${tenantSlug}/admin/academics/streams`);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: getStreamSubjectRules
+// ─────────────────────────────────────────────────────────────
+
+export async function getStreamSubjectRules(
+  tenantSlug: string,
+  streamId: string,
+  academicYearId?: string
+): Promise<{
+  success: boolean;
+  data: {
+    id: string;
+    stream_id: string;
+    subject_id: string;
+    subject_name: string;
+    subject_code: string;
+    rule_type: 'core' | 'elective';
+    elective_group?: string;
+    min_selections: number;
+    max_selections: number;
+    sort_order: number;
+    is_active: boolean;
+  }[];
+  error?: string;
+}> {
+  try {
+    const tenantId = await resolveTenantId(tenantSlug);
+    if (!tenantId) return { success: false, data: [], error: 'Tenant not found.' };
+
+    const pool = getPgPool();
+    if (!pool) return { success: false, data: [], error: 'Database unavailable.' };
+
+    const conditions = ['ssr.tenant_id = $1', 'ssr.stream_id = $2', 'ssr.is_active = true'];
+    const params: unknown[] = [tenantId, streamId];
+
+    if (academicYearId) {
+      conditions.push('(ssr.academic_year_id IS NULL OR ssr.academic_year_id = $3)');
+      params.push(academicYearId);
+    }
+
+    const res = await pool.query(
+      `SELECT ssr.*, s.name AS subject_name, s.code AS subject_code
+       FROM stream_subject_rules ssr
+       JOIN subjects s ON s.id = ssr.subject_id
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY ssr.rule_type ASC, ssr.elective_group ASC NULLS FIRST, ssr.sort_order ASC, s.name ASC`,
+      params
+    );
+
+    return { success: true, data: res.rows };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: upsertStreamSubjectRule
+// ─────────────────────────────────────────────────────────────
+
+export async function upsertStreamSubjectRule(
+  tenantSlug: string,
+  payload: {
+    id?: string;
+    stream_id: string;
+    subject_id: string;
+    academic_year_id?: string;
+    rule_type: 'core' | 'elective';
+    elective_group?: string;
+    min_selections?: number;
+    max_selections?: number;
+    sort_order?: number;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const tenantId = await resolveTenantId(tenantSlug);
+    if (!tenantId) return { success: false, error: 'Tenant not found.' };
+
+    const pool = getPgPool();
+    if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    if (payload.id) {
+      await pool.query(
+        `UPDATE stream_subject_rules
+         SET rule_type = $1, elective_group = $2, min_selections = $3,
+             max_selections = $4, sort_order = $5, updated_at = NOW()
+         WHERE id = $6 AND tenant_id = $7`,
+        [
+          payload.rule_type,
+          payload.rule_type === 'elective' ? (payload.elective_group || 'Group A') : null,
+          payload.min_selections ?? 1,
+          payload.max_selections ?? 1,
+          payload.sort_order ?? 0,
+          payload.id,
+          tenantId,
+        ]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO stream_subject_rules (
+           tenant_id, stream_id, subject_id, academic_year_id,
+           rule_type, elective_group, min_selections, max_selections, sort_order
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (stream_id, subject_id, COALESCE(academic_year_id::text, 'ALL')) DO UPDATE
+           SET rule_type = EXCLUDED.rule_type,
+               elective_group = EXCLUDED.elective_group,
+               min_selections = EXCLUDED.min_selections,
+               max_selections = EXCLUDED.max_selections,
+               is_active = true,
+               updated_at = NOW()`,
+        [
+          tenantId,
+          payload.stream_id,
+          payload.subject_id,
+          payload.academic_year_id || null,
+          payload.rule_type,
+          payload.rule_type === 'elective' ? (payload.elective_group || 'Group A') : null,
+          payload.min_selections ?? 1,
+          payload.max_selections ?? 1,
+          payload.sort_order ?? 0,
+        ]
+      );
+    }
+
+    revalidatePath(`/${tenantSlug}/admin/academics/streams`);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION: deleteStreamSubjectRule
+// ─────────────────────────────────────────────────────────────
+
+export async function deleteStreamSubjectRule(
+  tenantSlug: string,
+  ruleId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const tenantId = await resolveTenantId(tenantSlug);
+    if (!tenantId) return { success: false, error: 'Tenant not found.' };
+
+    const pool = getPgPool();
+    if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    await pool.query(
+      `DELETE FROM stream_subject_rules WHERE id = $1 AND tenant_id = $2`,
+      [ruleId, tenantId]
+    );
+
+    revalidatePath(`/${tenantSlug}/admin/academics/streams`);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 }
 

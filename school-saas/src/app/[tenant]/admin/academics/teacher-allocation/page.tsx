@@ -87,6 +87,12 @@ function AssignOfferingModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [qualifiedSubjectIds, setQualifiedSubjectIds] = useState<string[]>([]);
+  const [overloadWarning, setOverloadWarning] = useState<{
+    currentPeriods: number;
+    projectedPeriods: number;
+    maxPeriods: number;
+    teacherName: string;
+  } | null>(null);
 
   useEffect(() => {
     getTeacherQualifications(tenant, teacherId).then(res => {
@@ -94,7 +100,7 @@ function AssignOfferingModal({
     });
   }, [teacherId, tenant]);
 
-  const handleSave = async () => {
+  const handleSave = async (override = false) => {
     if (!subjectId) { setError('Please select a subject.'); return; }
     setSaving(true);
     setError('');
@@ -104,6 +110,7 @@ function AssignOfferingModal({
       res = await updateSubjectOffering(tenant, existingOfferingId, {
         teacher_id: teacherId,
         periods_per_week: periodsPerWeek,
+        override_overload: override,
       });
     } else {
       res = await createSubjectOffering(tenant, {
@@ -113,12 +120,20 @@ function AssignOfferingModal({
         teacher_id: teacherId,
         periods_per_week: periodsPerWeek,
         is_compulsory: isCompulsory,
+        override_overload: override,
       });
     }
 
     setSaving(false);
     if (res.success) {
       onSaved();
+    } else if (res.overload_warning && !override) {
+      setOverloadWarning({
+        currentPeriods: res.current_periods || 0,
+        projectedPeriods: res.projected_periods || 0,
+        maxPeriods: res.max_periods || 30,
+        teacherName: res.teacher_name || teacherName,
+      });
     } else {
       setError(res.error || 'Failed to save allocation.');
     }
@@ -155,79 +170,139 @@ function AssignOfferingModal({
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Subject</label>
-          <select
-            value={subjectId}
-            onChange={e => setSubjectId(e.target.value)}
-            className="w-full h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-          >
-            <option value="">Select subject…</option>
-            {subjects.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.code ? `[${s.code}] ` : ''}{s.name}
-                {qualifiedSubjectIds.includes(s.id) ? ' ✓' : ''}
-              </option>
-            ))}
-          </select>
-          {qualifiedSubjectIds.length > 0 && (
-            <p className="text-[10px] text-[hsl(var(--text-tertiary))]">✓ = Teacher has qualification on file</p>
-          )}
-        </div>
+        {/* Option B: Overload Warning Modal Dialog */}
+        {overloadWarning ? (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+              <h4 className="text-xs font-black text-amber-400 uppercase tracking-wider">
+                Workload Overload Warning
+              </h4>
+            </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Periods per Week</label>
-          <div className="flex items-center gap-3">
-            {[2, 3, 4, 5, 6].map(n => (
+            <p className="text-xs text-[hsl(var(--text-secondary))] leading-relaxed">
+              Assigning this section will push <strong className="text-[hsl(var(--text-primary))]">{overloadWarning.teacherName}</strong> to{' '}
+              <strong className="text-amber-400">{overloadWarning.projectedPeriods} periods/week</strong>, exceeding the standard threshold of {overloadWarning.maxPeriods} periods/week.
+            </p>
+
+            <div className="grid grid-cols-3 gap-2 py-2 px-3 rounded-xl bg-[hsl(var(--bg-tertiary))] text-center text-xs">
+              <div>
+                <span className="text-[10px] text-[hsl(var(--text-tertiary))] block">Current</span>
+                <span className="font-bold text-[hsl(var(--text-primary))]">{overloadWarning.currentPeriods} p/wk</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-[hsl(var(--text-tertiary))] block">Adding</span>
+                <span className="font-bold text-[hsl(var(--accent))]">+{periodsPerWeek} p/wk</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-amber-400 block">Projected</span>
+                <span className="font-black text-amber-400">{overloadWarning.projectedPeriods} p/wk</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-[hsl(var(--text-tertiary))] italic">
+              Option B Policy: You can override this limitation. The assignment will be logged and flagged on the HOD/Principal dashboards.
+            </p>
+
+            <div className="flex gap-2 pt-2">
               <button
-                key={n}
-                onClick={() => setPeriodsPerWeek(n)}
-                className={`w-10 h-10 rounded-xl text-sm font-black transition-all ${
-                  periodsPerWeek === n
-                    ? 'bg-[hsl(var(--accent))] text-white'
-                    : 'bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:border-[hsl(var(--accent)/0.5)]'
-                }`}
+                type="button"
+                onClick={() => setOverloadWarning(null)}
+                className="flex-1 h-10 rounded-xl border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))]"
               >
-                {n}
+                Cancel
               </button>
-            ))}
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSave(true)}
+                className="flex-1 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-black hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Confirm Overload Override'}
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Subject</label>
+              <select
+                value={subjectId}
+                onChange={e => setSubjectId(e.target.value)}
+                className="w-full h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+              >
+                <option value="">Select subject…</option>
+                {subjects.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.code ? `[${s.code}] ` : ''}{s.name}
+                    {qualifiedSubjectIds.includes(s.id) ? ' ✓' : ''}
+                  </option>
+                ))}
+              </select>
+              {qualifiedSubjectIds.length > 0 && (
+                <p className="text-[10px] text-[hsl(var(--text-tertiary))]">✓ = Teacher has qualification on file</p>
+              )}
+            </div>
 
-        <label className="flex items-center gap-3 cursor-pointer">
-          <div
-            onClick={() => setIsCompulsory(p => !p)}
-            className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${isCompulsory ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))]'}`}
-          >
-            <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${isCompulsory ? 'translate-x-5' : ''}`} />
-          </div>
-          <span className="text-sm font-semibold text-[hsl(var(--text-primary))]">Compulsory subject</span>
-        </label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Periods per Week</label>
+              <div className="flex items-center gap-3">
+                {[2, 3, 4, 5, 6].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPeriodsPerWeek(n)}
+                    className={`w-10 h-10 rounded-xl text-sm font-black transition-all ${
+                      periodsPerWeek === n
+                        ? 'bg-[hsl(var(--accent))] text-white'
+                        : 'bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-secondary))] hover:border-[hsl(var(--accent)/0.5)]'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        <div className="flex gap-3 pt-2 border-t border-[hsl(var(--border))]">
-          {existingOfferingId && (
-            <button
-              onClick={handleRemove}
-              disabled={saving}
-              className="h-11 px-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors disabled:opacity-50"
-            >
-              Remove
-            </button>
-          )}
-          <button
-            onClick={onClose}
-            className="flex-1 h-11 rounded-2xl border border-[hsl(var(--border))] text-sm font-bold text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || !subjectId}
-            className="flex-1 h-11 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-bold disabled:opacity-50 hover:opacity-90 transition-opacity"
-          >
-            {saving ? 'Saving…' : 'Assign'}
-          </button>
-        </div>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div
+                onClick={() => setIsCompulsory(p => !p)}
+                className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${isCompulsory ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))]'}`}
+              >
+                <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${isCompulsory ? 'translate-x-5' : ''}`} />
+              </div>
+              <span className="text-sm font-semibold text-[hsl(var(--text-primary))]">Compulsory subject</span>
+            </label>
+
+            <div className="flex gap-3 pt-2 border-t border-[hsl(var(--border))]">
+              {existingOfferingId && (
+                <button
+                  type="button"
+                  onClick={handleRemove}
+                  disabled={saving}
+                  className="h-11 px-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 h-11 rounded-2xl border border-[hsl(var(--border))] text-sm font-bold text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving || !subjectId}
+                onClick={() => handleSave(false)}
+                className="flex-1 h-11 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-bold disabled:opacity-50 hover:opacity-90 transition-opacity"
+              >
+                {saving ? 'Saving…' : 'Save Allocation'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -343,39 +418,46 @@ export default function TeacherAllocationPage() {
           </p>
         </div>
 
-        {/* Year Selector */}
-        {academicYears.length > 0 && (
-          <select
-            value={selectedYear}
-            onChange={e => setSelectedYear(e.target.value)}
-            className="h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-bold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors min-w-[180px]"
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <Link
+            href={`/${tenant}/admin/academics/offerings`}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-secondary))] hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] transition-colors"
           >
-            {academicYears.map(y => (
-              <option key={y.id} value={y.id}>{y.name}{y.is_current ? ' (Current)' : ''}</option>
-            ))}
-          </select>
-        )}
+            <BookMarked className="w-3.5 h-3.5" /> Subject Offerings Directory
+          </Link>
+          {academicYears.length > 0 && (
+            <select
+              value={selectedYear}
+              onChange={e => setSelectedYear(e.target.value)}
+              className="h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-bold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors min-w-[180px]"
+            >
+              {academicYears.map(y => (
+                <option key={y.id} value={y.id}>{y.name}{y.is_current ? ' (Current)' : ''}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {/* Alert Banner */}
       {(overloadedCount > 0 || unassignedCount > 0) && (
         <div className="flex flex-wrap gap-3">
           {overloadedCount > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs font-bold text-red-400">
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-400">
               <AlertTriangle className="w-3.5 h-3.5" />
-              {overloadedCount} teacher{overloadedCount > 1 ? 's' : ''} over workload limit
+              {overloadedCount} teacher{overloadedCount > 1 ? 's' : ''} with active overload assignments (&gt;30 p/wk)
             </div>
           )}
           {unassignedCount > 0 && (
             <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-400">
-              <AlertCircle className="w-3.5 h-3.5" />
-              {unassignedCount} class section{unassignedCount > 1 ? 's' : ''} without a teacher allocation
+              <Clock className="w-3.5 h-3.5" />
+              {unassignedCount} subject{unassignedCount > 1 ? 's' : ''} have no teacher assigned
             </div>
           )}
         </div>
       )}
 
-      {/* Filters */}
+      {/* Search & Filter */}
       <div className="glass-card p-4 rounded-3xl flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-tertiary))]" />
@@ -485,8 +567,10 @@ function TeacherRow({
               {row.employee_id && (
                 <span className="text-[9px] font-bold font-mono text-[hsl(var(--text-tertiary))] bg-[hsl(var(--bg-tertiary))] px-1.5 py-0.5 rounded-md">{row.employee_id}</span>
               )}
-              {row.total_periods > row.max_periods && (
-                <span className="text-[9px] font-black text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">OVERLOADED</span>
+              {(row.is_overloaded || row.total_periods > row.max_periods) && (
+                <span className="text-[9px] font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <AlertTriangle className="w-2.5 h-2.5" /> OVERLOAD OVERRIDE
+                </span>
               )}
             </div>
             <p className="text-xs text-[hsl(var(--text-tertiary))]">
@@ -536,7 +620,14 @@ function TeacherRow({
                       <p className="text-[10px] font-bold text-[hsl(var(--accent))] mt-1.5 line-clamp-1">
                         {assignment?.subject_code ? `[${assignment.subject_code}]` : ''} {assignment?.subject_name}
                       </p>
-                      <p className="text-[9px] text-[hsl(var(--text-tertiary))]">{assignment?.periods_per_week}×/wk</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[9px] text-[hsl(var(--text-tertiary))]">{assignment?.periods_per_week}×/wk</span>
+                        {assignment?.overload_flag && (
+                          <span className="text-[8px] font-black text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.2 rounded-md">
+                            ⚡ Overload
+                          </span>
+                        )}
+                      </div>
                     </>
                   ) : assignment?.is_form_tutor ? (
                     <p className="text-[10px] font-bold text-amber-400 mt-1.5">Form Tutor</p>

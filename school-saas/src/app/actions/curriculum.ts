@@ -20,6 +20,7 @@ export interface CurriculumVersionRecord {
   academic_year_name?: string;
   grade_level: string;
   version: number;
+  version_label?: string;
   status: CurriculumStatus;
   effective_from?: string;
   effective_to?: string;

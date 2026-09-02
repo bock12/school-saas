@@ -53,11 +53,16 @@ const EMPTY_FORM: SubjectPayload = {
   short_name: '',
   code: '',
   national_code: '',
+  exam_board_code: '',
   description: '',
   category: 'general',
   subject_type: 'academic',
   department_id: '',
   is_elective: false,
+  is_examinable: false,
+  default_periods_per_week: 4,
+  default_period_duration: 40,
+  max_class_size: undefined,
   stream_ids: [],
 };
 
@@ -105,14 +110,17 @@ function SubjectFormModal({
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-2xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-[hsl(var(--border))]">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[hsl(var(--border))] sticky top-0 bg-[hsl(var(--bg-secondary))] z-10">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-[hsl(var(--accent)/0.15)]">
               <BookMarked className="w-5 h-5 text-[hsl(var(--accent))]" />
             </div>
-            <h2 className="text-base font-black text-[hsl(var(--text-primary))]">
-              {mode === 'create' ? 'Add New Subject' : 'Edit Subject'}
-            </h2>
+            <div>
+              <h2 className="text-base font-black text-[hsl(var(--text-primary))]">
+                {mode === 'create' ? 'Add New Subject' : 'Edit Subject'}
+              </h2>
+              <p className="text-[11px] text-[hsl(var(--text-tertiary))]">Master curriculum catalog entry and syllabus standards</p>
+            </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-[hsl(var(--bg-tertiary))] transition-colors">
             <X className="w-4 h-4 text-[hsl(var(--text-tertiary))]" />
@@ -148,32 +156,35 @@ function SubjectFormModal({
             </div>
           </div>
 
-          {/* Code + National Code */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* School Code + Department */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">School Code</label>
               <input
                 type="text"
                 value={form.code || ''}
                 onChange={e => setForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
-                placeholder="e.g. MTH101 (auto-generated)"
+                placeholder="e.g. MTH101 (auto-generated if blank)"
                 className="w-full h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-mono font-bold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">MBSSE / National Code</label>
-              <input
-                type="text"
-                value={form.national_code || ''}
-                onChange={e => setForm(p => ({ ...p, national_code: e.target.value }))}
-                placeholder="e.g. WAEC-MTH-01"
-                className="w-full h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-mono font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-              />
+              <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Department</label>
+              <select
+                value={form.department_id || ''}
+                onChange={e => setForm(p => ({ ...p, department_id: e.target.value || undefined }))}
+                className="w-full h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+              >
+                <option value="">No Department</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
             </div>
           </div>
 
           {/* Category + Type */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Subject Category *</label>
               <select
@@ -200,25 +211,99 @@ function SubjectFormModal({
             </div>
           </div>
 
-          {/* Department */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Department</label>
-            <select
-              value={form.department_id || ''}
-              onChange={e => setForm(p => ({ ...p, department_id: e.target.value || undefined }))}
-              className="w-full h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
-            >
-              <option value="">No Department</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
+          {/* Examination & National Standards */}
+          <div className="p-4 rounded-2xl bg-[hsl(var(--bg-tertiary)/0.6)] border border-[hsl(var(--border))] space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-black text-[hsl(var(--text-primary))] uppercase tracking-wider flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+                  Examination &amp; National Standards
+                </h4>
+                <p className="text-[11px] text-[hsl(var(--text-tertiary))]">Configure alignment with BECE, WASSCE, or National Syllabi.</p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div
+                  onClick={() => setForm(p => ({ ...p, is_examinable: !p.is_examinable }))}
+                  className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${form.is_examinable ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))]'}`}
+                >
+                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.is_examinable ? 'translate-x-4' : ''}`} />
+                </div>
+                <span className="text-xs font-bold text-[hsl(var(--text-primary))]">Public Examinable</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">WAEC / BECE Syllabus Code</label>
+                <input
+                  type="text"
+                  value={form.exam_board_code || ''}
+                  onChange={e => setForm(p => ({ ...p, exam_board_code: e.target.value.toUpperCase() }))}
+                  placeholder="e.g. WASSCE-MTH-401"
+                  className="w-full h-10 px-3.5 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-xs font-mono font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">MBSSE / National Code</label>
+                <input
+                  type="text"
+                  value={form.national_code || ''}
+                  onChange={e => setForm(p => ({ ...p, national_code: e.target.value.toUpperCase() }))}
+                  placeholder="e.g. SL-MTH-JSS"
+                  className="w-full h-10 px-3.5 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-xs font-mono font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Timetable Standards & Class Size */}
+          <div className="p-4 rounded-2xl bg-[hsl(var(--bg-tertiary)/0.6)] border border-[hsl(var(--border))] space-y-3">
+            <h4 className="text-xs font-black text-[hsl(var(--text-primary))] uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[hsl(var(--accent))]" />
+              Teaching &amp; Timetable Standards
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">Default Periods / Week</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={form.default_periods_per_week ?? 4}
+                  onChange={e => setForm(p => ({ ...p, default_periods_per_week: parseInt(e.target.value) || 1 }))}
+                  className="w-full h-10 px-3.5 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">Period Duration (mins)</label>
+                <input
+                  type="number"
+                  min={20}
+                  max={120}
+                  value={form.default_period_duration ?? 40}
+                  onChange={e => setForm(p => ({ ...p, default_period_duration: parseInt(e.target.value) || 40 }))}
+                  className="w-full h-10 px-3.5 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-[hsl(var(--text-secondary))]">Max Class Size (Advisory)</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={200}
+                  value={form.max_class_size || ''}
+                  onChange={e => setForm(p => ({ ...p, max_class_size: e.target.value ? parseInt(e.target.value) : undefined }))}
+                  placeholder="e.g. 45"
+                  className="w-full h-10 px-3.5 rounded-xl bg-[hsl(var(--bg-secondary))] border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Streams */}
           {streams.length > 0 && (
             <div className="space-y-2">
-              <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Curriculum Streams</label>
+              <label className="text-xs font-bold text-[hsl(var(--text-secondary))] uppercase tracking-wider">Curriculum Streams / Faculty Association</label>
               <div className="flex flex-wrap gap-2">
                 {streams.map(s => {
                   const selected = form.stream_ids?.includes(s.id);
@@ -247,8 +332,8 @@ function SubjectFormModal({
             <textarea
               value={form.description || ''}
               onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-              rows={3}
-              placeholder="Brief description of the subject..."
+              rows={2}
+              placeholder="Brief description of the subject and syllabus scope..."
               className="w-full px-4 py-3 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--text-primary))] resize-none focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
             />
           </div>
@@ -261,7 +346,7 @@ function SubjectFormModal({
             >
               <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${form.is_elective ? 'translate-x-5' : ''}`} />
             </div>
-            <span className="text-sm font-semibold text-[hsl(var(--text-primary))]">This is an elective subject</span>
+            <span className="text-sm font-semibold text-[hsl(var(--text-primary))]">This is an elective subject (students choose from stream groups)</span>
           </label>
 
           {/* Actions */}
@@ -307,6 +392,8 @@ export default function SubjectsPage() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [examinableFilter, setExaminableFilter] = useState('');
+  const [streamFilter, setStreamFilter] = useState('');
   const [showArchived, setShowArchived] = useState(false);
 
   // Modals
@@ -329,6 +416,8 @@ export default function SubjectsPage() {
         department_id: deptFilter || undefined,
         category: categoryFilter || undefined,
         is_active: showArchived ? undefined : true,
+        is_examinable: examinableFilter === 'examinable' ? true : examinableFilter === 'non_examinable' ? false : undefined,
+        stream_id: streamFilter || undefined,
       }),
       getDepartments(tenant),
       getCurriculumStreams(tenant),
@@ -338,7 +427,7 @@ export default function SubjectsPage() {
     if (deptsRes.success)    setDepartments(deptsRes.data);
     if (streamsRes.success)  setStreams(streamsRes.data);
     setLoading(false);
-  }, [tenant, search, deptFilter, categoryFilter, showArchived]);
+  }, [tenant, search, deptFilter, categoryFilter, examinableFilter, streamFilter, showArchived]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -423,11 +512,17 @@ export default function SubjectsPage() {
             Curriculum Subjects Catalogue
           </h1>
           <p className="text-xs sm:text-sm text-[hsl(var(--text-secondary))]">
-            {total} subject{total !== 1 ? 's' : ''} · Manage codes, categories, streams, and curriculum versions
+            {total} subject{total !== 1 ? 's' : ''} · Master academic SKUs, national examination codes, and teaching standards
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <Link
+            href={`/${tenant}/admin/academics/streams`}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-secondary))] hover:border-[hsl(var(--accent))] hover:text-[hsl(var(--accent))] transition-colors"
+          >
+            <Layers className="w-3.5 h-3.5" /> Streams &amp; Faculty Rules
+          </Link>
           <button
             onClick={() => setIsAddOpen(true)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-xs font-bold shadow-md hover:opacity-90 transition-opacity"
@@ -439,14 +534,14 @@ export default function SubjectsPage() {
 
       {/* Filters */}
       <div className="glass-card p-4 rounded-3xl">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+          <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--text-tertiary))]" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name or code…"
+              placeholder="Search by name, code, or syllabus…"
               className="w-full h-11 pl-10 pr-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-sm font-semibold text-[hsl(var(--text-primary))] focus:outline-none focus:border-[hsl(var(--accent))] transition-colors"
             />
           </div>
@@ -470,6 +565,27 @@ export default function SubjectsPage() {
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
+
+          <select
+            value={examinableFilter}
+            onChange={e => setExaminableFilter(e.target.value)}
+            className="h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-secondary))] focus:outline-none min-w-[150px]"
+          >
+            <option value="">All Examination Types</option>
+            <option value="examinable">Examinable (BECE/WASSCE)</option>
+            <option value="non_examinable">Non-Examinable</option>
+          </select>
+
+          {streams.length > 0 && (
+            <select
+              value={streamFilter}
+              onChange={e => setStreamFilter(e.target.value)}
+              className="h-11 px-4 rounded-2xl bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-xs font-bold text-[hsl(var(--text-secondary))] focus:outline-none min-w-[160px]"
+            >
+              <option value="">All Streams</option>
+              {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
 
           <button
             onClick={() => setShowArchived(p => !p)}
@@ -503,11 +619,11 @@ export default function SubjectsPage() {
           </div>
           <h3 className="text-lg font-black text-[hsl(var(--text-primary))] mb-2">No subjects found</h3>
           <p className="text-sm text-[hsl(var(--text-secondary))] mb-6">
-            {search || deptFilter || categoryFilter
+            {search || deptFilter || categoryFilter || examinableFilter || streamFilter
               ? 'Try adjusting your filters'
               : 'Start building your subject catalogue'}
           </p>
-          {!search && !deptFilter && !categoryFilter && (
+          {!search && !deptFilter && !categoryFilter && !examinableFilter && !streamFilter && (
             <button
               onClick={() => setIsAddOpen(true)}
               className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-[hsl(var(--accent))] to-[hsl(var(--accent-hover))] text-white text-sm font-bold hover:opacity-90 transition-opacity"
@@ -553,11 +669,16 @@ export default function SubjectsPage() {
             short_name: editingSubject.short_name,
             code: editingSubject.code,
             national_code: editingSubject.national_code,
+            exam_board_code: editingSubject.exam_board_code,
             description: editingSubject.description,
             category: editingSubject.category,
             subject_type: editingSubject.subject_type,
             department_id: editingSubject.department_id,
             is_elective: editingSubject.is_elective,
+            is_examinable: editingSubject.is_examinable,
+            default_periods_per_week: editingSubject.default_periods_per_week,
+            default_period_duration: editingSubject.default_period_duration,
+            max_class_size: editingSubject.max_class_size,
             stream_ids: editingSubject.streams?.map(s => s.stream_id) || [],
           }}
           departments={departments}
@@ -637,10 +758,16 @@ function SubjectCard({
       {/* Top row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-1.5 flex-wrap mb-1">
             {subject.code && (
               <span className="text-[10px] font-black font-mono text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.08)] px-2 py-0.5 rounded-lg">
                 {subject.code}
+              </span>
+            )}
+            {subject.is_examinable && (
+              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                <GraduationCap className="w-2.5 h-2.5" />
+                {subject.exam_board_code || 'WAEC / BECE'}
               </span>
             )}
             {subject.is_elective && (
@@ -715,18 +842,30 @@ function SubjectCard({
         )}
       </div>
 
+      {/* Standards & Timetable Info */}
+      <div className="flex items-center gap-2 flex-wrap text-[10px] font-bold text-[hsl(var(--text-secondary))]">
+        <span className="px-2 py-0.5 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))]">
+          {subject.default_periods_per_week ?? 4} periods/wk ({subject.default_period_duration ?? 40}m)
+        </span>
+        {subject.max_class_size && (
+          <span className="px-2 py-0.5 rounded-lg bg-[hsl(var(--bg-tertiary))] border border-[hsl(var(--border))] text-[hsl(var(--text-tertiary))]">
+            Max {subject.max_class_size} students
+          </span>
+        )}
+      </div>
+
       {/* Streams */}
       {subject.streams && subject.streams.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {subject.streams.slice(0, 2).map(s => (
+          {subject.streams.slice(0, 3).map(s => (
             <span key={s.stream_id} className="text-[9px] font-bold px-2 py-0.5 rounded-lg bg-[hsl(var(--accent)/0.08)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.15)]">
               {s.stream_code}
-              {s.is_core && ' •'}
+              {s.is_core ? ' • Core' : ''}
             </span>
           ))}
-          {subject.streams.length > 2 && (
+          {subject.streams.length > 3 && (
             <span className="text-[9px] font-bold px-2 py-0.5 rounded-lg bg-[hsl(var(--bg-tertiary))] text-[hsl(var(--text-tertiary))] border border-[hsl(var(--border))]">
-              +{subject.streams.length - 2}
+              +{subject.streams.length - 3}
             </span>
           )}
         </div>
@@ -744,7 +883,7 @@ function SubjectCard({
           href={`/${tenant}/admin/academics/subjects/${subject.id}`}
           className="text-[10px] font-bold text-[hsl(var(--accent))] hover:underline flex items-center gap-1"
         >
-          View <ChevronRight className="w-3 h-3" />
+          View Details <ChevronRight className="w-3 h-3" />
         </Link>
       </div>
     </div>
