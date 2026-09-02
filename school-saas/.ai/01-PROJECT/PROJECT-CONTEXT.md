@@ -21,3 +21,5 @@ The enterprise audit reports a sound multi-tenant foundation but substantial pro
 
 ## Source conflicts
 `docs/enterprise-readiness-audit.md` is the audit evidence baseline. The root README remains create-next-app documentation. Prior planning documents may describe a database as empty while migrations establish schema; actual production occupancy is unverified.
+
+The old Codex Collaboration Playbook and duplicate top-level `.ai` records have been consolidated into the numbered AI-EOS structure. Historical material is retained only where it adds useful evidence/context and is explicitly marked as legacy/reference.
