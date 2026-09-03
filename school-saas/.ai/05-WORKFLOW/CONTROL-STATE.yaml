@@ -7,18 +7,18 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: null
-  status: IDLE
-  authority: null
-  authorized_at: null
+  id: TASK-TEST-001
+  status: APPROVED
+  authority: chatgpt
+  authorized_at: "2026-09-03"
 last_instruction:
-  id: null
-  from: null
-  to: null
-  type: null
-  task_id: null
-  status: null
-  commit: null
+  id: MSG-TEST-001
+  from: chatgpt
+  to: gemini
+  type: AUTHORIZED_TASK
+  task_id: TASK-TEST-001
+  status: ACTIVE
+  commit: 1bc9d038d0bb8a064ef942dec7d94b47f6fbecf6
 pending:
   recommendations: []
   reviews: []
