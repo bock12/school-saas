@@ -45,13 +45,15 @@ Completed a static security-boundary inventory covering privileged Supabase/Post
 
 ## TASK-TEST-001 — AI-EOS Collaboration Protocol Validation
 **Date:** 2026-09-03  
-**Status:** IMPLEMENTED (Awaiting ChatGPT Architectural/QA Review)  
-**Implementer:** Gemini / Antigravity (Implementation Engineer)  
+**Status:** IMPLEMENTED (Review Corrections Applied · Awaiting Second ChatGPT Supervisory Review)  
+**Implementer:** Gemini / Antigravity (Implementation Engineer & Technical Contributor)  
 **Supervisor / Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
 **Final Authority:** Human Project Owner  
 
 ### Summary
-Executed read-only operational and governance validation test TASK-TEST-001 in accordance with the SchoolSaaS AI Engineering Operating System (AI-EOS v1.1/v1.2). Validated autonomous discovery of authority boundaries, recognized the authoritative handshake from `CONTROL-STATE.yaml` and `MSG-TEST-001`, evaluated repository and governance documentation health, identified stale references and governance duplications, formulated evidence-based recommendation `REC-0001` regarding module-level `createAdminClient()` calls, and verified blocker/escalation mechanisms without modifying application source, database schemas, authentication, RLS, or production infrastructure.
+Executed operational and governance validation test TASK-TEST-001 in accordance with the SchoolSaaS AI Engineering Operating System (AI-EOS v1.1/v1.2). Validated autonomous discovery of authority boundaries, recognized the authoritative handshake from `CONTROL-STATE.yaml` and `MSG-TEST-001`, evaluated repository and governance documentation health, identified stale references and governance duplications, formulated evidence-based recommendation `REC-0001`, and verified blocker/escalation mechanisms without modifying application source, database schemas, authentication, RLS, or production infrastructure.
+
+Following ChatGPT supervisory review `REVIEW-TASK-TEST-001` (`CHANGES_REQUESTED` via `MSG-TEST-003`), this report was updated to incorporate all six requested corrections: correcting `REC-0001` remediation logic to distinguish function scoping from genuine multi-layered authorization; isolating the examination API exposure (`src/app/api/admin/exams/route.ts`) as a distinct critical security concern; documenting the arbitrary tenant fallback in `src/app/actions/academic-calendar.ts` (`R-004`); revising QA evidence terminology into standardized categories; and clarifying review lifecycle boundaries.
 
 ### Repository and Governance Files Inspected
 1. `school-saas/AGENTS.md` (Next.js 16 breaking change rules)
@@ -71,7 +73,7 @@ Executed read-only operational and governance validation test TASK-TEST-001 in a
 15. `school-saas/.ai/02-ARCHITECTURE/ARCHITECTURE.md`, `DECISIONS.md`, `TARGET-ARCHITECTURE.md`
 16. `school-saas/.ai/03-ENGINEERING/CODING-STANDARDS.md` & `TESTING-STANDARDS.md`
 17. `school-saas/.ai/04-SECURITY/SECURITY-POLICY.md`, `SECURITY-ARCHITECTURE.md`, `PRIVILEGED-ACCESS.md`, `RBAC.md`, `TENANT-ISOLATION.md`, `THREAT-MODEL.md`
-18. `school-saas/.ai/05-WORKFLOW/CONTROL-STATE.yaml`, `TASK-QUEUE.md`, `TASK-TEST-001.md`, `DEFINITION-OF-DONE.md`, `WORKED-EXAMPLE.md`, `REVIEW-QUEUE.md`, `RECOMMENDATIONS.md`, `messages/MSG-TEST-001.md`, `messages/README.md`
+18. `school-saas/.ai/05-WORKFLOW/CONTROL-STATE.yaml`, `TASK-QUEUE.md`, `TASK-TEST-001.md`, `DEFINITION-OF-DONE.md`, `WORKED-EXAMPLE.md`, `REVIEW-QUEUE.md`, `RECOMMENDATIONS.md`, `messages/MSG-TEST-001.md`, `messages/MSG-TEST-002.md`, `messages/MSG-TEST-003.md`, `messages/README.md`
 19. `school-saas/.ai/06-MODULES/SECURITY-CONTROL-MATRIX.md`
 20. `school-saas/.ai/07-RISK/RISKS.md` & `INCIDENTS.md`
 21. `school-saas/.ai/08-CHANGE/AI-EOS-MIGRATION-MANIFEST.md`, `AUTOMATION-GUIDE.md`, `CHANGELOG.md`, `LEGACY-GOVERNANCE-FRAMEWORK.md`, `LEGACY-IMPLEMENTATION-PLAN.md`
@@ -81,7 +83,7 @@ Executed read-only operational and governance validation test TASK-TEST-001 in a
 
 ### Authority Model Verification
 - **Human Project Owner (Final Authority):** Full sovereignty over production deployments, code merges, releases, credential provisioning, destructive database commands, database migrations, package dependencies, and architecture/schema/RLS exceptions.
-- **ChatGPT (Engineering Supervisor):** Performs 6 distinct supervisory roles: Chief Software Architect, Project Supervisor, UI/UX Reviewer, Security Analyst, QA Lead, and Technical Strategy Advisor. Creates task contracts, decomposes work, defines quality and security gates, reviews implementation diffs, and evaluates recommendations.
+- **ChatGPT (Engineering Supervisor):** Performs 6 distinct supervisory roles: Chief Software Architect, Project Supervisor, UI/UX Reviewer, Security Analyst, QA Lead, and Technical Strategy Advisor. Creates task contracts, decomposes work, defines quality and security gates, reviews implementation diffs, issues review verdicts (`APPROVED` / `CHANGES_REQUESTED`), and evaluates recommendations.
 - **Gemini / Antigravity (Implementation Engineer & Technical Contributor):** Operates strictly within approved task scope. Performs repository investigations, implements approved contracts, executes proportionate validation, submits evidence-based recommendations (`REC-####`), and reports blockers (`ARCHITECTURAL_ESCALATION`). Has no authority to self-approve, merge code, or override architectural/security invariants.
 - **GitHub Copilot (Coding Assistant):** Local assistive tool only; no authority to decide architecture, approve tasks, or bypass controls.
 - **GitHub:** Canonical source of truth for repository history, code, branches, and PRs.
@@ -90,19 +92,40 @@ Executed read-only operational and governance validation test TASK-TEST-001 in a
 ### Authoritative-Instruction Handshake Verification
 Under `.ai/00-GOVERNANCE/AI-COLLABORATION-PROTOCOL.md` and `.ai/05-WORKFLOW/CONTROL-STATE.yaml`, an instruction is recognized as authoritative if and only if:
 1. `from: chatgpt`
-2. `type: AUTHORIZED_TASK` or `type: ARCHITECTURE_DIRECTIVE`
-3. Accompanied by a valid linked `task_id` matching an approved task in `.ai/05-WORKFLOW/TASK-QUEUE.md` and task specification in `.ai/05-WORKFLOW/`
+2. `type: AUTHORIZED_TASK` or `type: ARCHITECTURE_DIRECTIVE` (or supervisory `type: CHANGES_REQUESTED` during review cycle)
+3. Accompanied by a valid linked `task_id` matching an active task in `.ai/05-WORKFLOW/TASK-QUEUE.md` and task specification in `.ai/05-WORKFLOW/`
 4. State is `ACTIVE` or `APPROVED`
 5. Handshake record exists in `.ai/05-WORKFLOW/messages/`
-All conditions were verified for `TASK-TEST-001` via `CONTROL-STATE.yaml` and `MSG-TEST-001.md`.
+All conditions were verified for `TASK-TEST-001` via `CONTROL-STATE.yaml`, `MSG-TEST-001.md`, and `MSG-TEST-003.md`.
 
-### Task Lifecycle, Recommendation, and Blocker Protocols
-- **Lifecycle:** `BACKLOG → TRIAGED → APPROVED → IN_PROGRESS → IMPLEMENTED → UNDER_REVIEW → APPROVED_FOR_MERGE → COMPLETED`.
-  - Gemini transitions tasks to `IMPLEMENTED` with an implementation report and diff.
-  - ChatGPT evaluates the actual diff against acceptance criteria and records a review verdict (`APPROVED`, `CHANGES_REQUESTED`, `BLOCKED`, `ESCALATED`).
+### Task Lifecycle and Review Ownership
+- **Lifecycle Flow:** `BACKLOG → TRIAGED → APPROVED → IN_PROGRESS → IMPLEMENTED → UNDER_REVIEW → APPROVED_FOR_MERGE → COMPLETED`.
+  - Gemini transitions tasks to `IMPLEMENTED` when implementation work is finished and records an implementation report.
+  - ChatGPT evaluates the actual git diff against acceptance criteria, security controls, and Definition of Done, recording an official review verdict in `REVIEW-QUEUE.md`.
+  - When ChatGPT issues `CHANGES_REQUESTED` (as in `REVIEW-TASK-TEST-001` / `MSG-TEST-003`), the task returns to `CHANGES_REQUESTED` / `IN_PROGRESS` until corrections are applied.
+  - Upon applying corrections, Gemini resubmits for supervisory review.
   - Human alone executes merge/release (`COMPLETED`).
-- **Recommendation Protocol (`REC-####`):** Recommendations challenge assumptions using repository evidence. They require Problem, Repository Evidence, Impact, Alternatives Considered, Recommendation, Risk if Ignored, and Decision Required. Recommendations never constitute implementation authorization until dispositioned by ChatGPT/Human and converted into an approved task.
-- **Blocker / Escalation Protocol:** If work requires modifying authentication, tenant isolation, RLS, database schema, service-role callers, package dependencies, or public APIs outside approved scope, Gemini immediately halts work and files an `ARCHITECTURAL_ESCALATION` with status `BLOCKED — ARCHITECTURAL DECISION REQUIRED`.
+  - **Gemini never self-approves or marks work approved.**
+
+### Specific Security & Architectural Findings (Separated)
+
+1. **Privileged Client Instantiation vs. Multi-Layered Authorization (`REC-0001`):**
+   - `createAdminClient()` at module level in `src/app/actions/academic-calendar.ts:8` and `src/app/api/admin/exams/route.ts:4` creates build-time fragility and decouples client creation from request-level guards.
+   - **Correction Applied:** Moving `createAdminClient()` into function scope is **not an authorization control**. Genuine security requires explicit multi-layered enforcement:
+     1. Authentication / session validation via Supabase auth.
+     2. Tenant resolution and tenant authorization (fail-closed).
+     3. Role / permission authorization (RBAC).
+     4. Resource-level ownership / scope checks.
+     5. Privileged execution strictly after authorization boundaries pass.
+
+2. **Unauthenticated Privileged Examination API (`src/app/api/admin/exams/route.ts`):**
+   - Lines 7–25 expose a `GET` endpoint that directly executes `supabase.from('exam_sessions').select('*')`, `exam_results_approval`, and `exam_malpractices` across all tenants.
+   - It performs **no** authentication check, **no** session check, **no** role check, and **no** tenant filtering.
+   - This is an active critical security finding (`R-002` / `TASK-0003`) that is distinct from client placement. A dedicated remediation task is recommended.
+
+3. **Arbitrary Tenant Resolution Fallback (`src/app/actions/academic-calendar.ts`):**
+   - Lines 66–73, 118–119, and 125–133 in `resolveTenantId()` explicitly fall back to `SELECT id FROM tenants LIMIT 1` (arbitrary tenant) when a tenant slug is missing, invalid, or unresolvable.
+   - This directly violates `.ai/AGENTS.md` ("Tenant resolution must fail closed; never select an arbitrary fallback tenant") and represents an active tenant-isolation risk (`R-004`).
 
 ### Documentation and Governance Health Findings
 1. **Accidental Truncation of `RECOMMENDATIONS.md` (`CONFIRMED`):** In commit `0d05dd2`, `school-saas/.ai/05-WORKFLOW/RECOMMENDATIONS.md` was inadvertently truncated to 0 bytes. Restored canonical header and indexed `REC-0001`.
@@ -116,18 +139,18 @@ All conditions were verified for `TASK-TEST-001` via `CONTROL-STATE.yaml` and `M
 4. **Topology Disconnect (`CONFIRMED`):** Git repo root is `SchoolSaas/`, but project code and `.ai/` live in `SchoolSaas/school-saas/`. Repo root lacks an `AGENTS.md` file; `school-saas/AGENTS.md` contains only Next.js 16 rules, while `.ai/AGENTS.md` contains AI-EOS governance.
 5. **Untracked Historical Implementation Artifacts (`CONFIRMED`):** `school-saas/Implemenation plan.md` sits untracked in project root outside AI-EOS workflow.
 
-### Usability Assessment of AI-EOS
-The AI-EOS framework is exceptionally well-structured for asynchronous, durable multi-agent orchestration without shared runtime memory. The clear separation of concerns (Human finality, ChatGPT architectural governance, Gemini disciplined implementation) eliminates common agent failure modes like scope creep, unauthorized migrations, and silent security weakening.
-Key strengths:
-- Clear evidence taxonomy (`CONFIRMED`, `DOCUMENTED`, `INFERRED`, etc.) prevents speculation from becoming assumed fact.
-- Durable file-based handshakes (`CONTROL-STATE.yaml`, `messages/MSG-####.md`) eliminate context loss across agent restarts.
-- Mandatory blocker escalation protects core security boundaries (RLS, tenant boundaries, credentials).
-
-### Recommendation Produced
-Produced `REC-0001` in `.ai/05-WORKFLOW/RECOMMENDATIONS.md`:
-- **Title:** Eliminate module-level instantiation of privileged `createAdminClient()` and establish request-scoped authorized caller pattern.
-- **Evidence:** `src/app/actions/academic-calendar.ts` line 8 and `src/app/api/admin/exams/route.ts` line 4 execute `createAdminClient()` at module load time, risking build-time crashes and decoupling privileged access from request-time authorization guards.
-- **Status:** `PROPOSED`, awaiting ChatGPT architectural disposition.
+### QA Evidence & Validation Categories (Corrected Terminology)
+1. **Governance & Collaboration Protocol Validation:**
+   - Handshake verification: Successfully parsed `CONTROL-STATE.yaml` and authenticated message `MSG-TEST-001`.
+   - Review cycle execution: Processed ChatGPT supervisory instruction `MSG-TEST-003` (`CHANGES_REQUESTED`), updated records, and generated response `MSG-TEST-004`.
+   - Branching verification: Maintained clean isolation on `ai-eos/task-test-001-validation` without merging.
+2. **Static Repository & Security Analysis:**
+   - Static inspection of `src/middleware.ts`, `src/lib/auth/guards.ts`, `src/lib/supabase/admin.ts`, `src/app/actions/academic-calendar.ts`, and `src/app/api/admin/exams/route.ts`.
+   - Identification of module-level client instantiation, unauthenticated API exposure, and `LIMIT 1` tenant fallback.
+3. **Automated Application Tests:**
+   - **None run.** As confirmed in `package.json`, no automated test framework (e.g. Vitest, Jest, Playwright) is configured or installed in the repository. Application automated tests were not required and were not run.
+4. **Runtime & Integration Tests:**
+   - **None run.** In accordance with explicit task boundaries, no dev servers, live database connections, or HTTP requests were executed.
 
 ### Application Code, Database, and Production Boundary Compliance
 - Application code modified: **None** (0 lines)
@@ -137,18 +160,13 @@ Produced `REC-0001` in `.ai/05-WORKFLOW/RECOMMENDATIONS.md`:
 - Infrastructure / production configuration modified: **None** (0 lines)
 - Merges executed: **None** (0 merges)
 
-### Files Changed
-- `school-saas/.ai/05-WORKFLOW/RECOMMENDATIONS.md` (Restored template, added `REC-0001`)
-- `school-saas/.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` (Appended TASK-TEST-001 report)
-- `school-saas/.ai/05-WORKFLOW/TASK-QUEUE.md` (Updated TASK-TEST-001 status to `IMPLEMENTED`)
-- `school-saas/.ai/05-WORKFLOW/CONTROL-STATE.yaml` (Updated active_task status to `IMPLEMENTED`, registered pending recommendation and review)
-- `school-saas/.ai/05-WORKFLOW/messages/MSG-TEST-002.md` (Created durable implementation response message)
+### Files Changed (Current Review Correction Round)
+- `school-saas/.ai/05-WORKFLOW/RECOMMENDATIONS.md` (Refined REC-0001 with layered auth logic, exam API details, and tenant fallback details)
+- `school-saas/.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` (Updated report with QA taxonomy, separated security findings, and review correction status)
+- `school-saas/.ai/05-WORKFLOW/REVIEW-QUEUE.md` (Recorded implementer response to REVIEW-TASK-TEST-001)
+- `school-saas/.ai/05-WORKFLOW/TASK-QUEUE.md` (Updated TASK-TEST-001 status reflecting review corrections applied)
+- `school-saas/.ai/05-WORKFLOW/CONTROL-STATE.yaml` (Updated last_response to MSG-TEST-004)
+- `school-saas/.ai/05-WORKFLOW/messages/MSG-TEST-004.md` (Created implementation response message to MSG-TEST-003)
 
-### Tests and Exact Results
-1. `git status`: Verified clean working tree prior to task execution.
-2. `git branch -a`: Verified branch topology and remote tracking state.
-3. Read-only static analysis across all `.ai/` governance docs, prompts, and source code.
-4. Git branch created: `ai-eos/task-test-001-validation` to isolate documentation and report updates.
-
-### Final Assessment
-**PASS** — All acceptance criteria (`AC-001` through `AC-010`) satisfied. The AI-EOS protocol was fully discovered, respected, and executed without breach of authority boundaries.
+### Current Assessment
+**CORRECTIONS APPLIED · PENDING SECOND CHATGPT SUPERVISORY REVIEW** — All six review findings from `MSG-TEST-003` have been addressed in documentation. PR remains unmerged awaiting ChatGPT review verdict.

@@ -57,6 +57,16 @@ See durable review message `MSG-TEST-003` for the authoritative correction instr
 ### Recommendation disposition
 `REC-0001`: `ACCEPTED_WITH_CHANGES` for continued refinement only; this disposition does **not** authorize application implementation. Any resulting application work must be converted into a separate authorized task.
 
+### Implementer Response (Gemini)
+**Date:** 2026-09-03 · **Response Message:** `MSG-TEST-004`
+All six review corrections from `MSG-TEST-003` have been applied in documentation:
+- **Finding 1 (REC-0001 logic):** Refined `RECOMMENDATIONS.md` to explicitly decouple function scoping from true authorization controls (Authentication → Tenant Resolution/Authorization → Role/Permission Authorization → Resource Scope → Privileged Client Access).
+- **Finding 2 (Exam API finding):** Preserved and isolated `src/app/api/admin/exams/route.ts` as a distinct critical security concern (`R-002`) and recommended a dedicated remediation task.
+- **Finding 3 (Tenant fallback):** Documented that `src/app/actions/academic-calendar.ts` lines 66–73, 118–119, and 125–133 fall back to `SELECT id FROM tenants LIMIT 1`, violating fail-closed tenant resolution (`R-004`).
+- **Finding 4 (QA terminology):** Categorized QA evidence in `IMPLEMENTATION-REPORT.md` into Governance Validation, Static Analysis, Automated Application Tests (none run), and Runtime Tests (none run).
+- **Finding 5 (Review lifecycle):** Clarified lifecycle status: implementation corrections complete, resubmitted for second supervisory review.
+- **Finding 6 (Scope):** Strictly 0 lines of application code, schema, migrations, RLS, dependencies, or infrastructure modified. 0 merges executed.
+
 ### Final decision
 Pending second ChatGPT review after Gemini corrections.
 

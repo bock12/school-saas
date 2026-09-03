@@ -39,33 +39,34 @@ Recommendations do not authorize implementation. An accepted recommendation that
 `createAdminClient()` is instantiated at top-level module scope in server action and API route files, and privileged database access may occur without a clearly enforced request-level authorization boundary.
 
 #### Repository Evidence
-1. `src/app/actions/academic-calendar.ts` contains top-level `createAdminClient()` usage.
-2. `src/app/api/admin/exams/route.ts` contains top-level `createAdminClient()` usage and its handlers require dedicated review for authentication, tenant authorization, role/permission authorization, and resource scope.
+1. `src/app/actions/academic-calendar.ts` line 8 contains top-level module instantiation of `createAdminClient()`. Additionally, lines 66–73, 118–119, and 125–133 in `resolveTenantId()` fall back to `SELECT id FROM tenants LIMIT 1` (arbitrary first tenant), directly violating `.ai/AGENTS.md` ("Tenant resolution must fail closed; never select an arbitrary fallback tenant") and risk `R-004`.
+2. `src/app/api/admin/exams/route.ts` line 4 instantiates `createAdminClient()` at module level, and lines 7–25 expose a `GET` handler that queries `exam_sessions`, `exam_results_approval`, and `exam_malpractices` across all tenants without request authentication, session verification, role checks, or tenant scoping (violating risk `R-002`).
 3. `src/lib/supabase/admin.ts` requires `SUPABASE_SERVICE_ROLE_KEY` during privileged-client creation.
 4. `.ai/02-ARCHITECTURE/ARCHITECTURE.md` and `.ai/04-SECURITY/PRIVILEGED-ACCESS.md` require application authorization and treat service-role access as a reviewed exception rather than a replacement for authorization.
 
 #### Impact
-- Module-level privileged client creation can encourage handlers to use elevated access without a visible request authorization boundary.
-- Missing request-level authorization or tenant scoping can expose privileged examination data.
-- Import-time environment requirements can create build/CI fragility where privileged credentials are intentionally unavailable.
+- Module-level privileged client creation encourages handlers to use elevated access without a visible request authorization boundary.
+- Missing request-level authorization or tenant scoping in `src/app/api/admin/exams/route.ts` exposes confidential examination records across tenants.
+- Arbitrary fallback to `LIMIT 1` tenant in `resolveTenantId()` risks cross-tenant data leakage and mutation whenever a caller provides an invalid or missing tenant slug.
+- Import-time environment requirements create build/CI fragility where privileged credentials are intentionally unavailable.
 
 #### Alternatives Considered
 1. *Lazy module-level singleton:* Rejected because lazy initialization does not establish request authentication or authorization.
-2. *Request-scoped privileged client after guards:* Retained as a possible implementation pattern, but only as one part of the security boundary.
+2. *Request-scoped privileged client after guards:* Retained as a possible implementation pattern, but only as one component of a multi-layered security boundary.
 3. *Centralized authorized privileged-client factory:* Recommended for evaluation if it can enforce or require explicit authenticated actor, tenant, permission, and resource context.
 
 #### ChatGPT Review Correction
 Moving `createAdminClient()` into a handler is **not itself an authorization control**. Any remediation must explicitly separate:
 
-1. authentication/session verification;
-2. tenant resolution and tenant authorization;
-3. role/permission authorization;
-4. resource-level scope checks where applicable;
-5. privileged client creation/use only after the required authorization boundary.
+1. **Authentication / session verification** (verifying the caller identity via Supabase auth);
+2. **Tenant resolution and tenant authorization** (fail-closed resolution without arbitrary tenant fallback);
+3. **Role / permission authorization** (validating role membership against operation matrix);
+4. **Resource-level scope checks** (ensuring the target object belongs to the verified tenant/actor);
+5. **Privileged client creation/use** (instantiated strictly after the authorization gate passes).
 
-The examination API authorization concern is a distinct security issue and should not be reduced to client-instantiation scope.
+The examination API authorization concern is a distinct security issue (`R-002`) and should not be reduced to client-instantiation scope.
 
-The `academic-calendar.ts` tenant-resolution fallback behavior must also be reviewed separately so a privileged operation can never silently select an unrelated/default tenant when the caller tenant cannot be established.
+The `academic-calendar.ts` tenant-resolution fallback behavior must also be reviewed separately so a privileged operation can never silently select an unrelated/default tenant when the caller tenant cannot be established (`R-004`).
 
 #### Decision Required
 Create a dedicated authorized task for the application security remediation after the relevant code paths are fully audited. This recommendation does **not** authorize application changes under TASK-TEST-001.
