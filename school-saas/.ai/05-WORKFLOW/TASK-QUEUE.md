@@ -13,15 +13,14 @@ Read-only inventory completed for privileged Supabase/PostgreSQL/auth-user acces
 Rotate/revoke exposed database credentials, assess repository/history exposure, remove embedded credentials through an approved recovery plan, and add secret scanning. Human-controlled operation; no credential rotation, history rewrite or database execution without explicit approval.
 
 ## TASK-0003 — Privileged API & Tenant Isolation Security Investigation
-**Status:** IMPLEMENTED (Pending ChatGPT Supervisory Review) · **Priority:** Critical · **Owner:** ChatGPT supervision · **Target:** Gemini/Antigravity
+**Status:** IMPLEMENTED · **Priority:** Critical · **Owner:** ChatGPT supervision · **Target:** Gemini/Antigravity
 
-Read-only security architecture investigation and remediation-planning task covering unauthenticated privileged APIs, service-role client usage, tenant resolution, and tenant isolation boundaries. Explicitly prohibits application code, database schema, migration, RLS, authentication, dependency, or infrastructure modifications. Specification: `.ai/05-WORKFLOW/TASK-0003.md`. Authorization: `.ai/05-WORKFLOW/messages/MSG-0005.md`. Implementation Response: `.ai/05-WORKFLOW/messages/MSG-0006.md`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Review: `REVIEW-TASK-0003`.
+Read-only security architecture investigation and remediation-planning task covering unauthenticated privileged APIs, service-role client usage, tenant resolution, and tenant isolation boundaries. Investigation accepted as complete; implementation remediation is tracked separately. Specification: `.ai/05-WORKFLOW/TASK-0003.md`. Authorization: `.ai/05-WORKFLOW/messages/MSG-0005.md`. Implementation Response: `.ai/05-WORKFLOW/messages/MSG-0006.md`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Review: `REVIEW-TASK-0003`.
 
+## TASK-0004 — Unified API Route Authorization Guard
+**Status:** APPROVED · **Priority:** Critical · **Owner:** ChatGPT / Architecture & Security Supervision · **Target:** Gemini/Antigravity
 
-## TASK-0004 — Privileged server-action authorization boundary
-**Status:** BACKLOG · **Priority:** Critical · **Owner:** Gemini/Antigravity after approval
-
-Require trusted actor/role/tenant/object checks before service-role/direct PostgreSQL/auth-admin operations. Restrict direct `auth.users` manipulation and prove denial cases.
+Create the centralized request-safe `authorizeApiRequest` boundary for Next.js Route Handlers. Authentication, trusted tenant resolution, explicit role/permission checks, standardized JSON 401/403 responses, and strict separation from privileged-client creation must be established before TASK-0005 secures vulnerable route families. Specification: `.ai/05-WORKFLOW/TASK-0004.md`. Authorization: `.ai/05-WORKFLOW/messages/MSG-0007.md`.
 
 ## TASK-0005 — Tenant resolution and RLS correction
 **Status:** BACKLOG · **Priority:** High · **Owner:** ChatGPT design; Gemini/Antigravity after approval
