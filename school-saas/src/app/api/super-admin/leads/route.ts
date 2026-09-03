@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { authorizeApiRequest, apiError } from '@/lib/auth/api-guard';
 
 let pgPool: Pool | null = null;
 function getPgPool() {
@@ -12,15 +13,24 @@ function getPgPool() {
   return pgPool;
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
+    const auth = await authorizeApiRequest(req, {
+      roles: ['super_admin'],
+      requireTenant: false,
+    });
+
+    if (!auth.ok) {
+      return auth.response;
+    }
+
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
     const search = searchParams.get('search');
 
     const dbPool = getPgPool();
     if (!dbPool) {
-      return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+      return apiError('Database unavailable', 'DATABASE_UNAVAILABLE', 500);
     }
 
     let query = `
@@ -69,22 +79,31 @@ export async function GET(req: Request) {
     });
   } catch (err: any) {
     console.error('Super Admin Leads GET error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to fetch leads' }, { status: 500 });
+    return apiError(err.message || 'Failed to fetch leads', 'INTERNAL_ERROR', 500);
   }
 }
 
-export async function PATCH(req: Request) {
+export async function PATCH(req: NextRequest) {
   try {
-    const body = await req.json();
+    const auth = await authorizeApiRequest(req, {
+      roles: ['super_admin'],
+      requireTenant: false,
+    });
+
+    if (!auth.ok) {
+      return auth.response;
+    }
+
+    const body = await req.json().catch(() => ({}));
     const { id, status, notes, scheduledAt, provisionedTenantId } = body;
 
-    if (!id) {
-      return NextResponse.json({ error: 'Lead ID is required' }, { status: 400 });
+    if (!id || typeof id !== 'string') {
+      return apiError('Lead ID is required', 'INVALID_REQUEST', 400);
     }
 
     const dbPool = getPgPool();
     if (!dbPool) {
-      return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+      return apiError('Database unavailable', 'DATABASE_UNAVAILABLE', 500);
     }
 
     const updates: string[] = ['updated_at = NOW()'];
@@ -118,35 +137,48 @@ export async function PATCH(req: Request) {
     const { rows } = await dbPool.query(query, params);
 
     if (rows.length === 0) {
-      return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+      return apiError('Lead not found', 'NOT_FOUND', 404);
     }
 
     return NextResponse.json({ success: true, lead: rows[0] });
   } catch (err: any) {
     console.error('Super Admin Leads PATCH error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to update lead' }, { status: 500 });
+    return apiError(err.message || 'Failed to update lead', 'INTERNAL_ERROR', 500);
   }
 }
 
-export async function DELETE(req: Request) {
+export async function DELETE(req: NextRequest) {
   try {
+    const auth = await authorizeApiRequest(req, {
+      roles: ['super_admin'],
+      requireTenant: false,
+    });
+
+    if (!auth.ok) {
+      return auth.response;
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'Lead ID is required' }, { status: 400 });
+      return apiError('Lead ID is required', 'INVALID_REQUEST', 400);
     }
 
     const dbPool = getPgPool();
     if (!dbPool) {
-      return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+      return apiError('Database unavailable', 'DATABASE_UNAVAILABLE', 500);
     }
 
-    await dbPool.query('DELETE FROM demo_requests WHERE id = $1', [id]);
+    const res = await dbPool.query('DELETE FROM demo_requests WHERE id = $1', [id]);
+
+    if (res.rowCount === 0) {
+      return apiError('Lead not found', 'NOT_FOUND', 404);
+    }
 
     return NextResponse.json({ success: true, message: 'Lead deleted successfully' });
   } catch (err: any) {
     console.error('Super Admin Leads DELETE error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to delete lead' }, { status: 500 });
+    return apiError(err.message || 'Failed to delete lead', 'INTERNAL_ERROR', 500);
   }
 }

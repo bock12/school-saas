@@ -74,6 +74,32 @@ The investigation's strict read-only boundary was also satisfied: no application
 ### Final decision
 **APPROVED.** TASK-0003 is closed as an investigation. The confirmed vulnerabilities remain open until their dedicated remediation tasks are implemented and verified.
 
+## REVIEW-TASK-0004 — Unified API Route Authorization Guard Review
+**Task:** TASK-0004  
+**Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Status:** PENDING_REVIEW  
+**Priority:** P1 (Critical Application Security Foundation)  
+**Branch:** `ai-eos/task-0004-api-authorization-guard`  
+**Specification:** `.ai/05-WORKFLOW/TASK-0004.md`  
+**Implementation Report:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`  
+**Response Message:** `.ai/05-WORKFLOW/messages/MSG-0008.md`
+
+### Scope
+Verify the implementation of `src/lib/auth/api-guard.ts`, representative route migrations (`/api/admin/exams`, `/api/exam-office/communications`, `/api/super-admin/leads`), unit test suite (`tests/auth/api-guard.test.ts`), and build/typecheck compliance against acceptance criteria AC-001 through AC-011.
+
+### Evidence Summary
+- `src/lib/auth/api-guard.ts` created with 7-stage fail-closed pipeline.
+- Standardized JSON 401/403/404/400 responses (no `redirect()`).
+- Fail-closed tenant resolution and tenant-scoped resource authorization (`WHERE id = :id AND tenant_id = :tenantId`).
+- Module-level `createAdminClient()` eliminated from `/api/admin/exams`.
+- Unverified `tenantSlug` override closed in `/api/exam-office/communications`.
+- Direct `pg.Pool` connection protected in `/api/super-admin/leads`.
+- 10 automated unit test scenarios executing via `npx tsx --test` (10/10 passed in 1.41s).
+- Next.js production build (`npm run build`) and TypeScript check (`npx tsc --noEmit`) passed with 0 errors.
+
+### Final decision
+Pending ChatGPT supervisory review.
+
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.
 

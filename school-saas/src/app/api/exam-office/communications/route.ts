@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { authorizeApiRequest, apiError } from '@/lib/auth/api-guard';
 import { resolveAudience } from '@/lib/communication/audience-resolver';
 import { renderTemplate } from '@/lib/communication/template-engine';
 import { CHANNELS, DeliveryChannel } from '@/lib/communication/channels';
@@ -8,28 +7,21 @@ import { logCommunicationAudit } from '@/lib/communication/audit';
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(req.url);
-    const tenantSlug = searchParams.get('tenant') || req.headers.get('x-tenant-slug');
+    const targetTenantSlug = searchParams.get('tenant') || undefined;
 
-    const adminSupabase = createAdminClient();
+    const auth = await authorizeApiRequest(req, {
+      roles: ['school_admin', 'exam_officer', 'super_admin'],
+      targetTenantSlug,
+      requireTenant: true,
+    });
 
-    // Get tenant id
-    let tenantId = user.user_metadata?.tenant_id;
-    if (!tenantId && tenantSlug) {
-      const { data: tenant } = await adminSupabase.from('tenants').select('id').eq('slug', tenantSlug).single();
-      tenantId = tenant?.id;
+    if (!auth.ok) {
+      return auth.response;
     }
 
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant context required' }, { status: 400 });
-    }
+    const adminSupabase = auth.adminClient();
+    const tenantId = auth.tenantId;
 
     const { data: notifications, error } = await adminSupabase
       .from('notifications')
@@ -38,25 +30,18 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return apiError(error.message, 'DATABASE_ERROR', 500);
     }
 
     return NextResponse.json({ notifications: notifications || [] });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });
+    return apiError(err.message || 'Server error', 'INTERNAL_ERROR', 500);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const {
       tenantSlug,
       title,
@@ -71,17 +56,19 @@ export async function POST(req: NextRequest) {
       context = {},
     } = body;
 
-    const adminSupabase = createAdminClient();
+    const auth = await authorizeApiRequest(req, {
+      roles: ['school_admin', 'exam_officer', 'super_admin'],
+      targetTenantSlug: tenantSlug || undefined,
+      requireTenant: true,
+    });
 
-    let tenantId = user.user_metadata?.tenant_id;
-    if (!tenantId && tenantSlug) {
-      const { data: tenant } = await adminSupabase.from('tenants').select('id').eq('slug', tenantSlug).single();
-      tenantId = tenant?.id;
+    if (!auth.ok) {
+      return auth.response;
     }
 
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant context required' }, { status: 400 });
-    }
+    const user = auth.user;
+    const adminSupabase = auth.adminClient();
+    const tenantId = auth.tenantId;
 
     // Render template if templateId provided
     let finalTitle = title;
@@ -92,7 +79,8 @@ export async function POST(req: NextRequest) {
         .from('notification_templates')
         .select('*')
         .eq('id', templateId)
-        .single();
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
 
       if (tpl) {
         finalTitle = renderTemplate(tpl.title_template, context);
@@ -106,11 +94,11 @@ export async function POST(req: NextRequest) {
     // 1. Resolve recipients
     const recipients = await resolveAudience({
       type: audienceType,
-      tenantId,
+      tenantId: tenantId!,
     });
 
     if (recipients.length === 0) {
-      return NextResponse.json({ error: 'No recipients match the selected audience filter' }, { status: 400 });
+      return apiError('No recipients match the selected audience filter', 'INVALID_AUDIENCE', 400);
     }
 
     // 2. Create notification record
@@ -135,7 +123,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (notifErr || !notif) {
-      return NextResponse.json({ error: notifErr?.message || 'Failed to create notification' }, { status: 500 });
+      return apiError(notifErr?.message || 'Failed to create notification', 'DATABASE_ERROR', 500);
     }
 
     // 3. Dispatch to recipients if sent immediately
@@ -187,7 +175,7 @@ export async function POST(req: NextRequest) {
     }
 
     await logCommunicationAudit({
-      tenantId,
+      tenantId: tenantId!,
       actorId: user.id,
       action: isScheduled ? 'notification_scheduled' : 'notification_sent',
       notificationId: notif.id,
@@ -201,6 +189,6 @@ export async function POST(req: NextRequest) {
       deliveryCount,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });
+    return apiError(err.message || 'Server error', 'INTERNAL_ERROR', 500);
   }
 }
