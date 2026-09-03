@@ -7,18 +7,18 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-TEST-001
-  status: IMPLEMENTED
+  id: TASK-0003
+  status: APPROVED
   authority: chatgpt
+  target: gemini
   authorized_at: "2026-09-03"
 last_instruction:
-  id: MSG-TEST-003
+  id: MSG-0005
   from: chatgpt
   to: gemini
-  type: CHANGES_REQUESTED
-  task_id: TASK-TEST-001
+  type: AUTHORIZED_TASK
+  task_id: TASK-0003
   status: ACTIVE
-  commit: 4f2982ad878202c30ac8830a7a271c8c562f7180
 last_response:
   id: MSG-TEST-004
   from: gemini
