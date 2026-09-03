@@ -36,3 +36,8 @@ Implement cross-tenant, RBAC, API/action, RLS and privileged-boundary tests usin
 **Status:** BACKLOG · **Priority:** High · **Owner:** ChatGPT design; Gemini/Antigravity after approval
 
 Reconcile database/application roles, permissions and hierarchy before adding new roles. Add regression coverage.
+
+## TASK-TEST-001 — AI-EOS Collaboration Protocol Validation
+**Status:** APPROVED · **Priority:** P1 · **Owner:** ChatGPT / Project Supervisor · **Target:** Gemini/Antigravity
+
+Controlled process test. Validate that a fresh Gemini/Antigravity session can discover and follow the AI-EOS collaboration protocol, identify authority, recognize an authorized task, assess governance/documentation health, submit an evidence-based recommendation and report blockers without changing application functionality. Full specification: `.ai/05-WORKFLOW/TASK-TEST-001.md`. Authorization record: `.ai/05-WORKFLOW/messages/MSG-TEST-001.md`. No merge is authorized.
