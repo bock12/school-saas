@@ -73,3 +73,179 @@ Create a dedicated authorized task for the application security remediation afte
 
 #### Verification
 Second ChatGPT supervisory review required before TASK-TEST-001 can be approved. Application remediation requires a separate authorized task and appropriate cross-tenant/role regression tests.
+
+---
+
+### REC-0002 — Implement Unified API Route Authorization Guard (`authorizeApiRequest`)
+
+- **Task:** TASK-0003 / Proposed TASK-0004
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Architecture / Authentication & RBAC
+- **Severity:** Critical
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+Next.js edge middleware (`src/middleware.ts`) explicitly excludes `/api/*` routes. Existing authorization helpers in `src/lib/auth/guards.ts` invoke `redirect(...)` (from `next/navigation`), which is suitable only for React Server Component page rendering and causes failures/improper behavior in Next.js Route Handlers. Consequently, API route developers omitted authentication and authorization or wrote brittle, ad-hoc checks.
+
+#### Repository Evidence
+1. `src/middleware.ts:113` matcher: `'/((?!api|_next/static...))'`.
+2. `src/lib/auth/guards.ts:24, 34, 83, 107` rely on `redirect('/login')` or `redirect('/')`.
+3. `/api/admin/exams`, `/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`, and `/api/super-admin/leads` lack all authentication and authorization checks.
+
+#### Impact
+Anonymous attackers can invoke backend route handlers to exfiltrate cross-tenant data, tamper with applicant and examination data, and perform BOLA/IDOR mutations without detection.
+
+#### Alternatives Considered
+1. *Rely solely on Next.js edge middleware:* Excluded because edge middleware runs in the Edge runtime where database calls for profile/role resolution are restricted or add latency.
+2. *Ad-hoc checks in every route handler:* Rejected as error-prone, inconsistent, and difficult to audit.
+3. *Unified `authorizeApiRequest` helper:* Recommended. A centralized function returning either `{ success: true, user, profile, tenantId }` or `{ success: false, response: NextResponse.json({ error }, { status }) }`.
+
+#### Recommendation
+Create `src/lib/auth/api-guard.ts` providing `authorizeApiRequest(req, options)`:
+- Authenticates caller using `createClient()` from `@/lib/supabase/server`.
+- Resolves caller profile and active status from `profiles`.
+- Validates tenant membership against requested tenant slug or ID.
+- Enforces role requirements (e.g. `allowedRoles: ['school_admin', 'exam_officer']`).
+- Handles `super_admin` platform-wide bypass and `org_admin` parent-child tenant hierarchy.
+- Returns standardized JSON 401/403 responses on failure.
+
+#### Risk If Ignored
+API routes remain unprotected and vulnerable to unauthorized access and tenant spoofing.
+
+#### Decision Required
+Authorization of proposed TASK-0004 to create the API guard module.
+
+---
+
+### REC-0003 — Remediate Unauthenticated Privileged API Routes & Deprecate Module-Level Admin Clients
+
+- **Task:** TASK-0003 / Proposed TASK-0005
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Security Remediation
+- **Severity:** Critical
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+High-privilege API routes (`/api/admin/exams`, `/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`, `/api/super-admin/leads`) instantiate privileged clients (`createAdminClient()` or raw PostgreSQL pools) at module level and expose full cross-tenant data and mutation capabilities to unauthenticated callers.
+
+#### Repository Evidence
+1. `src/app/api/admin/exams/route.ts:4` (`const supabase = createAdminClient()`).
+2. `src/app/api/admissions/route.ts:4` (`const supabase = createAdminClient()`).
+3. `src/app/api/cass-export/route.ts:4` (`const supabase = createAdminClient()`).
+4. `src/app/api/exam-office/dashboard/route.ts:4` (`const supabase = createAdminClient()`).
+5. `src/app/api/super-admin/leads/route.ts:7` (`new Pool(...)`).
+
+#### Impact
+Critical exposure of student records, national exam scores, WAEC Continuous Assessment data, applicant PII, and customer leads.
+
+#### Recommendation
+1. Remove all module-level `createAdminClient()` instantiations.
+2. Protect all five routes using `authorizeApiRequest`.
+3. Restructure `/api/admissions` to separate unauthenticated public applications (`/api/admissions/apply`) with rate limiting and schema validation from administrative applicant management (`/api/admin/admissions`).
+4. Enforce strict `WHERE tenant_id = :tenantId` scoping on all queries and mutations.
+
+#### Risk If Ignored
+Severe compliance violations (FERPA, GDPR, national data protection laws) and total compromise of student data privacy.
+
+#### Decision Required
+Authorization of proposed TASK-0005.
+
+---
+
+### REC-0004 — Enforce Fail-Closed Tenant Resolution & Purge `LIMIT 1` Fallbacks
+
+- **Task:** TASK-0003 / Proposed TASK-0007
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Multi-Tenant Isolation
+- **Severity:** High
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+In `src/app/actions/academic-calendar.ts` and `src/app/actions/academic-sessions.ts`, helper `resolveTenantId()` executes `SELECT id FROM tenants LIMIT 1` when given undefined, null, or unrecognized tenant identifiers. This silently binds queries and mutations to an arbitrary school.
+
+#### Repository Evidence
+1. `src/app/actions/academic-calendar.ts:66–73, 118–119, 125–133`.
+2. `src/app/actions/academic-sessions.ts:66–80`.
+3. `.ai/AGENTS.md` Line 49: *"Tenant resolution must fail closed; never select an arbitrary fallback tenant"*.
+
+#### Impact
+Cross-tenant contamination, data corruption, and unauthorized state mutation when tenant context is missing.
+
+#### Recommendation
+1. Remove all `SELECT id FROM tenants LIMIT 1` queries from tenant resolution routines.
+2. Return `null` immediately if a tenant slug or ID cannot be verified.
+3. Require mutating Server Actions in `academic-calendar.ts` and `subjects.ts` to verify caller authentication and role before executing changes.
+
+#### Risk If Ignored
+Violation of core multi-tenant security architecture principles and risk of silent cross-school data corruption.
+
+#### Decision Required
+Authorization of proposed TASK-0007.
+
+---
+
+### REC-0005 — Replace Permissive `FOR ALL USING (true)` RLS Policies
+
+- **Task:** TASK-0003 / Proposed TASK-0006
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Database Security / RLS
+- **Severity:** Critical
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+Migrations `030_exam_core_system.sql` and `031_exam_analytics_dashboard.sql` enable Row Level Security on 10 examination tables but attach policies defined as `FOR ALL USING (true)`.
+
+#### Repository Evidence
+1. `supabase/migrations/030_exam_core_system.sql:91–95` (`exam_sessions`, `exam_schedules`, `exam_results_approval`, `exam_malpractices`, `exam_appeals`).
+2. `supabase/migrations/031_exam_analytics_dashboard.sql:79–83` (`exam_student_spotlights`, `exam_grade_distributions`, `exam_student_details`, `exam_subject_results`, `exam_subject_averages`).
+
+#### Impact
+Any authenticated user connecting directly to the Supabase client with an anon key can read, insert, update, and delete examination records for all schools without going through the Next.js API layer.
+
+#### Recommendation
+Author migration `044_fix_exam_rls_policies.sql` to drop the permissive policies and install strict tenant-scoped policies using `tenant_id = public.get_user_tenant_id()`.
+
+#### Risk If Ignored
+Defense-in-depth is completely absent at the database layer for the entire examination subsystem.
+
+#### Decision Required
+Authorization of proposed TASK-0006.
+
+---
+
+### REC-0006 — Establish Automated Security & Authorization Regression Test Suite
+
+- **Task:** TASK-0003 / Proposed TASK-0008
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Quality Assurance & Testing
+- **Severity:** High
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+The repository has zero testing frameworks installed (0 unit, integration, or E2E tests). Security fixes cannot be automatically validated or protected against future regressions.
+
+#### Repository Evidence
+`package.json` contains no test dependencies or test scripts. No test files exist in `src/`.
+
+#### Impact
+High risk of regression as code changes occur across routes, actions, and migrations.
+
+#### Recommendation
+Install Vitest and construct an automated security regression test suite covering:
+1. 401 Unauthorized for unauthenticated calls to all private API routes.
+2. 403 Forbidden for authenticated users attempting cross-tenant access.
+3. 403 Forbidden for users attempting unauthorized actions (e.g. students creating exam sessions).
+4. IDOR / BOLA attack payload validation.
+5. Verification that tenant resolution fails closed.
+
+#### Risk If Ignored
+Security posture remains unverified and susceptible to silent regressions.
+
+#### Decision Required
+Authorization of proposed TASK-0008.
+

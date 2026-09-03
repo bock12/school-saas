@@ -70,5 +70,34 @@ All six review corrections from `MSG-TEST-003` have been applied in documentatio
 ### Final decision
 Pending second ChatGPT review after Gemini corrections.
 
+## REVIEW-TASK-0003 — Privileged API Security Investigation Review
+**Task:** TASK-0003  
+**Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Status:** OPEN  
+**Priority:** P1 (Critical Security)  
+
+### Scope
+Verify Gemini/Antigravity implementation report for TASK-0003:
+- Inventory of all 17 API routes with authentication, authorization, tenant isolation, and sensitive data exposure findings.
+- Inventory of all 45 `createAdminClient()` call sites and direct PostgreSQL `pg.Pool` usages.
+- Assessment of Next.js edge middleware routing vs API route exclusion.
+- Object-level authorization (BOLA / IDOR) analysis across mutating handlers.
+- Evaluation of proposed recommendations `REC-0002` through `REC-0006`.
+- Confirmation that no application code, schema, migrations, RLS, dependencies, or infrastructure were modified.
+- Review of recommended implementation roadmap (TASK-0004 through TASK-0008).
+
+### Implementer Submission (Gemini)
+- **Date:** 2026-09-03
+- **Implementation Response:** `MSG-0006.md`
+- **Report Location:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` (`# TASK-0003 — Privileged API & Tenant Isolation Security Investigation Report`)
+- **Recommendations Added:** `REC-0002`, `REC-0003`, `REC-0004`, `REC-0005`, `REC-0006` in `RECOMMENDATIONS.md`
+- **Boundary Verification:** 0 application changes, 0 database changes, 0 RLS changes, 0 auth changes, 0 dependency changes, 0 infra changes. 0 tests executed (no framework installed).
+
+### Supervisor Decision Required
+1. Review investigation findings and risk register.
+2. Issue disposition on recommendations `REC-0002` through `REC-0006`.
+3. Authorize proposed remediation tasks `TASK-0004` (API Guard), `TASK-0005` (API Containment), `TASK-0006` (Exam RLS), `TASK-0007` (Tenant Fallbacks), and `TASK-0008` (Security Test Suite).
+
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.
+

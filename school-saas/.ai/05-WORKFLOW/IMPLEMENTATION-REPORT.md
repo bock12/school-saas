@@ -170,3 +170,403 @@ All conditions were verified for `TASK-TEST-001` via `CONTROL-STATE.yaml`, `MSG-
 
 ### Current Assessment
 **CORRECTIONS APPLIED · PENDING SECOND CHATGPT SUPERVISORY REVIEW** — All six review findings from `MSG-TEST-003` have been addressed in documentation. PR remains unmerged awaiting ChatGPT review verdict.
+
+---
+
+# TASK-0003 — Privileged API & Tenant Isolation Security Investigation Report
+
+**Task Identifier:** TASK-0003  
+**Investigation Date:** 2026-09-03  
+**Investigator:** Gemini / Antigravity (Implementation Engineer & Technical Contributor)  
+**Authoritative Reference:** `school-saas/.ai/05-WORKFLOW/messages/MSG-0005.md` & `school-saas/.ai/05-WORKFLOW/TASK-0003.md`  
+**Execution Nature:** READ-ONLY Security Architecture Investigation & Remediation Planning  
+**Enforcement Boundary:** 0 application modifications, 0 database changes, 0 RLS modifications, 0 auth changes, 0 dependency changes, 0 infrastructure changes.
+
+---
+
+## 1. Executive Summary
+
+A comprehensive static security architecture investigation was conducted across the entire SchoolSaaS API surface, authentication boundaries, privileged client usages, and tenant isolation mechanisms. 
+
+The investigation confirmed multiple **CRITICAL** security vulnerabilities across primary API routes and Server Actions. Most significantly:
+1. **Edge Middleware Excludes All API Routes:** `src/middleware.ts` explicitly matches `(?!api...)`, meaning zero `/api/*` routes receive edge authentication, session token refresh, or subdomain tenant scoping.
+2. **Unauthenticated Privileged API Routes:** High-privilege endpoints—specifically `/api/admin/exams`, `/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`, and `/api/super-admin/leads`—are entirely unauthenticated. They instantiate module-level or request-level privileged clients (`createAdminClient()` or raw PostgreSQL connection pools) and expose sensitive cross-tenant student records, national exam scores, WAEC Continuous Assessment data, applicant PII, and sales leads to any anonymous internet caller.
+3. **Broken Object-Level Authorization (BOLA / IDOR):** Anonymous or unauthenticated callers can mutate examination sessions (`PATCH /api/admin/exams`, `PATCH /api/exam-office/dashboard`), delete applicants (`DELETE /api/admissions?id=...`), update applicant profiles (`PATCH /api/admissions`), and delete leads (`DELETE /api/super-admin/leads?id=...`) across any school tenant simply by passing row UUIDs.
+4. **Database RLS Bypass & Permissive Policies:** While tables like `applicants` have well-formed tenant-scoping RLS policies in migrations, the API route handlers bypass RLS entirely by using `createAdminClient()`. Moreover, core examination tables created in migrations `030_exam_core_system.sql` and `031_exam_analytics_dashboard.sql` define `FOR ALL USING (true)` policies with zero tenant or role checks, allowing direct exploitation via the Supabase REST/PostgREST client interface.
+5. **Arbitrary Tenant Fallbacks:** In Server Actions (`src/app/actions/academic-calendar.ts` and `academic-sessions.ts`), tenant resolution fails open rather than closed: if a slug is missing or unmatched, the system executes `SELECT id FROM tenants LIMIT 1`, silently operating against an arbitrary school.
+6. **Zero Automated Test Coverage:** The repository contains zero unit, integration, or API security tests, leaving all authorization and tenant boundary regressions undetected.
+
+Immediate architectural remediation is required before production deployment.
+
+---
+
+## 2. Architecture Baseline
+
+### 2.1 Next.js App Router Structure & Edge Proxy Boundary
+- **Framework:** Next.js 14 (App Router) with React 18, Supabase SSR (`@supabase/ssr`), and TypeScript.
+- **Edge Middleware (`src/middleware.ts`):** 
+  - Excludes all API routes via lines 103–115:
+    ```typescript
+    export const config = {
+      matcher: [
+        '/((?!api|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+      ],
+    };
+    ```
+  - **Security Consequence [CONFIRMED]:** The edge proxy refreshes sessions and extracts subdomains *only* for HTML page routes. API routes (`/api/*`) are completely unshielded at the edge and must perform their own authentication and authorization.
+
+### 2.2 Client Invocations vs Server Actions vs API Routes
+- **UI Pages:** Rendered via Server Components with `requireTenantRole` guards from `src/lib/auth/guards.ts`.
+- **Server Actions:** Located in `src/app/actions/*.ts`. Next.js exposes these as callable HTTP POST RPC endpoints. Some actions (e.g., `src/app/actions/users.ts`) enforce strict RBAC checks via `getActorProfile()` and `canManageTarget()`. Others (e.g., `academic-calendar.ts`, `subjects.ts`) omit caller authentication and rely only on `resolveTenantId(tenantSlug)`, allowing cross-tenant caller abuse.
+- **API Routes:** Located in `src/app/api/*/route.ts`. Standalone HTTP handlers. Currently lack a centralized API authorization middleware or helper.
+
+### 2.3 Privileged Client Architectures
+- **Supabase Admin Client (`src/lib/supabase/admin.ts`):**
+  - Instantiates `@supabase/supabase-js` `createClient` using `SUPABASE_SERVICE_ROLE_KEY` with `{ auth: { persistSession: false, autoRefreshToken: false } }`.
+  - Calling this client completely bypasses Postgres Row Level Security (RLS).
+  - Module-level declarations (`const supabase = createAdminClient()` at line 4) execute on module import, risking CI/build-time environment failures and promoting context-free query execution.
+- **Direct PostgreSQL Connection Pool (`pg.Pool` in `src/lib/db/pg-fallback.ts`):**
+  - Connects directly to `DATABASE_URL` with `{ ssl: { rejectUnauthorized: false } }`.
+  - Used in 5 API route handlers and 3 server actions to bypass Supabase APIs completely, directly querying tables and writing directly into `auth.users` via `crypt($..., gen_salt('bf'))`.
+
+---
+
+## 3. Complete API Inventory (All 17 Route Handlers)
+
+| # | Route Path | Methods | Intended Scope | Auth Enforced? | Role Check | Tenant Isolation | Privileged Client | Sensitive Data Exposed | Vulnerability Status |
+|---|------------|---------|----------------|----------------|------------|------------------|-------------------|------------------------|----------------------|
+| 1 | `/api/academics/ai/lesson-plan` | POST | Authenticated Staff | Yes (`getUser()`) | None | Broken (BOLA on `offering_id`) | Direct `pg.Pool` | Complete curriculum, teacher names, generated plans | **CONFIRMED VULNERABLE** |
+| 2 | `/api/admin/exams` | GET, PATCH | School / Exam Admin | None | None | None (Global leak) | Module `createAdminClient` | Exam sessions, malpractice cases, approvals | **CONFIRMED CRITICAL** |
+| 3 | `/api/admissions` | GET, POST, PATCH, DELETE | Admin / Public Apply | None | None | Broken (`tenantSlug` optional; leaks all) | Module `createAdminClient` | Full applicant PII, WAEC scores, parent contacts | **CONFIRMED CRITICAL** |
+| 4 | `/api/auth/callback` | GET | Public Auth Callback | Yes (Exchange code) | Yes | Positive Control (Validates tenant match) | Scoped service-role client | Session tokens | **CONTROL VERIFIED** |
+| 5 | `/api/cass-export` | GET, POST | Exam Officer / MBSSE | None | None | Broken (`tenantSlug` unauthenticated) | Module `createAdminClient` | Student WAEC index numbers, grades, CA marks | **CONFIRMED CRITICAL** |
+| 6 | `/api/exam-office/communication-rules` | GET, POST | Exam Admin | Yes (`getUser()`) | None | Broken (Leaks all if metadata empty) | Request `createAdminClient` | Automated communication trigger rules | **CONFIRMED VULNERABLE** |
+| 7 | `/api/exam-office/communication-templates` | GET, POST | Exam Admin | Yes (`getUser()`) | None | Broken (Leaks all if metadata empty) | Request `createAdminClient` | Message templates, internal variables | **CONFIRMED VULNERABLE** |
+| 8 | `/api/exam-office/communications` | GET, POST | Exam Admin | Yes (`getUser()`) | None | Broken (Arbitrary `tenantSlug` bypass) | Request `createAdminClient` | Broadcast dispatch, SMS dispatch, logs | **CONFIRMED CRITICAL** |
+| 9 | `/api/exam-office/dashboard` | GET, POST, PATCH, DELETE | Exam Officer | None | None | None (Dumps 10 entire DB tables) | Module `createAdminClient` | Student GPA, marks, rank, appeals, malpractices | **CONFIRMED CRITICAL** |
+| 10 | `/api/notifications` | GET, POST | Authenticated User | Yes (`getUser()`) | N/A | Enforced (`user_id = user.id`) | Request `createAdminClient` | User-specific notifications | **CONTROL VERIFIED** |
+| 11 | `/api/public/check-slug` | GET | Public Landing | None | None | N/A | Direct `pg.Pool` | Subdomain availability | **LOW RISK (Needs rate limiting)** |
+| 12 | `/api/public/demo-requests` | POST | Public Landing | None | None | N/A | Direct `pg.Pool` + REST | Inbound sales lead creation | **LOW RISK (Needs rate limiting)** |
+| 13 | `/api/public/landing-sections` | GET | Public Landing | None | None | N/A | Action CMS Client | Landing page content | **INTENDED PUBLIC** |
+| 14 | `/api/public/register-tenant` | POST | Public Onboarding | None | None | N/A (Provisions tenant) | Direct `pg.Pool` (`auth.users` raw insert) | Returns provisioned admin & school metadata | **MEDIUM RISK (Needs rate limiting/CAPTCHA)** |
+| 15 | `/api/public/tenants` | GET | Public Landing Directory | None | None | N/A (Filters suspended) | Direct `pg.Pool` + REST | School names, slugs, contact emails/phones | **INTENDED PUBLIC** |
+| 16 | `/api/super-admin/leads` | GET, PATCH, DELETE | Super Admin | None | None | N/A (Platform-wide) | Direct `pg.Pool` | Full lead contact PII, phone, email, notes | **CONFIRMED CRITICAL** |
+| 17 | `/api/test-db` | GET | Super Admin Diagnostic | Yes (`getUser()`) | Yes (`super_admin`) | Platform diagnostic | Request `createAdminClient` | Student and applicant search results | **CONTROLLED (404 in prod)** |
+
+---
+
+## 4. Authentication Findings
+
+### 4.1 Missing Edge Authentication
+- `src/middleware.ts` excludes `/api/*` from its matcher regex (line 113).
+- **Finding [CONFIRMED]:** No session validation, authentication header check, or cookie hydration occurs at the Next.js middleware layer for any API route.
+
+### 4.2 Unauthenticated Route Handlers
+The following routes have **zero** authentication checks and process requests from anonymous callers:
+- `src/app/api/admin/exams/route.ts:18` (GET) and `route.ts:40` (PATCH)
+- `src/app/api/admissions/route.ts:15` (GET), `route.ts:51` (POST), `route.ts:167` (PATCH), `route.ts:212` (DELETE)
+- `src/app/api/cass-export/route.ts:18` (GET), `route.ts:120` (POST)
+- `src/app/api/exam-office/dashboard/route.ts:6` (GET), `route.ts:174` (POST), `route.ts:218` (PATCH), `route.ts:253` (DELETE)
+- `src/app/api/super-admin/leads/route.ts:15` (GET), `route.ts:76` (PATCH), `route.ts:131` (DELETE)
+
+### 4.3 Insecure Session Extraction Pattern
+In `src/app/api/exam-office/communications/route.ts:24-28`:
+```typescript
+let tenantId = user.user_metadata?.tenant_id;
+if (!tenantId && tenantSlug) {
+  const { data: tenant } = await adminSupabase.from('tenants').select('id').eq('slug', tenantSlug).single();
+  tenantId = tenant?.id;
+}
+```
+- **Finding [CONFIRMED]:** Even when authenticated, the route trusts user-supplied query parameters or headers (`tenantSlug` or `x-tenant-slug`) without verifying that the authenticated user actually belongs to that tenant.
+
+---
+
+## 5. Authorization Findings (RBAC)
+
+### 5.1 Absence of API-Level RBAC Helpers
+- `src/lib/auth/guards.ts` contains `requireSuperAdmin()`, `requireTenantRole()`, `requireSchoolAdmin()`, `requireExamOfficer()`.
+- **Finding [CONFIRMED]:** All functions in `guards.ts` use `redirect('/login')` or `redirect('/')` from `next/navigation`. They are designed solely for React Server Components and cannot return HTTP 401/403 JSON responses.
+- As a consequence, none of the API route handlers import or use these guards.
+
+### 5.2 Missing Role Checks in Authenticated Endpoints
+- `/api/academics/ai/lesson-plan`: Authenticates `user`, but never verifies if `user` has the `teacher` or `school_admin` role. A student or parent account can invoke this endpoint.
+- `/api/exam-office/communications`: Authenticates `user`, but never verifies if `user` is an `exam_officer` or `school_admin`. Any authenticated student can trigger mass broadcast SMS/Email notifications.
+- `/api/exam-office/communication-templates`: Authenticates `user`, but allows any authenticated user to create official system communication templates.
+- `/api/exam-office/communication-rules`: Authenticates `user`, but allows any authenticated user to configure event-driven notification dispatch rules.
+
+### 5.3 Positive Control Benchmark
+- `src/app/actions/users.ts:139-158` (`authorizeUserAction` and `canManageTarget`): Exclusively loads `getActorProfile()`, validates active status, evaluates organizational hierarchy, enforces that school admins cannot manage admins, and creates `createAdminClient()` strictly after authorization passes. This represents the reference pattern for the entire codebase.
+
+---
+
+## 6. Tenant Isolation Findings
+
+### 6.1 Unconditional Global Data Leaks
+- **`/api/admin/exams` (GET):** Queries `exam_sessions`, `exam_results_approval`, `exam_malpractices` with no `tenant_id` filter. Returns cross-tenant records from every institution on the platform.
+- **`/api/exam-office/dashboard` (GET):** Queries 10 database tables (`exam_sessions`, `exam_results_approval`, `exam_malpractices`, `exam_appeals`, `exam_student_spotlights`, `exam_grade_distributions`, `exam_student_details`, `exam_subject_results`, `exam_subject_averages`, `exam_class_gender_counts`) with zero tenant filter.
+- **`/api/admissions` (GET):** If `tenantSlug` query parameter is omitted, `tenantId` is `undefined`, causing the handler to omit `.eq('tenant_id', ...)` and return all applicants across all tenants.
+
+### 6.2 Fail-Open Arbitrary Tenant Resolution in Server Actions
+In `src/app/actions/academic-calendar.ts:66-73`, `118-119`, `125-133` and `src/app/actions/academic-sessions.ts:66-80`:
+```typescript
+if (!slugOrId || slugOrId === 'undefined' || slugOrId === 'null') {
+  const { data: firstTenant } = await supabase
+    .from('tenants')
+    .select('id')
+    .limit(1)
+    .maybeSingle();
+  return firstTenant?.id || null;
+}
+```
+- **Finding [CONFIRMED]:** If a caller provides a null, undefined, or unmatched slug, the code executes `SELECT id FROM tenants LIMIT 1` and binds the mutation or query to an arbitrary school. This violates `.ai/AGENTS.md` Line 49 (*"Tenant resolution must fail closed; never select an arbitrary fallback tenant"*).
+
+---
+
+## 7. Privileged Client Findings (`createAdminClient`)
+
+### 7.1 Complete Call Site Inventory (45 Identified Sites)
+1. **API Routes (11 call sites):**
+   - `src/app/api/admin/exams/route.ts:4` (module-level)
+   - `src/app/api/admissions/route.ts:4` (module-level)
+   - `src/app/api/cass-export/route.ts:4` (module-level)
+   - `src/app/api/exam-office/dashboard/route.ts:4` (module-level)
+   - `src/app/api/exam-office/communications/route.ts:3, 21, 74` (request-level)
+   - `src/app/api/exam-office/communication-templates/route.ts:3, 13, 50` (request-level)
+   - `src/app/api/exam-office/communication-rules/route.ts:3, 12, 41` (request-level)
+   - `src/app/api/notifications/route.ts:3, 14, 51` (request-level)
+   - `src/app/api/test-db/route.ts:3, 25` (request-level)
+2. **Server Actions (18 call sites):**
+   - `src/app/actions/academic-calendar.ts:3, 8, 64` (module-level + resolve helper)
+   - `src/app/actions/academic-sessions.ts:3, 7, 73, 101` (module-level + resolve helper)
+   - `src/app/actions/subjects.ts:3, 102` (resolve helper)
+   - `src/app/actions/tenant.ts:3, 33` (request-level tenant creation)
+   - `src/app/actions/users.ts:3, 140` (request-level user management)
+   - `src/app/actions/students.ts:3, 22` (request-level student management)
+   - `src/app/actions/staff-attendance.ts:3, 19` (request-level staff attendance)
+3. **Communication & Event Subsystems (16 call sites):**
+   - `src/lib/communication/audience-resolver.ts:4, 18`
+   - `src/lib/communication/audit.ts:3, 12`
+   - `src/lib/communication/event-engine.ts:3, 25`
+   - `src/lib/communication/channels/email.ts:4, 15`
+   - `src/lib/communication/channels/sms.ts:4, 16`
+   - `src/lib/communication/channels/in-app.ts:4, 14`
+
+### 7.2 Module-Level vs Request-Level Execution
+- **Module-Level Anti-Pattern [CONFIRMED]:** `admin/exams/route.ts:4`, `admissions/route.ts:4`, `cass-export/route.ts:4`, `exam-office/dashboard/route.ts:4`, `academic-calendar.ts:8`, `academic-sessions.ts:7`.
+- Executing `createAdminClient()` at module level means:
+  1. The client is created during static build/import time. If `SUPABASE_SERVICE_ROLE_KEY` is missing in CI, builds crash.
+  2. No request headers, cookies, or caller identity can ever be bound to this client instance.
+  3. Every incoming request automatically inherits full service-role database bypass privileges.
+
+### 7.3 Direct PostgreSQL Bypasses (`pg.Pool`)
+- `src/lib/db/pg-fallback.ts` bypasses Supabase GoTrue Auth completely, executing raw SQL `INSERT INTO auth.users` with `crypt()` and `ssl: { rejectUnauthorized: false }`.
+- Route handlers `/api/super-admin/leads`, `/api/public/register-tenant`, `/api/public/check-slug`, `/api/public/demo-requests`, `/api/public/tenants`, and `/api/academics/ai/lesson-plan` all utilize direct PostgreSQL connections, bypassing Supabase API gateways and RLS policies completely.
+
+---
+
+## 8. Object-Level Authorization Findings (BOLA / IDOR)
+
+| Route / Action | Vulnerable Parameter | Mechanism | Impact |
+|----------------|----------------------|-----------|--------|
+| `PATCH /api/admin/exams` | `body.id` | Queries `exam_sessions.update(...).eq('id', id)` via admin client with no tenant check | Any caller can modify exam session names, weightages, and status for any tenant |
+| `PATCH /api/admissions` | `body.id` | Updates `applicants.update(...).eq('id', id)` via admin client with no tenant check | Any caller can alter admission stage, scores, and personal data for any applicant |
+| `DELETE /api/admissions` | `?id=` query param | Executes `applicants.delete().eq('id', id)` via admin client with no tenant check | Any caller can permanently delete any applicant in the system |
+| `PATCH /api/exam-office/dashboard` | `body.id` | Updates `exam_sessions.update(...).eq('id', id)` via admin client with no tenant check | Unauthenticated mutation of exam deadlines and approval statuses |
+| `DELETE /api/exam-office/dashboard` | `?id=` query param | Executes `exam_sessions.delete().eq('id', id)` via admin client with no tenant check | Unauthenticated deletion of exam sessions |
+| `PATCH /api/super-admin/leads` | `body.id` | Executes raw SQL `UPDATE demo_requests WHERE id = $1` with no auth check | Any caller can tamper with lead statuses and notes |
+| `DELETE /api/super-admin/leads` | `?id=` query param | Executes raw SQL `DELETE FROM demo_requests WHERE id = $1` with no auth check | Any caller can delete sales leads |
+| `POST /api/academics/ai/lesson-plan` | `body.offering_id` | Fetches `subject_offerings WHERE id = $1` without verifying caller belongs to `so.tenant_id` | Caller from Tenant A can extract curriculum and lesson plans from Tenant B |
+
+---
+
+## 9. Response Exposure Findings
+
+1. **Mass Applicant PII Exposure (`/api/admissions` GET):**
+   - Returns unredacted applicant records: `first_name`, `last_name`, `dob`, `gender`, `nin` (National Identification Number), `email`, `phone`, `address`, `city`, `parent_name`, `parent_phone`, `parent_email`, `parent_relation`, `interview_score`, `assessment_score`, `national_index_no`, and raw WAEC results.
+2. **National Examination Results Exposure (`/api/cass-export` GET):**
+   - Returns downloadable CSV or JSON containing student full names, WAEC index numbers, continuous assessment component scores (`ca1`, `ca2`, `ca3`, `caTotal`), examination marks (`exam_70`), final composite score, WAEC letter grade (`A1` through `F9`), and official MBSSE compliance flags.
+3. **Student Academic Performance & Spotlights Exposure (`/api/exam-office/dashboard` GET):**
+   - Exposes complete student spotlight records, grade distributions, subject averages, student names with marks and rank, appeals, and reported exam malpractice cases with student candidate numbers and offense details.
+4. **Prospective Customer & Institutional Leads Exposure (`/api/super-admin/leads` GET):**
+   - Exposes full names, work emails, personal phone numbers, institution names, regions, and internal sales notes for all demo requests.
+
+---
+
+## 10. Security Risk Register
+
+| Risk ID | Vulnerability / Threat Description | Likelihood | Impact | Severity | OWASP Top 10 | Status |
+|---------|-----------------------------------|------------|--------|----------|--------------|--------|
+| **RSK-001** | Unauthenticated exposure of student WAEC and exam scores via `/api/admin/exams` & `/api/exam-office/dashboard` | High | Critical | **CRITICAL** | API1:2023 Broken Object Level Auth / API2:2023 Broken Auth | CONFIRMED |
+| **RSK-002** | Unauthenticated mass disclosure and deletion of applicant PII via `/api/admissions` | High | Critical | **CRITICAL** | API1:2023 Broken Object Level Auth / API2:2023 Broken Auth | CONFIRMED |
+| **RSK-003** | Unauthenticated export of official CASS scoresheets via `/api/cass-export` | High | Critical | **CRITICAL** | API2:2023 Broken Authentication | CONFIRMED |
+| **RSK-004** | Unauthenticated disclosure, update, and deletion of sales leads via `/api/super-admin/leads` | High | High | **CRITICAL** | API1:2023 Broken Object Level Auth / API2:2023 Broken Auth | CONFIRMED |
+| **RSK-005** | Unauthorized mass broadcast SMS/Email dispatch via `/api/exam-office/communications` | High | High | **CRITICAL** | API1:2023 Broken Object Level Auth / API5:2023 Broken Function Level Auth | CONFIRMED |
+| **RSK-006** | Permissive `FOR ALL USING (true)` RLS policies in migrations `030` and `031` | High | Critical | **CRITICAL** | API1:2023 Broken Object Level Auth / Database Security | CONFIRMED |
+| **RSK-007** | Arbitrary tenant fallback (`SELECT id FROM tenants LIMIT 1`) in Server Actions | Medium | High | **HIGH** | API1:2023 Broken Object Level Auth / Tenant Isolation | CONFIRMED |
+| **RSK-008** | Edge middleware exclusion of all `/api/*` routes | High | High | **HIGH** | API2:2023 Broken Authentication | CONFIRMED |
+| **RSK-009** | Module-level instantiation of privileged `createAdminClient()` | Medium | High | **HIGH** | Architectural / Secret Exposure | CONFIRMED |
+| **RSK-010** | Cross-tenant lesson plan and curriculum theft via `/api/academics/ai/lesson-plan` | Medium | Medium | **MEDIUM** | API1:2023 Broken Object Level Auth | CONFIRMED |
+| **RSK-011** | Direct database password hashing and user insertion in `pg-fallback.ts` bypassing GoTrue | Low | High | **MEDIUM** | Authentication Integrity | CONFIRMED |
+| **RSK-012** | Missing rate limiting and abuse controls on public registration and demo endpoints | High | Medium | **MEDIUM** | API4:2023 Unrestricted Resource Consumption | CONFIRMED |
+
+---
+
+## 11. Confirmed Vulnerabilities
+
+1. **VULN-001 — Unauthenticated Exam Management API**
+   - **Classification:** CONFIRMED
+   - **Location:** `school-saas/src/app/api/admin/exams/route.ts:4`, `18-38`, `40-62`
+   - **Evidence:** `GET` returns all exam sessions and malpractice records without `user` or `tenant_id` checks. `PATCH` allows arbitrary updates to exam sessions by UUID via module-level `createAdminClient()`.
+2. **VULN-002 — Unauthenticated Admissions PII & Deletion API**
+   - **Classification:** CONFIRMED
+   - **Location:** `school-saas/src/app/api/admissions/route.ts:4`, `15-49`, `167-210`, `212-230`
+   - **Evidence:** `GET` returns all applicants when `tenantSlug` is omitted. `PATCH` updates any applicant record by `id`. `DELETE` removes any applicant record by `id`. All methods use module-level `createAdminClient()` with zero authentication.
+3. **VULN-003 — Unauthenticated CASS Score Export**
+   - **Classification:** CONFIRMED
+   - **Location:** `school-saas/src/app/api/cass-export/route.ts:4`, `18-118`, `120-152`
+   - **Evidence:** `GET` generates and downloads CSV/JSON score sheets with WAEC index numbers and continuous assessment marks for any school slug without authentication. `POST` creates batch records without authentication.
+4. **VULN-004 — Unauthenticated Super Admin Leads API**
+   - **Classification:** CONFIRMED
+   - **Location:** `school-saas/src/app/api/super-admin/leads/route.ts:15-74`, `76-129`, `131-152`
+   - **Evidence:** Route resides in `/api/super-admin/` but lacks all authentication checks. Directly queries PostgreSQL pool to list, modify, and delete customer leads.
+5. **VULN-005 — Unauthenticated Exam Office Dashboard API**
+   - **Classification:** CONFIRMED
+   - **Location:** `school-saas/src/app/api/exam-office/dashboard/route.ts:4`, `6-172`, `174-216`, `218-251`, `253-274`
+   - **Evidence:** Module-level `createAdminClient()`. `GET` dumps 10 database tables with no tenant or user check. `POST`, `PATCH`, `DELETE` mutate exam records without authentication.
+6. **VULN-006 — Cross-Tenant Notification Spoofing & Dispatch**
+   - **Classification:** CONFIRMED
+   - **Location:** `school-saas/src/app/api/exam-office/communications/route.ts:24-28`, `76-80`
+   - **Evidence:** Authenticated caller can pass arbitrary `tenantSlug` query parameter or header; the route resolves `tenantId` without verifying that the caller belongs to that school, allowing unauthorized notification dispatches.
+7. **VULN-007 — Permissive RLS Policies on Core Examination Tables**
+   - **Classification:** CONFIRMED
+   - **Location:** `school-saas/supabase/migrations/030_exam_core_system.sql:91-95` & `031_exam_analytics_dashboard.sql:79-83`
+   - **Evidence:** 10 examination tables have policies defined as `FOR ALL USING (true)`, granting full public access via direct PostgREST calls.
+8. **VULN-008 — Arbitrary Tenant Fallback in Server Actions**
+   - **Classification:** CONFIRMED
+   - **Location:** `school-saas/src/app/actions/academic-calendar.ts:66-73`, `118-119`, `125-133` & `src/app/actions/academic-sessions.ts:66-80`
+   - **Evidence:** Helper `resolveTenantId()` executes `SELECT id FROM tenants LIMIT 1` when given undefined input, silently operating on an arbitrary school.
+
+---
+
+## 12. Inferred Risks
+
+1. **Unauthenticated Public Registration Abuse (`/api/public/register-tenant`):**
+   - **Inference:** The route lacks rate limiting and CAPTCHA verification. An automated attacker could provision thousands of organization and school tenants, consuming database connection pool slots and disk storage.
+2. **Subdomain Enumeration (`/api/public/check-slug`):**
+   - **Inference:** Anonymous callers can brute-force subdomain names to build a target list of active schools on the platform.
+3. **API Secret Leakage via Module-Level Execution:**
+   - **Inference:** Instantiating `createAdminClient()` at module level in multiple files increases the likelihood that client-side code bundles inadvertently bundle the module if imported improperly.
+
+---
+
+## 13. Not Verified Items
+
+1. **Production Infrastructure Rate Limiting:**
+   - **Status:** NOT VERIFIED
+   - **Reason:** Cloudflare, AWS WAF, or Vercel edge firewall rules cannot be inspected from the repository code.
+2. **Live GoTrue / PostgREST Configuration:**
+   - **Status:** NOT VERIFIED
+   - **Reason:** Supabase project settings (e.g., JWT expiry, email verification requirements, schema exposure) are hosted in Supabase cloud and cannot be inspected statically.
+3. **Production Database Seed State:**
+   - **Status:** NOT VERIFIED
+   - **Reason:** Whether the seed records from `030_exam_core_system.sql` exist in production was not verified via live query in order to preserve read-only boundaries.
+
+---
+
+## 14. Recommendations
+
+### `REC-0002`: Implement Unified API Route Authorization Guard (`authorizeApiRequest`)
+- **Category:** Architecture / Authentication / RBAC
+- **Scope:** Create `src/lib/auth/api-guard.ts` providing `authorizeApiRequest(req, options)`:
+  - Validates Supabase JWT session via `createClient()`.
+  - Resolves caller profile, role, and tenant membership from `profiles`.
+  - Matches caller tenant against target tenant (or validates `org_admin` parent hierarchy / `super_admin` bypass).
+  - Returns structured `{ user, profile, tenantId }` or JSON response (`401 Unauthorized` / `403 Forbidden`).
+  - Completely replaces ad-hoc route authentication.
+
+### `REC-0003`: Remediate Unauthenticated Privileged API Routes & Eliminate Module-Level Admin Clients
+- **Category:** Security Remediation
+- **Scope:** 
+  1. Remove `const supabase = createAdminClient()` from module level in all 4 API routes and 2 Server Actions.
+  2. Protect `/api/admin/exams`, `/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`, and `/api/super-admin/leads` with `authorizeApiRequest`.
+  3. Enforce strict `WHERE tenant_id = :tenantId` scoping on all queries.
+  4. Separate public admission application submission (`POST /api/admissions/apply`) from internal administrative applicant management.
+
+### `REC-0004`: Enforce Fail-Closed Tenant Resolution & Deprecate `LIMIT 1` Fallback
+- **Category:** Multi-Tenant Isolation
+- **Scope:** 
+  - Remove all occurrences of `SELECT id FROM tenants LIMIT 1` from `src/app/actions/academic-calendar.ts` and `src/app/actions/academic-sessions.ts`.
+  - When `tenantSlug` is missing, invalid, or unauthorized, immediately return `{ success: false, error: 'Tenant context required' }`.
+
+### `REC-0005`: Replace Permissive RLS Policies with Strict Tenant Policies
+- **Category:** Database / RLS
+- **Scope:** 
+  - Author a new migration (`044_fix_exam_rls_policies.sql`) dropping all `FOR ALL USING (true)` policies on `exam_sessions`, `exam_schedules`, `exam_results_approval`, `exam_malpractices`, `exam_appeals`, `exam_student_spotlights`, `exam_grade_distributions`, `exam_student_details`, `exam_subject_results`, and `exam_subject_averages`.
+  - Replace them with tenant-scoped policies using `tenant_id = public.get_user_tenant_id()`.
+
+### `REC-0006`: Establish Automated Security & Authorization Regression Test Suite
+- **Category:** Quality Assurance / Testing
+- **Scope:** 
+  - Install Vitest and create an automated test suite verifying:
+    1. Unauthenticated requests to all private API routes return 401.
+    2. Requests with valid tokens but mismatched tenants return 403.
+    3. Requests attempting IDOR mutations across tenants return 403/404.
+    4. Tenant resolution strictly fails closed.
+
+---
+
+## 15. Recommended Implementation Tasks
+
+The following engineering task sequence is recommended for ChatGPT supervisory authorization:
+
+1. **TASK-0004 — API Route Authorization Guard & Edge Alignment:**
+   - Create `src/lib/auth/api-guard.ts`.
+   - Update `src/middleware.ts` if edge token verification is required, or standardize on route-level `authorizeApiRequest`.
+2. **TASK-0005 — Contain Unauthenticated Privileged API Routes:**
+   - Apply `authorizeApiRequest` to `/api/admin/exams`, `/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`, and `/api/super-admin/leads`.
+   - Remove module-level `createAdminClient()` calls.
+   - Enforce tenant filtering on all SELECT, UPDATE, and DELETE operations.
+3. **TASK-0006 — Fix Examination System Row Level Security (RLS):**
+   - Author migration `044_fix_exam_rls_policies.sql`.
+   - Replace `FOR ALL USING (true)` with tenant-isolated RLS policies across all 10 exam tables.
+4. **TASK-0007 — Purge Fail-Open Tenant Fallbacks in Server Actions:**
+   - Remove `LIMIT 1` tenant fallback queries from `academic-calendar.ts` and `academic-sessions.ts`.
+   - Add caller authentication and RBAC checks to mutating Server Actions in `academic-calendar.ts` and `subjects.ts`.
+5. **TASK-0008 — Security Regression Testing Harness:**
+   - Install Vitest.
+   - Implement automated tenant isolation and BOLA regression test suites.
+
+---
+
+## 16. Testing Gaps
+
+1. **Framework Absence:** The repository has zero testing dependencies installed (no Jest, Vitest, Playwright, or Cypress).
+2. **CI Pipeline Gap:** GitHub Actions or local npm scripts only execute `lint` and `build`. No automated security checks or unit tests run on commit.
+3. **Missing Regression Suites:**
+   - No tests verifying that unauthenticated API calls return 401.
+   - No tests verifying that a user from School A cannot access records from School B.
+   - No tests verifying that non-admin roles cannot mutate examination data.
+
+---
+
+## 17. Overall Security Assessment
+
+**Current Security Rating: CRITICAL VULNERABILITIES DETECTED — NOT READY FOR PRODUCTION**
+
+The SchoolSaaS application provides extensive institutional features and has strong foundational designs in specific areas (such as `src/app/actions/users.ts` and `015_admission_applicants.sql`). However, the unauthenticated state of multiple privileged API routes, the complete exclusion of API routes from edge middleware protection, the module-level admin client anti-patterns, and the `USING (true)` RLS policies represent severe multi-tenant isolation and data privacy risks.
+
+Until the remediation tasks outlined in `TASK-0004` through `TASK-0007` are implemented, verified, and audited, privileged APIs must remain restricted from production deployment.
+
+---
+
+### Execution Boundary Verification Metrics
+- Application code changed: **0**
+- Database changed: **0**
+- RLS changed: **0**
+- Authentication changed: **0**
+- Dependencies changed: **0**
+- Infrastructure changed: **0**
+- Tests created: **0**
+- Tests executed: **0** *(No testing framework installed in repository)*
+

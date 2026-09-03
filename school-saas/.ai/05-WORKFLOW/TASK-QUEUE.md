@@ -13,9 +13,10 @@ Read-only inventory completed for privileged Supabase/PostgreSQL/auth-user acces
 Rotate/revoke exposed database credentials, assess repository/history exposure, remove embedded credentials through an approved recovery plan, and add secret scanning. Human-controlled operation; no credential rotation, history rewrite or database execution without explicit approval.
 
 ## TASK-0003 — Privileged API & Tenant Isolation Security Investigation
-**Status:** APPROVED · **Priority:** Critical · **Owner:** ChatGPT supervision · **Target:** Gemini/Antigravity
+**Status:** IMPLEMENTED (Pending ChatGPT Supervisory Review) · **Priority:** Critical · **Owner:** ChatGPT supervision · **Target:** Gemini/Antigravity
 
-Read-only security architecture investigation and remediation-planning task covering unauthenticated privileged APIs, service-role client usage, tenant resolution, and tenant isolation boundaries. Explicitly prohibits application code, database schema, migration, RLS, authentication, dependency, or infrastructure modifications. Specification: `.ai/05-WORKFLOW/TASK-0003.md`. Authorization: `.ai/05-WORKFLOW/messages/MSG-0005.md`.
+Read-only security architecture investigation and remediation-planning task covering unauthenticated privileged APIs, service-role client usage, tenant resolution, and tenant isolation boundaries. Explicitly prohibits application code, database schema, migration, RLS, authentication, dependency, or infrastructure modifications. Specification: `.ai/05-WORKFLOW/TASK-0003.md`. Authorization: `.ai/05-WORKFLOW/messages/MSG-0005.md`. Implementation Response: `.ai/05-WORKFLOW/messages/MSG-0006.md`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Review: `REVIEW-TASK-0003`.
+
 
 ## TASK-0004 — Privileged server-action authorization boundary
 **Status:** BACKLOG · **Priority:** Critical · **Owner:** Gemini/Antigravity after approval
