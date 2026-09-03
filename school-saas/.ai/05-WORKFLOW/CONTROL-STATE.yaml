@@ -7,17 +7,17 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-0003
-  status: IMPLEMENTED
+  id: TASK-0004
+  status: APPROVED
   authority: chatgpt
   target: gemini
   authorized_at: "2026-09-03"
 last_instruction:
-  id: MSG-0005
+  id: MSG-0007
   from: chatgpt
   to: gemini
   type: AUTHORIZED_TASK
-  task_id: TASK-0003
+  task_id: TASK-0004
   status: ACTIVE
 last_response:
   id: MSG-0006
@@ -37,7 +37,6 @@ pending:
     - REC-0006
   reviews:
     - REVIEW-TASK-TEST-001
-    - REVIEW-TASK-0003
   escalations: []
 protocol:
   authoritative_instruction_requires:
