@@ -26,52 +26,49 @@ Recommendations do not authorize implementation. An accepted recommendation that
 
 ## Current recommendations
 
-### REC-0001 — Eliminate module-level instantiation of privileged `createAdminClient()` and establish request-scoped authorized caller pattern
+### REC-0001 — Establish a request-scoped authorized privileged-access pattern
 
 - **Task:** TASK-0004 / TASK-0003
 - **Author:** Gemini / Antigravity (Implementation Engineer)
 - **Category:** Security & Architectural Hardening / Reliability
 - **Severity:** High
-- **Status:** PROPOSED
-- **ChatGPT Disposition:** PENDING_REVIEW
+- **Status:** ACCEPTED_WITH_CHANGES
+- **ChatGPT Disposition:** ACCEPTED_WITH_CHANGES
 
 #### Problem
-`createAdminClient()` is instantiated at the top-level module scope in server action and API route files rather than inside function handlers after authentication and tenant guards have executed.
+`createAdminClient()` is instantiated at top-level module scope in server action and API route files, and privileged database access may occur without a clearly enforced request-level authorization boundary.
 
 #### Repository Evidence
-1. `src/app/actions/academic-calendar.ts` line 8:
-   ```ts
-   const supabaseAdmin = createAdminClient();
-   ```
-   This executes immediately when the module is imported by Next.js.
-2. `src/app/api/admin/exams/route.ts` line 4:
-   ```ts
-   const supabase = createAdminClient();
-   ```
-   This executes at module load time; the subsequent `GET` handler queries `exam_sessions`, `exam_results_approval`, and `exam_malpractices` without user authentication, session verification, or tenant filtering.
-3. `src/lib/supabase/admin.ts` lines 4–9:
-   `requireEnv('SUPABASE_SERVICE_ROLE_KEY')` throws an unhandled `Error` if the environment variable is missing, empty, or placeholder.
-4. `.ai/02-ARCHITECTURE/ARCHITECTURE.md` (lines 10–12) & `.ai/04-SECURITY/PRIVILEGED-ACCESS.md`:
-   "Tenant operations enforce application authorization and applicable RLS; service-role access is a reviewed exception, not a replacement for authorization... trusted authorization at every call site."
+1. `src/app/actions/academic-calendar.ts` contains top-level `createAdminClient()` usage.
+2. `src/app/api/admin/exams/route.ts` contains top-level `createAdminClient()` usage and its handlers require dedicated review for authentication, tenant authorization, role/permission authorization, and resource scope.
+3. `src/lib/supabase/admin.ts` requires `SUPABASE_SERVICE_ROLE_KEY` during privileged-client creation.
+4. `.ai/02-ARCHITECTURE/ARCHITECTURE.md` and `.ai/04-SECURITY/PRIVILEGED-ACCESS.md` require application authorization and treat service-role access as a reviewed exception rather than a replacement for authorization.
 
 #### Impact
-- **Build & CI Failures:** Any static analysis, Next.js build compilation, or CI test run in an environment where `SUPABASE_SERVICE_ROLE_KEY` is absent or set to a placeholder will fail at build/import time.
-- **Separation of Authorization from Privileged Access:** Instantiating a module-level admin client decouples client creation from request-level authorization. Developers can easily reference `supabaseAdmin` in handlers without performing prior session, tenant, or role checks (as seen in `src/app/api/admin/exams/route.ts`).
-- **Connection & State Isolation:** Module-level singletons can lead to unintended state sharing or unpredictable lifetime management across edge/serverless runtimes.
+- Module-level privileged client creation can encourage handlers to use elevated access without a visible request authorization boundary.
+- Missing request-level authorization or tenant scoping can expose privileged examination data.
+- Import-time environment requirements can create build/CI fragility where privileged credentials are intentionally unavailable.
 
 #### Alternatives Considered
-1. *Lazy module-level singleton initialized on first call:* Discarded because it still allows handlers to query the service-role client without verifying that the current request has passed authorization guards.
-2. *Request-scoped invocation inside handler post-guard check:* Call `createAdminClient()` strictly inside handlers after `requireTenantRole()` or equivalent guard returns an authorized session. (Recommended approach).
-3. *Centralized authorized client factory:* E.g. `getAuthorizedAdminClient(user, requiredRole, tenantId)`.
+1. *Lazy module-level singleton:* Rejected because lazy initialization does not establish request authentication or authorization.
+2. *Request-scoped privileged client after guards:* Retained as a possible implementation pattern, but only as one part of the security boundary.
+3. *Centralized authorized privileged-client factory:* Recommended for evaluation if it can enforce or require explicit authenticated actor, tenant, permission, and resource context.
 
-#### Recommendation
-1. Refactor `src/app/actions/academic-calendar.ts` and `src/app/api/admin/exams/route.ts` to remove module-level `createAdminClient()` calls, moving instantiation strictly inside individual server action and route handler bodies.
-2. Ensure that in every server action or API route, user authentication and tenant/role authorization (`requireTenantRole` / `requireSuperAdmin`) occur *before* `createAdminClient()` is invoked.
-3. Add a linter rule or static check banning `createAdminClient()` at top-level module scope outside function scopes.
-4. Incorporate this remediation into the execution scope of `TASK-0004` and `TASK-0003`.
+#### ChatGPT Review Correction
+Moving `createAdminClient()` into a handler is **not itself an authorization control**. Any remediation must explicitly separate:
 
-#### Risk if Ignored
-Build and CI pipelines will break when running without live service-role credentials. Further unauthenticated endpoints may inadvertently leverage top-level admin clients, perpetuating critical security vulnerabilities `R-002` and `R-003`.
+1. authentication/session verification;
+2. tenant resolution and tenant authorization;
+3. role/permission authorization;
+4. resource-level scope checks where applicable;
+5. privileged client creation/use only after the required authorization boundary.
+
+The examination API authorization concern is a distinct security issue and should not be reduced to client-instantiation scope.
+
+The `academic-calendar.ts` tenant-resolution fallback behavior must also be reviewed separately so a privileged operation can never silently select an unrelated/default tenant when the caller tenant cannot be established.
 
 #### Decision Required
-ChatGPT architectural review and disposition on the standardized pattern for privileged service-role invocation across server actions and route handlers.
+Create a dedicated authorized task for the application security remediation after the relevant code paths are fully audited. This recommendation does **not** authorize application changes under TASK-TEST-001.
+
+#### Verification
+Second ChatGPT supervisory review required before TASK-TEST-001 can be approved. Application remediation requires a separate authorized task and appropriate cross-tenant/role regression tests.
