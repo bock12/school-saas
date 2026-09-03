@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await authorizeApiRequest(req, {
       roles: ['super_admin'],
-      requireTenant: false,
+      scope: 'platform',
     });
 
     if (!auth.ok) {
@@ -87,7 +87,7 @@ export async function PATCH(req: NextRequest) {
   try {
     const auth = await authorizeApiRequest(req, {
       roles: ['super_admin'],
-      requireTenant: false,
+      scope: 'platform',
     });
 
     if (!auth.ok) {
@@ -151,7 +151,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const auth = await authorizeApiRequest(req, {
       roles: ['super_admin'],
-      requireTenant: false,
+      scope: 'platform',
     });
 
     if (!auth.ok) {

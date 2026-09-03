@@ -9,8 +9,8 @@ export async function GET(req: NextRequest) {
 
     const auth = await authorizeApiRequest(req, {
       roles: ['school_admin', 'exam_officer', 'super_admin'],
-      targetTenantSlug,
-      requireTenant: true,
+      requestedTenantSlug: targetTenantSlug,
+      scope: 'tenant',
     });
 
     if (!auth.ok) {
@@ -72,8 +72,8 @@ export async function PATCH(req: NextRequest) {
 
     const auth = await authorizeApiRequest(req, {
       roles: ['school_admin', 'exam_officer', 'super_admin'],
-      targetTenantSlug,
-      requireTenant: true,
+      requestedTenantSlug: targetTenantSlug,
+      scope: 'tenant',
       resource: {
         table: 'exam_sessions',
         id,

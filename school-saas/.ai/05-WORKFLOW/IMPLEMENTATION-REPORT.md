@@ -627,9 +627,9 @@ Implemented the centralized, server-side API authorization boundary in `src/lib/
 - **Authentication Source:** Exclusively utilizes standard Next.js server cookie sessions via `@/lib/supabase/server` (`createClient()`). No Bearer token surface added.
 - **Actor Resolution:** User-scoped query against `profiles` table where `id = auth.uid()`. Fails closed if profile is missing or `is_active === false`.
 - **Role Verification:** Validates `profile.role` against existing `AppRole` enum (`super_admin`, `org_admin`, `school_admin`, `teacher`, `student`, `parent`, `exam_officer`). Denies by default.
-- **Tenant Scope:** Verified through server-side direct membership (`profile.tenant_id === targetTenant.id`) or organizational hierarchy (`profile.role === 'org_admin'` and `childSchool.parent_id === profile.tenant_id`). Client-supplied headers/slugs cannot override verified scope.
-- **Resource Ownership:** Enforced at the database query level (`WHERE id = :id AND tenant_id = :authorizedTenantId`). Mismatches return 404 Not Found to prevent ID enumeration.
-- **Privileged Client Boundary:** `createAdminClient()` is accessible only via `auth.adminClient()` factory returned after all authorization checks succeed.
+- **Tenant Scope & Tenant Boundary Hardening:** Explicitly decoupled into `scope: 'tenant' | 'platform'`. Caller-supplied tenant identifiers are treated strictly as untrusted requested targets (`requestedTenantSlug`, `requestedTenantId`), resolved server-side against the `tenants` table, and verified against the actor's profile. Normal tenant users can never select another tenant (returns 403 Forbidden). Non-super-admins cannot access platform-scoped routes (returns 403 Forbidden).
+- **Resource Ownership & Privileged Invariant:** Enforced at the database query level (`WHERE id = :id AND tenant_id = :authorizedTenantId`) using the user-scoped client (`supabase`). The privileged/service-role client (`createAdminClient()`) is NEVER instantiated merely to perform resource authorization. Mismatches return 404 Not Found.
+- **Privileged Client Boundary:** `createAdminClient()` is accessible strictly downstream via the `auth.adminClient()` factory returned after all authorization checks succeed.
 
 ---
 
@@ -640,65 +640,45 @@ Implemented the centralized, server-side API authorization boundary in `src/lib/
 TAP version 13
 # Subtest: T-01: Anonymous request returns 401 Unauthorized
 ok 1 - T-01: Anonymous request returns 401 Unauthorized
-  ---
-  duration_ms: 14.2273
-  ...
 # Subtest: T-02: Inactive account returns 403 Forbidden
 ok 2 - T-02: Inactive account returns 403 Forbidden
-  ---
-  duration_ms: 1.6893
-  ...
 # Subtest: T-03: Authenticated user with missing role returns 403 Forbidden
 ok 3 - T-03: Authenticated user with missing role returns 403 Forbidden
-  ---
-  duration_ms: 1.2528
-  ...
 # Subtest: T-04: Authenticated user with authorized role succeeds
 ok 4 - T-04: Authenticated user with authorized role succeeds
-  ---
-  duration_ms: 0.8328
-  ...
 # Subtest: T-05: Missing tenant membership on tenant-scoped route returns 403
 ok 5 - T-05: Missing tenant membership on tenant-scoped route returns 403
-  ---
-  duration_ms: 1.2321
-  ...
 # Subtest: T-06: Cross-tenant spoofing attempt returns 403 Forbidden
 ok 6 - T-06: Cross-tenant spoofing attempt returns 403 Forbidden
-  ---
-  duration_ms: 1.4764
-  ...
 # Subtest: T-07: Platform super-admin route accessed by normal user returns 403
 ok 7 - T-07: Platform super-admin route accessed by normal user returns 403
-  ---
-  duration_ms: 4.7154
-  ...
 # Subtest: T-08: Platform super-admin route accessed by super_admin succeeds
 ok 8 - T-08: Platform super-admin route accessed by super_admin succeeds
-  ---
-  duration_ms: 0.801
-  ...
 # Subtest: T-09: Org admin accessing child tenant succeeds via hierarchy
 ok 9 - T-09: Org admin accessing child tenant succeeds via hierarchy
-  ---
-  duration_ms: 1.8366
-  ...
 # Subtest: T-10: Cross-tenant resource authorization (IDOR protection) returns 404
 ok 10 - T-10: Cross-tenant resource authorization (IDOR protection) returns 404
-  ---
-  duration_ms: 1.932
-  ...
-1..10
-# tests 10
+# Subtest: T-11: Admin client factory is NOT invoked during resource authorization
+ok 11 - T-11: Admin client factory is NOT invoked during resource authorization
+# Subtest: T-12: Arbitrary requestedTenantId cannot bypass tenant authorization
+ok 12 - T-12: Arbitrary requestedTenantId cannot bypass tenant authorization
+# Subtest: T-13: Invalid/non-existent requestedTenantId returns 404
+ok 13 - T-13: Invalid/non-existent requestedTenantId returns 404
+# Subtest: T-14: Super-admin operating within tenant requires explicit roles: [super_admin]
+ok 14 - T-14: Super-admin operating within tenant requires explicit roles: [super_admin]
+# Subtest: T-15: Resource authorization verifies ownership via user-scoped client and succeeds for valid tenant object
+ok 15 - T-15: Resource authorization verifies ownership via user-scoped client and succeeds for valid tenant object
+1..15
+# tests 15
 # suites 0
-# pass 10
+# pass 15
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1413.3795
+# duration_ms 1477.3637
 ```
-**Result:** 10 passed, 0 failed, 0 cancelled (Execution time: 1.41s).
+**Result:** 15 passed, 0 failed, 0 cancelled (Execution time: 1.48s).
 
 ---
 
@@ -711,25 +691,27 @@ ok 10 - T-10: Cross-tenant resource authorization (IDOR protection) returns 404
    - Newly introduced `src/lib/auth/api-guard.ts` compiles cleanly with zero unaddressed errors.
 3. **Next.js Production Build (`npm run build`):**
    - **Status:** PASSED (Exit code: 0).
-   - Turbopack compilation succeeded in 68s.
-   - Full TypeScript checking finished in 67s.
+   - Turbopack compilation succeeded in 81s.
+   - Full TypeScript checking finished in 83s.
    - 40 static and dynamic routes generated and optimized successfully.
    - All 3 migrated routes (`/api/admin/exams`, `/api/exam-office/communications`, `/api/super-admin/leads`) verified in build output.
 
 ---
 
 ### 7. Security Review Notes
+- **Blocker 1 Resolved:** Privileged client is never instantiated inside the authorization boundary. Resource authorization executes strictly through the user-scoped client (`supabase`).
+- **Blocker 2 Resolved:** Target tenant selection is strictly validated against the server database. Arbitrary tenant UUIDs or slugs cannot bypass tenant authorization. Normal tenant users can never select another tenant.
+- **Architectural Improvement:** Decoupled tenancy boundary (`scope: 'tenant' | 'platform'`) from role authorization (`roles: ['super_admin']`).
 - **VULN-001 Contained:** `/api/admin/exams` GET and PATCH are now authenticated, role-restricted, and strictly tenant-filtered. Module-level admin client eliminated.
-- **VULN-004 Contained:** `/api/super-admin/leads` direct `pg.Pool` connection is now gated behind explicit `super_admin` session validation.
-- **VULN-006 Contained:** `/api/exam-office/communications` cross-tenant spoofing vulnerability closed; notification records and delivery channels are strictly scoped to verified `auth.tenantId`.
-- **BOLA/IDOR Defense:** Demonstrated pattern for object-level authorization requiring `resource.id` AND `tenant_id` at the database level.
-- **Fail-Closed Architecture:** No fallback to arbitrary tenants (`SELECT id FROM tenants LIMIT 1`) exists in `api-guard.ts`.
+- **VULN-004 Contained:** `/api/super-admin/leads` direct `pg.Pool` connection is now gated behind explicit `scope: 'platform'` and `super_admin` role validation.
+- **VULN-006 Contained:** `/api/exam-office/communications` cross-tenant spoofing closed; notification records and delivery channels are strictly scoped to verified `auth.tenantId`.
+- **BOLA/IDOR Defense:** Verified pattern for object-level authorization requiring `resource.id` AND `tenant_id` at the database level.
 
 ---
 
 ### 8. Known Limitations
-1. **Standalone Test Limitations:** Unit tests exercise the guard's logic, state transitions, and error formatting using mock Supabase request contexts. End-to-end integration tests hitting live database instances with RLS will be introduced in `TASK-0008` (dedicated testing harness).
-2. **Remaining Unmigrated Routes:** Routes identified in TASK-0003 (`/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`, and others) remain to be migrated in `TASK-0005`.
+1. **Unit Test Scope:** The 15 unit tests exercise pure authorization logic, decision branches, and payload structures against simulated database contexts. Live end-to-end integration tests hitting deployed PostgreSQL and RLS are scheduled for **TASK-0008**.
+2. **Remaining Unmigrated Routes:** Routes identified in TASK-0003 (`/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`, etc.) remain scheduled for migration under **TASK-0005**.
 
 ---
 
@@ -744,4 +726,5 @@ ok 10 - T-10: Cross-tenant resource authorization (IDOR protection) returns 404
 - `.ai/05-WORKFLOW/REVIEW-QUEUE.md`
 - `.ai/05-WORKFLOW/messages/MSG-0008.md`
 - `src/lib/auth/api-guard.ts` (inline API documentation)
+
 

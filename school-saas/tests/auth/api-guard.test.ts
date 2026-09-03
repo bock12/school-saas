@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { authorizeApiRequest, AppRole } from '@/lib/auth/api-guard';
 
+/**
+ * NOTE: These are unit tests testing the pure authorization logic, decision branches,
+ * and error payloads of authorizeApiRequest using simulated database contexts.
+ * They do NOT execute live PostgreSQL network roundtrips or live RLS evaluations.
+ * Full integration tests are scheduled for the dedicated test harness under TASK-0008.
+ */
+
 function createMockRequest(url = 'http://localhost:3000/api/test', headers: Record<string, string> = {}) {
   return new NextRequest(url, { headers });
 }
@@ -20,8 +27,16 @@ function createMockSupabaseClient(params: {
   } | null;
   profileError?: Error | null;
   tenants?: Array<{ id: string; slug: string; parent_id?: string | null }>;
+  examSessions?: Array<{ id: string; tenant_id: string; status?: string }>;
 }) {
-  const { user = null, authError = null, profile = null, profileError = null, tenants = [] } = params;
+  const {
+    user = null,
+    authError = null,
+    profile = null,
+    profileError = null,
+    tenants = [],
+    examSessions = [],
+  } = params;
 
   return {
     auth: {
@@ -34,10 +49,23 @@ function createMockSupabaseClient(params: {
     },
     from(tableName: string) {
       return {
-        select(cols: string) {
+        select(_cols: string) {
           return {
             eq(col: string, val: any) {
               return {
+                eq(col2: string, val2: any) {
+                  return {
+                    async maybeSingle() {
+                      if (tableName === 'exam_sessions') {
+                        const match = examSessions.find(
+                          (s) => s.id === val && (s as any)[col2] === val2
+                        );
+                        return { data: match || null, error: null };
+                      }
+                      return { data: null, error: null };
+                    },
+                  };
+                },
                 async single() {
                   if (tableName === 'profiles') {
                     if (profileError || !profile) {
@@ -60,6 +88,10 @@ function createMockSupabaseClient(params: {
                   }
                   if (tableName === 'tenants') {
                     const match = tenants.find((t) => (t as any)[col] === val);
+                    return { data: match || null, error: null };
+                  }
+                  if (tableName === 'exam_sessions') {
+                    const match = examSessions.find((s) => s.id === val);
                     return { data: match || null, error: null };
                   }
                   return { data: null, error: null };
@@ -195,7 +227,7 @@ test('T-05: Missing tenant membership on tenant-scoped route returns 403', async
 
   const result = await authorizeApiRequest(req, {
     roles: ['teacher'],
-    requireTenant: true,
+    scope: 'tenant',
     supabaseClient: mockClient,
   });
 
@@ -225,10 +257,11 @@ test('T-06: Cross-tenant spoofing attempt returns 403 Forbidden', async () => {
     ],
   });
 
-  // User from School A specifies School B in targetTenantSlug
+  // User from School A specifies School B in requestedTenantSlug
   const result = await authorizeApiRequest(req, {
     roles: ['school_admin'],
-    targetTenantSlug: 'school-b',
+    requestedTenantSlug: 'school-b',
+    scope: 'tenant',
     supabaseClient: mockClient,
   });
 
@@ -256,7 +289,7 @@ test('T-07: Platform super-admin route accessed by normal user returns 403', asy
 
   const result = await authorizeApiRequest(req, {
     roles: ['super_admin'],
-    requireTenant: false,
+    scope: 'platform',
     supabaseClient: mockClient,
   });
 
@@ -284,7 +317,7 @@ test('T-08: Platform super-admin route accessed by super_admin succeeds', async 
 
   const result = await authorizeApiRequest(req, {
     roles: ['super_admin'],
-    requireTenant: false,
+    scope: 'platform',
     supabaseClient: mockClient,
   });
 
@@ -315,7 +348,8 @@ test('T-09: Org admin accessing child tenant succeeds via hierarchy', async () =
 
   const result = await authorizeApiRequest(req, {
     roles: ['org_admin', 'school_admin'],
-    targetTenantSlug: 'child-school',
+    requestedTenantSlug: 'child-school',
+    scope: 'tenant',
     supabaseClient: mockClient,
   });
 
@@ -338,43 +372,19 @@ test('T-10: Cross-tenant resource authorization (IDOR protection) returns 404', 
       full_name: 'School A Admin',
       is_active: true,
     },
+    examSessions: [
+      { id: 'session-belonging-to-b', tenant_id: 'tenant-school-b' },
+    ],
   });
-
-  // Mock admin client that simulates an exam session belonging to tenant-school-b
-  const mockAdminClient = {
-    from(table: string) {
-      return {
-        select(cols: string) {
-          return {
-            eq(col1: string, val1: any) {
-              return {
-                eq(col2: string, val2: any) {
-                  return {
-                    async maybeSingle() {
-                      // Session exists for school-b, but query constrains tenant_id = tenant-school-a
-                      if (val1 === 'session-belonging-to-b' && val2 === 'tenant-school-a') {
-                        return { data: null, error: null }; // Tenant mismatch filtered out!
-                      }
-                      return { data: null, error: null };
-                    },
-                  };
-                },
-              };
-            },
-          };
-        },
-      };
-    },
-  };
 
   const result = await authorizeApiRequest(req, {
     roles: ['school_admin'],
+    scope: 'tenant',
     resource: {
       table: 'exam_sessions',
       id: 'session-belonging-to-b',
     },
     supabaseClient: mockClient,
-    adminClientFactory: () => mockAdminClient as any,
   });
 
   assert.equal(result.ok, false);
@@ -382,5 +392,196 @@ test('T-10: Cross-tenant resource authorization (IDOR protection) returns 404', 
     assert.equal(result.response.status, 404);
     const body = await result.response.json();
     assert.equal(body.code, 'NOT_FOUND');
+  }
+});
+
+test('T-11: Admin client factory is NOT invoked during resource authorization', async () => {
+  const req = createMockRequest();
+  const mockClient = createMockSupabaseClient({
+    user: { id: 'user-school-a' },
+    profile: {
+      id: 'user-school-a',
+      tenant_id: 'tenant-school-a',
+      role: 'school_admin',
+      email: 'admin@school-a.com',
+      full_name: 'School A Admin',
+      is_active: true,
+    },
+    examSessions: [
+      { id: 'session-valid', tenant_id: 'tenant-school-a' },
+    ],
+  });
+
+  let adminClientFactoryCalled = false;
+  const mockAdminFactory = () => {
+    adminClientFactoryCalled = true;
+    return {} as any;
+  };
+
+  const result = await authorizeApiRequest(req, {
+    roles: ['school_admin'],
+    scope: 'tenant',
+    resource: {
+      table: 'exam_sessions',
+      id: 'session-valid',
+    },
+    supabaseClient: mockClient,
+    adminClientFactory: mockAdminFactory,
+  });
+
+  assert.equal(result.ok, true);
+  // Invariant verified: factory must NOT be called during resource check!
+  assert.equal(adminClientFactoryCalled, false);
+
+  if (result.ok) {
+    // Only when downstream route handler calls result.adminClient() is it invoked
+    result.adminClient();
+    assert.equal(adminClientFactoryCalled, true);
+  }
+});
+
+test('T-12: Arbitrary requestedTenantId cannot bypass tenant authorization', async () => {
+  const req = createMockRequest();
+  const mockClient = createMockSupabaseClient({
+    user: { id: 'user-school-a' },
+    profile: {
+      id: 'user-school-a',
+      tenant_id: 'tenant-school-a',
+      role: 'school_admin',
+      email: 'admin@school-a.com',
+      full_name: 'School A Admin',
+      is_active: true,
+    },
+    tenants: [
+      { id: 'tenant-school-a', slug: 'school-a', parent_id: null },
+      { id: 'tenant-school-b', slug: 'school-b', parent_id: null },
+    ],
+  });
+
+  // Attacker passes another school's UUID in requestedTenantId
+  const result = await authorizeApiRequest(req, {
+    roles: ['school_admin'],
+    requestedTenantId: 'tenant-school-b',
+    scope: 'tenant',
+    supabaseClient: mockClient,
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.response.status, 403);
+    const body = await result.response.json();
+    assert.equal(body.code, 'TENANT_ACCESS_DENIED');
+  }
+});
+
+test('T-13: Invalid/non-existent requestedTenantId returns 404', async () => {
+  const req = createMockRequest();
+  const mockClient = createMockSupabaseClient({
+    user: { id: 'user-school-a' },
+    profile: {
+      id: 'user-school-a',
+      tenant_id: 'tenant-school-a',
+      role: 'school_admin',
+      email: 'admin@school-a.com',
+      full_name: 'School A Admin',
+      is_active: true,
+    },
+    tenants: [
+      { id: 'tenant-school-a', slug: 'school-a', parent_id: null },
+    ],
+  });
+
+  const result = await authorizeApiRequest(req, {
+    roles: ['school_admin'],
+    requestedTenantId: 'non-existent-uuid',
+    scope: 'tenant',
+    supabaseClient: mockClient,
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.response.status, 404);
+    const body = await result.response.json();
+    assert.equal(body.code, 'TENANT_NOT_FOUND');
+  }
+});
+
+test('T-14: Super-admin operating within tenant requires explicit roles: [super_admin]', async () => {
+  const req = createMockRequest();
+  const mockClient = createMockSupabaseClient({
+    user: { id: 'user-super' },
+    profile: {
+      id: 'user-super',
+      tenant_id: null,
+      role: 'super_admin',
+      email: 'super@platform.com',
+      full_name: 'Super Admin',
+      is_active: true,
+    },
+    tenants: [
+      { id: 'tenant-target-uuid', slug: 'target-school', parent_id: null },
+    ],
+  });
+
+  // If route explicitly permits super_admin into tenant scope
+  const allowedResult = await authorizeApiRequest(req, {
+    roles: ['school_admin', 'super_admin'],
+    requestedTenantSlug: 'target-school',
+    scope: 'tenant',
+    supabaseClient: mockClient,
+  });
+
+  assert.equal(allowedResult.ok, true);
+  if (allowedResult.ok) {
+    assert.equal(allowedResult.tenantId, 'tenant-target-uuid');
+    assert.equal(allowedResult.isSuperAdmin, true);
+  }
+
+  // If route only allows school_admin and does NOT include super_admin
+  const deniedResult = await authorizeApiRequest(req, {
+    roles: ['school_admin'],
+    requestedTenantSlug: 'target-school',
+    scope: 'tenant',
+    supabaseClient: mockClient,
+  });
+
+  assert.equal(deniedResult.ok, false);
+  if (!deniedResult.ok) {
+    assert.equal(deniedResult.response.status, 403);
+    const body = await deniedResult.response.json();
+    assert.equal(body.code, 'INSUFFICIENT_ROLE');
+  }
+});
+
+test('T-15: Resource authorization verifies ownership via user-scoped client and succeeds for valid tenant object', async () => {
+  const req = createMockRequest();
+  const mockClient = createMockSupabaseClient({
+    user: { id: 'user-school-a' },
+    profile: {
+      id: 'user-school-a',
+      tenant_id: 'tenant-school-a',
+      role: 'school_admin',
+      email: 'admin@school-a.com',
+      full_name: 'School A Admin',
+      is_active: true,
+    },
+    examSessions: [
+      { id: 'session-owned-by-a', tenant_id: 'tenant-school-a' },
+    ],
+  });
+
+  const result = await authorizeApiRequest(req, {
+    roles: ['school_admin'],
+    scope: 'tenant',
+    resource: {
+      table: 'exam_sessions',
+      id: 'session-owned-by-a',
+    },
+    supabaseClient: mockClient,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.tenantId, 'tenant-school-a');
   }
 });
