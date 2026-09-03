@@ -570,3 +570,161 @@ Until the remediation tasks outlined in `TASK-0004` through `TASK-0007` are impl
 - Tests created: **0**
 - Tests executed: **0** *(No testing framework installed in repository)*
 
+---
+
+## TASK-0004 — Unified API Route Authorization Guard
+**Date:** 2026-09-03  
+**Status:** IMPLEMENTED (Pending ChatGPT Supervisory Review)  
+**Implementer:** Gemini / Antigravity (Implementation Engineer & Technical Contributor)  
+**Supervisor / Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Final Authority:** Human Project Owner  
+**Git Branch:** `ai-eos/task-0004-api-authorization-guard` (Category C Feature Branch)  
+**Specification:** `.ai/05-WORKFLOW/TASK-0004.md`  
+**Authorization:** `.ai/05-WORKFLOW/messages/MSG-0007.md`  
+**Review State:** `REVIEW-TASK-0004` in `.ai/05-WORKFLOW/REVIEW-QUEUE.md`
+
+---
+
+### 1. Summary
+Implemented the centralized, server-side API authorization boundary in `src/lib/auth/api-guard.ts` to establish fail-closed security for Next.js Route Handlers. The guard authenticates caller sessions via Supabase Auth, resolves the actor profile under user-scoped RLS (`001_foundation.sql:234`), checks active status, enforces role/permission requirements without inventing a second RBAC model, verifies tenant membership/hierarchy, and supports tenant-scoped object-level authorization (`WHERE id = :id AND tenant_id = :tenantId`). Privileged database access (`createAdminClient()`) is strictly prohibited until authorization succeeds. Migrated three representative routes (`/api/admin/exams`, `/api/exam-office/communications`, `/api/super-admin/leads`) to prove the pattern. All 10 automated test scenarios passed using native Node 20 / tsx test runner, and the full Next.js production build (`npm run build`) passed with zero type errors.
+
+---
+
+### 2. Files Changed
+1. **`src/lib/auth/api-guard.ts` [NEW]:**
+   - Centralized `authorizeApiRequest(req, options)` server-side guard.
+   - Enforces 7-stage authorization pipeline: Authenticate → Actor Resolution → Active Status → Role Check → Fail-Closed Tenant Resolution → Tenant-Scoped Resource Authorization → Lazy Privileged Client Boundary.
+   - Exposes standardized JSON responses (`apiError`) for HTTP 401, 403, 404, 400 without using `redirect()`.
+   - Lazily loads `createAdminClient` so that `'server-only'` is never imported prematurely during test analysis.
+2. **`tests/auth/api-guard.test.ts` [NEW]:**
+   - 10 automated unit test scenarios executing against real NextRequest objects and mocked client contexts.
+   - Validates anonymous rejection, inactive accounts, role mismatches, valid roles, tenant requirement, cross-tenant spoofing, super-admin platform boundary, org-admin hierarchy, and cross-tenant IDOR protection.
+3. **`src/app/api/admin/exams/route.ts` [MODIFIED]:**
+   - Removed module-level `createAdminClient()` instantiation.
+   - `GET`: Authenticates caller, restricts access to `['school_admin', 'exam_officer', 'super_admin']`, and enforces tenant isolation (`eq('tenant_id', auth.tenantId)`).
+   - `PATCH`: Authenticates caller, enforces role check, validates exam session ID, and enforces tenant-scoped resource update (`eq('id', id).eq('tenant_id', auth.tenantId)`). Mismatched or non-existent sessions return 404 Not Found.
+4. **`src/app/api/exam-office/communications/route.ts` [MODIFIED]:**
+   - Eliminated reliance on unverified `user.user_metadata?.tenant_id` and client-supplied `tenantSlug` overrides.
+   - `GET`: Enforces role check and scopes notification queries strictly to verified `auth.tenantId`.
+   - `POST`: Enforces role check, verifies target tenant authorization, and binds notification records and dispatches strictly to `auth.tenantId`.
+5. **`src/app/api/super-admin/leads/route.ts` [MODIFIED]:**
+   - Guarded direct `pg.Pool` connection with `authorizeApiRequest(req, { roles: ['super_admin'], requireTenant: false })`.
+   - `GET`, `PATCH`, `DELETE`: Denies non-super-admin actors with HTTP 403 Forbidden. Guarantees that sales leads in `demo_requests` cannot be accessed, altered, or deleted without a valid platform `super_admin` session.
+
+---
+
+### 3. Database / API Changes
+- **Database Schema Changes:** None (`0`).
+- **Migration Changes:** None (`0`).
+- **RLS Policy Changes:** None (`0`).
+- **API Changes:**
+  - Standardized JSON error response envelope: `{ "error": string, "code": string }` on status 401, 403, 404, 400.
+  - Eliminated unauthenticated access and cross-tenant leakage on `/api/admin/exams`, `/api/exam-office/communications`, and `/api/super-admin/leads`.
+
+---
+
+### 4. Authentication / Authorization Behavior
+- **Authentication Source:** Exclusively utilizes standard Next.js server cookie sessions via `@/lib/supabase/server` (`createClient()`). No Bearer token surface added.
+- **Actor Resolution:** User-scoped query against `profiles` table where `id = auth.uid()`. Fails closed if profile is missing or `is_active === false`.
+- **Role Verification:** Validates `profile.role` against existing `AppRole` enum (`super_admin`, `org_admin`, `school_admin`, `teacher`, `student`, `parent`, `exam_officer`). Denies by default.
+- **Tenant Scope & Tenant Boundary Hardening:** Explicitly decoupled into `scope: 'tenant' | 'platform'`. Caller-supplied tenant identifiers are treated strictly as untrusted requested targets (`requestedTenantSlug`, `requestedTenantId`), resolved server-side against the `tenants` table, and verified against the actor's profile. Normal tenant users can never select another tenant (returns 403 Forbidden). Non-super-admins cannot access platform-scoped routes (returns 403 Forbidden).
+- **Resource Ownership & Privileged Invariant:** Enforced at the database query level (`WHERE id = :id AND tenant_id = :authorizedTenantId`) using the user-scoped client (`supabase`). The privileged/service-role client (`createAdminClient()`) is NEVER instantiated merely to perform resource authorization. Mismatches return 404 Not Found.
+- **Privileged Client Boundary:** `createAdminClient()` is accessible strictly downstream via the `auth.adminClient()` factory returned after all authorization checks succeed.
+
+---
+
+### 5. Tests and Exact Results
+
+#### Automated Security Unit Test Suite (`npx tsx --test tests/auth/api-guard.test.ts`)
+```text
+TAP version 13
+# Subtest: T-01: Anonymous request returns 401 Unauthorized
+ok 1 - T-01: Anonymous request returns 401 Unauthorized
+# Subtest: T-02: Inactive account returns 403 Forbidden
+ok 2 - T-02: Inactive account returns 403 Forbidden
+# Subtest: T-03: Authenticated user with missing role returns 403 Forbidden
+ok 3 - T-03: Authenticated user with missing role returns 403 Forbidden
+# Subtest: T-04: Authenticated user with authorized role succeeds
+ok 4 - T-04: Authenticated user with authorized role succeeds
+# Subtest: T-05: Missing tenant membership on tenant-scoped route returns 403
+ok 5 - T-05: Missing tenant membership on tenant-scoped route returns 403
+# Subtest: T-06: Cross-tenant spoofing attempt returns 403 Forbidden
+ok 6 - T-06: Cross-tenant spoofing attempt returns 403 Forbidden
+# Subtest: T-07: Platform super-admin route accessed by normal user returns 403
+ok 7 - T-07: Platform super-admin route accessed by normal user returns 403
+# Subtest: T-08: Platform super-admin route accessed by super_admin succeeds
+ok 8 - T-08: Platform super-admin route accessed by super_admin succeeds
+# Subtest: T-09: Org admin accessing child tenant succeeds via hierarchy
+ok 9 - T-09: Org admin accessing child tenant succeeds via hierarchy
+# Subtest: T-10: Cross-tenant resource authorization (IDOR protection) returns 404
+ok 10 - T-10: Cross-tenant resource authorization (IDOR protection) returns 404
+# Subtest: T-11: Admin client factory is NOT invoked during resource authorization
+ok 11 - T-11: Admin client factory is NOT invoked during resource authorization
+# Subtest: T-12: Arbitrary requestedTenantId cannot bypass tenant authorization
+ok 12 - T-12: Arbitrary requestedTenantId cannot bypass tenant authorization
+# Subtest: T-13: Invalid/non-existent requestedTenantId returns 404
+ok 13 - T-13: Invalid/non-existent requestedTenantId returns 404
+# Subtest: T-14: Super-admin operating within tenant requires explicit roles: [super_admin]
+ok 14 - T-14: Super-admin operating within tenant requires explicit roles: [super_admin]
+# Subtest: T-15: Resource authorization verifies ownership via user-scoped client and succeeds for valid tenant object
+ok 15 - T-15: Resource authorization verifies ownership via user-scoped client and succeeds for valid tenant object
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1477.3637
+```
+**Result:** 15 passed, 0 failed, 0 cancelled (Execution time: 1.48s).
+
+---
+
+### 6. Typecheck, Lint, and Build Results
+1. **TypeScript Typecheck (`npx tsc --noEmit`):**
+   - **Status:** PASSED (Exit code: 0).
+   - Zero compilation or type errors across the entire repository.
+2. **ESLint (`npm run lint`):**
+   - Repository baseline has 1952 pre-existing lint problems across legacy files.
+   - Newly introduced `src/lib/auth/api-guard.ts` compiles cleanly with zero unaddressed errors.
+3. **Next.js Production Build (`npm run build`):**
+   - **Status:** PASSED (Exit code: 0).
+   - Turbopack compilation succeeded in 81s.
+   - Full TypeScript checking finished in 83s.
+   - 40 static and dynamic routes generated and optimized successfully.
+   - All 3 migrated routes (`/api/admin/exams`, `/api/exam-office/communications`, `/api/super-admin/leads`) verified in build output.
+
+---
+
+### 7. Security Review Notes
+- **Blocker 1 Resolved:** Privileged client is never instantiated inside the authorization boundary. Resource authorization executes strictly through the user-scoped client (`supabase`).
+- **Blocker 2 Resolved:** Target tenant selection is strictly validated against the server database. Arbitrary tenant UUIDs or slugs cannot bypass tenant authorization. Normal tenant users can never select another tenant.
+- **Architectural Improvement:** Decoupled tenancy boundary (`scope: 'tenant' | 'platform'`) from role authorization (`roles: ['super_admin']`).
+- **VULN-001 Contained:** `/api/admin/exams` GET and PATCH are now authenticated, role-restricted, and strictly tenant-filtered. Module-level admin client eliminated.
+- **VULN-004 Contained:** `/api/super-admin/leads` direct `pg.Pool` connection is now gated behind explicit `scope: 'platform'` and `super_admin` role validation.
+- **VULN-006 Contained:** `/api/exam-office/communications` cross-tenant spoofing closed; notification records and delivery channels are strictly scoped to verified `auth.tenantId`.
+- **BOLA/IDOR Defense:** Verified pattern for object-level authorization requiring `resource.id` AND `tenant_id` at the database level.
+
+---
+
+### 8. Known Limitations
+1. **Unit Test Scope:** The 15 unit tests exercise pure authorization logic, decision branches, and payload structures against simulated database contexts. Live end-to-end integration tests hitting deployed PostgreSQL and RLS are scheduled for **TASK-0008**.
+2. **Remaining Unmigrated Routes:** Routes identified in TASK-0003 (`/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`, etc.) remain scheduled for migration under **TASK-0005**.
+
+---
+
+### 9. Escalations
+- None. All implementation work strictly adhered to the approved plan, non-goals, and boundary constraints.
+
+---
+
+### 10. Documentation Updated
+- `.ai/05-WORKFLOW/TASK-QUEUE.md`
+- `.ai/05-WORKFLOW/CONTROL-STATE.yaml`
+- `.ai/05-WORKFLOW/REVIEW-QUEUE.md`
+- `.ai/05-WORKFLOW/messages/MSG-0008.md`
+- `src/lib/auth/api-guard.ts` (inline API documentation)
+
+
