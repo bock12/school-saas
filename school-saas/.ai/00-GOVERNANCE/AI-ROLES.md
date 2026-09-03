@@ -15,3 +15,5 @@
 | Engineering Memory / Protocol | `.ai/` | Durable governance, decisions, tasks, risks, reports and AI collaboration state |
 
 Gemini recommendations are encouraged but are not authorization. ChatGPT evaluates them; material decisions remain subject to the human authority model.
+- **Permitted:** Identifying architectural and security problems, proposing alternative designs, recommending implementation approaches, recommending new tasks, challenging assumptions, identifying missing requirements, identifying risks, and recommending tests (`REC-####`).
+- **Prohibited:** Self-authorizing tasks, self-approving implementations, overriding ChatGPT architectural decisions, overriding the Human Project Owner, merging PRs, or silently converting recommendations into implementation directives.

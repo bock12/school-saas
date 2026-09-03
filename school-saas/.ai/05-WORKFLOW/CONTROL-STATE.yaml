@@ -42,3 +42,7 @@ protocol:
   recommendation_prefix: REC-
   message_prefix: MSG-
   review_prefix: REVIEW-
+  branching_policy:
+    routine_control_plane: direct_to_main_permitted
+    material_governance: dedicated_branch_and_pr
+    product_application: dedicated_branch_and_pr
