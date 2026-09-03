@@ -6,26 +6,26 @@ authority:
   coding_assistant: copilot
 source_of_truth: github
 engineering_memory: .ai/
-active_task:
+active_task: null
+last_completed_task:
   id: TASK-0004
-  status: IMPLEMENTED
-  authority: chatgpt
-  target: gemini
-  authorized_at: "2026-09-03"
+  status: COMPLETED
+  merged_to: main
+  merged_at: "2026-09-03"
 last_instruction:
   id: MSG-0007
   from: chatgpt
   to: gemini
   type: AUTHORIZED_TASK
   task_id: TASK-0004
-  status: ACTIVE
+  status: COMPLETED
 last_response:
   id: MSG-0008
   from: gemini
   to: chatgpt
   type: IMPLEMENTATION_RESPONSE
   task_id: TASK-0004
-  status: IMPLEMENTED
+  status: COMPLETED
   in_response_to: MSG-0007
 pending:
   recommendations:
@@ -37,7 +37,6 @@ pending:
     - REC-0006
   reviews:
     - REVIEW-TASK-TEST-001
-    - REVIEW-TASK-0004
   escalations: []
 protocol:
   authoritative_instruction_requires:
@@ -48,7 +47,11 @@ protocol:
   recommendation_prefix: REC-
   message_prefix: MSG-
   review_prefix: REVIEW-
-  branching_policy:
-    routine_control_plane: direct_to_main_permitted
-    material_governance: dedicated_branch_and_pr
-    product_application: dedicated_branch_and_pr
+  task_prefix: TASK-
+  action_prefix: ACT-
+  escalation_prefix: ESC-
+  status_values:
+    - PROPOSED
+    - ACTIVE
+    - BLOCKED
+    - COMPLETED

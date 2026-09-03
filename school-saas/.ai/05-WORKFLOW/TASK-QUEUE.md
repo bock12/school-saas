@@ -18,7 +18,7 @@ Rotate/revoke exposed database credentials, assess repository/history exposure, 
 Read-only security architecture investigation and remediation-planning task covering unauthenticated privileged APIs, service-role client usage, tenant resolution, and tenant isolation boundaries. Investigation accepted as complete; implementation remediation is tracked separately. Specification: `.ai/05-WORKFLOW/TASK-0003.md`. Authorization: `.ai/05-WORKFLOW/messages/MSG-0005.md`. Implementation Response: `.ai/05-WORKFLOW/messages/MSG-0006.md`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Review: `REVIEW-TASK-0003`.
 
 ## TASK-0004 — Unified API Route Authorization Guard
-**Status:** IMPLEMENTED (Pending ChatGPT Supervisory Review) · **Priority:** Critical · **Owner:** ChatGPT / Architecture & Security Supervision · **Target:** Gemini/Antigravity
+**Status:** COMPLETED (Merged to main) · **Priority:** Critical · **Owner:** ChatGPT / Architecture & Security Supervision · **Target:** Gemini/Antigravity
 
 Create the centralized request-safe `authorizeApiRequest` boundary for Next.js Route Handlers. Authentication, trusted tenant resolution, explicit role/permission checks, standardized JSON 401/403 responses, and strict separation from privileged-client creation must be established before TASK-0005 secures vulnerable route families. Specification: `.ai/05-WORKFLOW/TASK-0004.md`. Authorization: `.ai/05-WORKFLOW/messages/MSG-0007.md`. Implementation Response: `.ai/05-WORKFLOW/messages/MSG-0008.md`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Review: `REVIEW-TASK-0004`.
 
