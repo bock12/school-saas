@@ -8,6 +8,29 @@ function getFallbackAdminClient() {
   return createAdminClient();
 }
 
+let _testSupabaseClient: any = null;
+let _testAdminClientFactory: (() => any) | null = null;
+
+/**
+ * Test utility: Set transport client overrides for route-handler integration testing.
+ * Strictly used in test environments; reset after test runs.
+ */
+export function setTestClientOverride(
+  client: any,
+  adminFactory?: () => any
+) {
+  _testSupabaseClient = client;
+  _testAdminClientFactory = adminFactory || null;
+}
+
+/**
+ * Test utility: Clear any active test transport client overrides.
+ */
+export function resetTestClientOverride() {
+  _testSupabaseClient = null;
+  _testAdminClientFactory = null;
+}
+
 export type AppRole =
   | 'super_admin'
   | 'org_admin'
@@ -123,7 +146,11 @@ export async function authorizeApiRequest(
   } = options;
 
   // ── 1. Authentication ───────────────────────────────────────────────────────
-  const supabase = supabaseClient || (await createClient());
+  const supabase = supabaseClient || _testSupabaseClient || (await createClient());
+  const effectiveAdminFactory =
+    adminClientFactory !== getFallbackAdminClient
+      ? adminClientFactory
+      : (_testAdminClientFactory || getFallbackAdminClient);
   const {
     data: { user },
     error: authError,
@@ -305,6 +332,6 @@ export async function authorizeApiRequest(
     tenantId: resolvedTenantId,
     isSuperAdmin,
     isOrgAdmin,
-    adminClient: adminClientFactory,
+    adminClient: effectiveAdminFactory,
   };
 }

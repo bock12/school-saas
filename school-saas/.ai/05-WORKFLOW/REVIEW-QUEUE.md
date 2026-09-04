@@ -100,6 +100,41 @@ Verify the implementation of `src/lib/auth/api-guard.ts`, representative route m
 ### Final decision
 **APPROVED AND MERGED.** Approved by Project Owner and merged into `main`. The API authorization foundation is now live on `main`.
 
+## REVIEW-TASK-0005 — Privileged API Containment Review
+**Task:** TASK-0005  
+**Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor) & Human Project Owner  
+**Status:** OPEN (SUBMITTED FOR SUPERVISORY REVIEW)  
+**Priority:** P1 (Critical Security Containment)  
+**Branch:** `ai-eos/task-0005-privileged-api-containment` (Unmerged)  
+**Specification:** `.ai/05-WORKFLOW/TASK-0005.md`  
+**Implementation Report:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`  
+**Submission Message:** `.ai/05-WORKFLOW/messages/MSG-0009.md`
+
+### Scope
+Verify the security containment of remaining high-risk privileged API routes identified during the TASK-0003 audit:
+1. `src/app/api/admissions/route.ts` (GET, POST, PATCH, DELETE)
+2. `src/app/api/cass-export/route.ts` (GET, POST)
+3. `src/app/api/exam-office/dashboard/route.ts` (GET, POST, PATCH, DELETE)
+4. `src/app/api/test-db/route.ts` (DELETED per REC-0007)
+5. `tests/security/privileged-api-containment.test.ts` (22 automated route-handler security tests invoking actual handlers)
+6. `tests/auth/api-guard.test.ts` (15 unit tests)
+7. Regression check of TASK-0004 foundation
+
+### Evidence Summary
+- Top-level module-scope `createAdminClient()` eliminated from all three routes.
+- Downstream privileged access instantiated exclusively via `auth.adminClient()` after successful authentication and tenant authorization.
+- Method-specific role gates enforced (`DELETE /api/admissions` restricted strictly to `school_admin`, `org_admin`, `super_admin`; `exam_officer` denied).
+- Candidate tenant parameters treated as untrusted requested targets; all operations bind strictly to server-authorized `auth.tenantId`.
+- Admissions PATCH strictly allowlisted against `ALLOWED_APPLICANT_PATCH_FIELDS`; immutable fields (`id`, `tenant_id`, `tenantId`, `tenantSlug`) and arbitrary columns rejected with 400.
+- Multi-table exam office dashboard queries (10 tables) executed concurrently via `Promise.all` with zero NULL-tenant fallback and explicit database query error handling returning 500 DATABASE_ERROR.
+- CASS export synthetic data documented as pre-existing prototype code; non-production status declared; `REC-0010` recorded.
+- 22/22 route-handler security tests in `tests/security/privileged-api-containment.test.ts` passed (11.28s).
+- 15/15 guard unit tests in `tests/auth/api-guard.test.ts` passed (6.17s).
+- `npx tsc --noEmit` and Next.js production build (`npm run build`) passed with 0 errors.
+
+### Supervisor Assessment & Decision
+Supervisory corrections applied. Resubmitted for ChatGPT review and Human Project Owner merge decision.
+
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.
 

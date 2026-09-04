@@ -249,3 +249,86 @@ Security posture remains unverified and susceptible to silent regressions.
 #### Decision Required
 Authorization of proposed TASK-0008.
 
+---
+
+### REC-0007 — Decommission and Remove Unauthenticated Test DB Endpoint (`/api/test-db`)
+
+- **Task:** TASK-0005
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Security / Attack Surface Reduction
+- **Severity:** High
+- **Status:** IMPLEMENTED
+- **ChatGPT Disposition:** ACCEPTED (Incorporated in TASK-0005)
+
+#### Problem
+`src/app/api/test-db/route.ts` exposed an unauthenticated GET endpoint that executed arbitrary database probes (`SELECT NOW()`) using a direct `pg.Pool` connection, bypassing all authentication, authorization, and tenant isolation layers.
+
+#### Repository Evidence
+`src/app/api/test-db/route.ts:1-29` connected directly via `pg.Pool` without middleware or guards.
+
+#### Impact
+Information leakage and unnecessary exposure of database infrastructure to anonymous internet traffic.
+
+#### Recommendation
+Decommission and completely remove `src/app/api/test-db/route.ts`.
+
+#### Implementation
+Executed as part of TASK-0005. File and directory removed. Next.js build output confirms endpoint is no longer present.
+
+---
+
+### REC-0008 — Defer Exam Office Communication Rules and Templates to Dedicated Containment Task
+
+- **Task:** TASK-0005
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Security / Scope Management
+- **Severity:** Medium
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+Endpoints `src/app/api/exam-office/communication-rules/route.ts` and `src/app/api/exam-office/communication-templates/route.ts` contain unauthenticated handlers and privileged client usage. However, bundling them into TASK-0005 risks scope creep away from the core privileged API containment targets (`admissions`, `cass-export`, `exam-office/dashboard`).
+
+#### Recommendation
+Address communication-rules and communication-templates in a dedicated subsequent exam communication security task.
+
+---
+
+### REC-0009 — Defer Notifications API to Dedicated Notification System Review
+
+- **Task:** TASK-0005
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Security / Architecture
+- **Severity:** Medium
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+`src/app/api/notifications/route.ts` serves both internal system notifications and external alert dispatch. Containing it requires architectural decisions on server-sent events, notification dispatch permissions, and recipient user filtering.
+
+#### Recommendation
+Review and harden `/api/notifications` in a dedicated task following the completion of privileged API containment.
+
+---
+
+### REC-0010 — Replace CASS Export Synthetic Score Generator with Authoritative Assessment Pipeline
+
+- **Task:** TASK-0005
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Functional / Data Integrity
+- **Severity:** High
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+`src/app/api/cass-export/route.ts` currently calculates candidate continuous assessment marks (CA1, CA2, CA3) and final examination marks using synthetic index-based formulas (`ca1 = 8.5 + (i % 2)`, `ca2 = 9.0 - (i % 1.5)`, `exam = 52.0 + ((i * 3) % 25)`). Git history inspection confirms this code was authored in commit `44a03ac` (2026-08-16) as a prototype demonstration of the MBSSE 30/70 formula and CSV formatting. It does not query real continuous assessment gradebook tables.
+
+#### Repository Evidence
+`src/app/api/cass-export/route.ts:58-74` (historical commit `44a03acff0506757a8f2033fbbdbc415d49d6f39`).
+
+#### Impact
+If an institution submits the generated export to the Ministry of Basic and Senior Secondary Education (MBSSE) or WAEC, synthetic scores would be submitted rather than actual student grades, posing a severe data-integrity and compliance risk.
+
+#### Recommendation
+Author a dedicated follow-up task to connect `/api/cass-export` to the authoritative gradebook and assessment results tables (`student_term_marks`, `exam_marks`, or continuous assessment tables), computing the 30% CA + 70% Final Exam aggregate from verified records rather than synthetic formulas. Mark `/api/cass-export` as non-production in documentation until this pipeline is implemented.
+

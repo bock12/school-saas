@@ -1,7 +1,5 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-
-const supabase = createAdminClient();
+import { NextRequest, NextResponse } from 'next/server';
+import { authorizeApiRequest, apiError } from '@/lib/auth/api-guard';
 
 function getWaecGrade(totalScore: number): { grade: string; points: number; remark: string } {
   if (totalScore >= 75) return { grade: 'A1', points: 4.0, remark: 'Excellent' };
@@ -15,59 +13,67 @@ function getWaecGrade(totalScore: number): { grade: string; points: number; rema
   return { grade: 'F9', points: 0.0, remark: 'Fail' };
 }
 
+// GET: Export Continuous Assessment (CASS) candidate records for authorized tenant
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const tenantSlug   = searchParams.get('tenantSlug');
-  const schoolLevel  = searchParams.get('schoolLevel') ?? 'SSS';
-  const examType     = searchParams.get('examType') ?? 'WASSCE';
-  const format       = searchParams.get('format'); // 'csv' | 'json'
-
   try {
-    let tenantId: string | undefined;
-    let tenantName = 'SchoolSaas Institution';
-    if (tenantSlug) {
-      const { data: tenant } = await supabase
-        .from('tenants').select('id, name').eq('slug', tenantSlug).single();
-      tenantId = tenant?.id;
-      if (tenant?.name) tenantName = tenant.name;
+    const { searchParams } = new URL(req.url);
+    const requestedTenantSlug =
+      searchParams.get('tenantSlug') || searchParams.get('tenant') || undefined;
+    const schoolLevel = searchParams.get('schoolLevel') ?? 'SSS';
+    const examType = searchParams.get('examType') ?? 'WASSCE';
+    const format = searchParams.get('format'); // 'csv' | 'json'
+
+    const auth = await authorizeApiRequest(req, {
+      roles: ['exam_officer', 'school_admin', 'org_admin', 'super_admin'],
+      scope: 'tenant',
+      requestedTenantSlug,
+    });
+
+    if (!auth.ok) {
+      return auth.response;
     }
 
-    // Sample or live candidates for CASS export
-    const { data: dbApplicants } = await supabase
+    const adminClient = auth.adminClient();
+    const tenantId = auth.tenantId!;
+
+    // Fetch authorized tenant display name
+    const { data: tenantRecord } = await adminClient
+      .from('tenants')
+      .select('name')
+      .eq('id', tenantId)
+      .maybeSingle();
+    const tenantName = tenantRecord?.name || 'SchoolSaas Institution';
+
+    // Query live candidate records strictly constrained to authorized tenant
+    const { data: dbApplicants, error: applicantsError } = await adminClient
       .from('applicants')
       .select('*')
-      .eq('tenant_id', tenantId ?? '')
+      .eq('tenant_id', tenantId)
       .eq('school_level', schoolLevel);
 
-    // Dynamic candidate CASS computation engine (MBSSE 30/70 formula)
-    const mockCandidates = [
-      { indexNo: '4230101001', name: 'Sahr Tommy', gender: 'M', stream: 'Science', ca1: 9.5, ca2: 9.0, ca3: 8.5, exam: 62.0 },
-      { indexNo: '4230101002', name: 'Fatmata Sesay', gender: 'F', stream: 'Science', ca1: 10.0, ca2: 9.5, ca3: 9.5, exam: 65.5 },
-      { indexNo: '4230101003', name: 'Kondo Koroma', gender: 'M', stream: 'Arts', ca1: 8.0, ca2: 8.5, ca3: 8.0, exam: 54.0 },
-      { indexNo: '4230101004', name: 'Aminata Bangura', gender: 'F', stream: 'Commercial', ca1: 9.0, ca2: 8.5, ca3: 9.0, exam: 58.0 },
-      { indexNo: '4230101005', name: 'Mohamed Kamara', gender: 'M', stream: 'Technical', ca1: 7.5, ca2: 8.0, ca3: 7.5, exam: 48.0 },
-    ];
+    if (applicantsError) throw applicantsError;
 
-    const candidates = (dbApplicants && dbApplicants.length > 0)
-      ? dbApplicants.map((a, i) => {
-          const ca1 = 8.5 + (i % 2);
-          const ca2 = 9.0 - (i % 1.5);
-          const ca3 = 8.8 + (i % 1.2);
-          const exam = 52.0 + (i * 3) % 25;
-          return {
-            indexNo: a.national_index_no || `4230${1000 + i}`,
-            name: `${a.first_name} ${a.last_name}`,
-            gender: a.gender ? a.gender.charAt(0).toUpperCase() : 'M',
-            stream: a.target_stream || 'General',
-            ca1: Math.min(10, Math.round(ca1 * 10) / 10),
-            ca2: Math.min(10, Math.round(ca2 * 10) / 10),
-            ca3: Math.min(10, Math.round(ca3 * 10) / 10),
-            exam: Math.min(70, Math.round(exam * 10) / 10),
-          };
-        })
-      : mockCandidates;
+    const candidates =
+      dbApplicants && dbApplicants.length > 0
+        ? dbApplicants.map((a: any, i: number) => {
+            const ca1 = 8.5 + (i % 2);
+            const ca2 = 9.0 - (i % 1.5);
+            const ca3 = 8.8 + (i % 1.2);
+            const exam = 52.0 + ((i * 3) % 25);
+            return {
+              indexNo: a.national_index_no || `4230${1000 + i}`,
+              name: `${a.first_name} ${a.last_name}`,
+              gender: a.gender ? a.gender.charAt(0).toUpperCase() : 'M',
+              stream: a.target_stream || 'General',
+              ca1: Math.min(10, Math.round(ca1 * 10) / 10),
+              ca2: Math.min(10, Math.round(ca2 * 10) / 10),
+              ca3: Math.min(10, Math.round(ca3 * 10) / 10),
+              exam: Math.min(70, Math.round(exam * 10) / 10),
+            };
+          })
+        : [];
 
-    const rows = candidates.map(c => {
+    const rows = candidates.map((c: any) => {
       const caTotal = Math.round((c.ca1 + c.ca2 + c.ca3) * 10) / 10;
       const totalScore = Math.round((caTotal + c.exam) * 10) / 10;
       const gradeInfo = getWaecGrade(totalScore);
@@ -83,10 +89,14 @@ export async function GET(req: NextRequest) {
     });
 
     if (format === 'csv') {
-      const csvHeader = 'WAEC_INDEX_NO,CANDIDATE_NAME,GENDER,STREAM,CA1_10,CA2_10,CA3_10,CA_TOTAL_30,EXAM_70,FINAL_SCORE_100,WAEC_GRADE,GRADE_POINTS,REMARK\n';
-      const csvBody = rows.map(r =>
-        `"${r.indexNo}","${r.name}","${r.gender}","${r.stream}",${r.ca1},${r.ca2},${r.ca3},${r.caTotal},${r.exam},${r.totalScore},"${r.grade}",${r.points},"${r.remark}"`
-      ).join('\n');
+      const csvHeader =
+        'WAEC_INDEX_NO,CANDIDATE_NAME,GENDER,STREAM,CA1_10,CA2_10,CA3_10,CA_TOTAL_30,EXAM_70,FINAL_SCORE_100,WAEC_GRADE,GRADE_POINTS,REMARK\n';
+      const csvBody = rows
+        .map(
+          (r: any) =>
+            `"${r.indexNo}","${r.name}","${r.gender}","${r.stream}",${r.ca1},${r.ca2},${r.ca3},${r.caTotal},${r.exam},${r.totalScore},"${r.grade}",${r.points},"${r.remark}"`
+        )
+        .join('\n');
 
       return new NextResponse(csvHeader + csvBody, {
         status: 200,
@@ -106,32 +116,42 @@ export async function GET(req: NextRequest) {
         academicYear: '2025/2026',
         cassFormula: '30% Continuous Assessment (CA1 + CA2 + CA3) + 70% Final Examination',
         candidateCount: rows.length,
-        compliantCount: rows.filter(r => r.isCompliant).length,
-        hasErrors: rows.some(r => !r.isCompliant),
+        compliantCount: rows.filter((r: any) => r.isCompliant).length,
+        hasErrors: rows.some((r: any) => !r.isCompliant),
         rows,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[CASS Export GET]', err);
-    return NextResponse.json({ success: false, error: 'Failed to generate CASS export' }, { status: 500 });
+    return apiError(err.message || 'Failed to generate CASS export', 'INTERNAL_ERROR', 500);
   }
 }
 
+// POST: Record CASS export batch for authorized tenant
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { tenantSlug, schoolLevel, academicYear, term, examType, candidateCount, exportFilename } = body;
+    const body = await req.json().catch(() => ({}));
+    const { tenantSlug, schoolLevel, academicYear, term, examType, candidateCount, exportFilename } =
+      body;
 
-    let tenantId: string | undefined;
-    if (tenantSlug) {
-      const { data: tenant } = await supabase.from('tenants').select('id').eq('slug', tenantSlug).single();
-      tenantId = tenant?.id;
+    const auth = await authorizeApiRequest(req, {
+      roles: ['exam_officer', 'school_admin', 'org_admin', 'super_admin'],
+      scope: 'tenant',
+      requestedTenantSlug: tenantSlug || undefined,
+    });
+
+    if (!auth.ok) {
+      return auth.response;
     }
 
-    const { data: batch, error } = await supabase
+    const adminClient = auth.adminClient();
+    const tenantId = auth.tenantId!;
+
+    // Force tenant_id to authorized tenant (client-supplied body tenant is ignored)
+    const { data: batch, error } = await adminClient
       .from('sl_cass_export_batches')
       .insert({
-        tenant_id: tenantId ?? null,
+        tenant_id: tenantId,
         school_level: schoolLevel ?? 'SSS',
         academic_year: academicYear ?? '2025/2026',
         term: term ?? 'Term 3',
@@ -140,13 +160,14 @@ export async function POST(req: NextRequest) {
         verified_count: candidateCount ?? 0,
         export_filename: exportFilename ?? 'MBSSE_CASS_Export.csv',
       })
-      .select().single();
+      .select()
+      .single();
 
     if (error) throw error;
 
     return NextResponse.json({ success: true, data: { batch } });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[CASS Export POST]', err);
-    return NextResponse.json({ success: false, error: 'Failed to record CASS batch' }, { status: 500 });
+    return apiError(err.message || 'Failed to record CASS batch', 'INTERNAL_ERROR', 500);
   }
 }
