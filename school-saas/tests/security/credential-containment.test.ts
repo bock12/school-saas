@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createAdminClient } from '../../src/lib/supabase/admin';
 import { authorizeApiRequest } from '../../src/lib/auth/api-guard';
+import { validateAndSyncInvitedProfile } from '../../src/lib/auth/callback-sync';
 import { NextRequest } from 'next/server';
 
 const ROOT_DIR = path.resolve(__dirname, '../..');
@@ -388,5 +389,178 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       !content.includes('Staff password sync error'),
       'login/actions.ts must not contain staff password sync fallback'
     );
+  });
+
+  // Helper to create mock admin client for profile synchronization tests
+  function createMockAdminForSync(existingProfiles: { id: string; email?: string; role: string; tenant_id: string; full_name?: string }[] = []) {
+    const profiles = [...existingProfiles];
+    const operations: { type: string; table: string; data: unknown; filters: Record<string, unknown> }[] = [];
+
+    return {
+      profiles,
+      operations,
+      client: {
+        from: (table: string) => {
+          const filters: Record<string, unknown> = {};
+          return {
+            select: () => ({
+              eq: (col: string, val: unknown) => {
+                filters[col] = val;
+                return {
+                  maybeSingle: async () => {
+                    const found = profiles.find((p: Record<string, unknown>) => p[col] === val);
+                    return { data: found ? { ...found } : null, error: null };
+                  },
+                };
+              },
+            }),
+            delete: () => ({
+              eq: (col: string, val: unknown) => {
+                operations.push({ type: 'delete', table, data: null, filters: { [col]: val } });
+                const idx = profiles.findIndex((p: Record<string, unknown>) => p[col] === val);
+                if (idx !== -1) profiles.splice(idx, 1);
+                return Promise.resolve({ error: null });
+              },
+            }),
+            insert: (data: unknown) => {
+              operations.push({ type: 'insert', table, data, filters: {} });
+              profiles.push({ ...(data as Record<string, unknown>) } as typeof existingProfiles[0]);
+              return Promise.resolve({ error: null });
+            },
+            update: (data: unknown) => ({
+              eq: (col: string, val: unknown) => {
+                operations.push({ type: 'update', table, data, filters: { [col]: val } });
+                const target = profiles.find((p: Record<string, unknown>) => p[col] === val);
+                if (target) Object.assign(target, data);
+                return Promise.resolve({ error: null });
+              },
+            }),
+          };
+        },
+      } as unknown as ReturnType<typeof createAdminClient>,
+    };
+  }
+
+  // SEC-15: Callback route rejects or ignores untrusted user_metadata.role (privilege escalation defense)
+  await t.test('SEC-15: Callback route rejects or ignores untrusted user_metadata.role (privilege escalation defense)', async () => {
+    const callbackPath = path.join(ROOT_DIR, 'src/app/api/auth/callback/route.ts');
+    const content = fs.readFileSync(callbackPath, 'utf8');
+
+    // Static security assertion: callback route must never upsert raw meta.role
+    assert.ok(
+      !content.includes('role: meta.role'),
+      'src/app/api/auth/callback/route.ts must not directly write role: meta.role into profiles'
+    );
+
+    // Behavioral assertion: self-registered attacker attempting privilege escalation
+    const mock = createMockAdminForSync([]);
+    const attackerUser = {
+      id: 'attacker-uuid-1',
+      email: 'attacker@evil.com',
+      user_metadata: { role: 'super_admin', tenant_id: 'target-tenant-uuid' },
+    };
+
+    const result = await validateAndSyncInvitedProfile(attackerUser, () => mock.client);
+
+    assert.equal(result.synced, false, 'Unprovisioned user sync must fail');
+    assert.equal(result.trusted, false, 'Unprovisioned user must not be trusted');
+    assert.notEqual(result.role, 'super_admin', 'Attacker must not be assigned super_admin role');
+    assert.equal(mock.profiles.length, 0, 'No profile row must be created in the database for untrusted user');
+  });
+
+  // SEC-16: Callback route rejects or ignores untrusted user_metadata.tenant_id (cross-tenant spoofing defense)
+  await t.test('SEC-16: Callback route rejects or ignores untrusted user_metadata.tenant_id (cross-tenant spoofing defense)', async () => {
+    const callbackPath = path.join(ROOT_DIR, 'src/app/api/auth/callback/route.ts');
+    const content = fs.readFileSync(callbackPath, 'utf8');
+
+    // Static security assertion: callback route must never upsert raw meta.tenant_id
+    assert.ok(
+      !content.includes('tenant_id: meta.tenant_id'),
+      'src/app/api/auth/callback/route.ts must not directly write tenant_id: meta.tenant_id into profiles'
+    );
+
+    // Behavioral assertion: attacker attempting to reassign/spoof another tenant
+    const mock = createMockAdminForSync([]);
+    const attackerUser = {
+      id: 'attacker-uuid-2',
+      email: 'spoofed@evil.com',
+      user_metadata: { role: 'school_admin', tenant_id: 'victim-school-uuid' },
+    };
+
+    const result = await validateAndSyncInvitedProfile(attackerUser, () => mock.client);
+
+    assert.equal(result.synced, false, 'Untrusted tenant spoofing sync must fail');
+    assert.equal(result.trusted, false, 'Untrusted tenant spoofing must not be marked trusted');
+    assert.notEqual(result.tenantId, 'victim-school-uuid', 'Attacker must not be bound to victim tenant');
+    assert.equal(mock.profiles.length, 0, 'No profile row must be created for untrusted tenant request');
+  });
+
+  // SEC-17: Callback route establishes and validates trusted invitation/provisioning source first
+  await t.test('SEC-17: Callback route establishes and validates trusted invitation/provisioning source first', async () => {
+    // Existing user with student role attempts to escalate to super_admin via metadata
+    const existingStudentProfile = {
+      id: 'student-uuid-1',
+      email: 'student@school.edu',
+      role: 'student',
+      tenant_id: 'school-tenant-1',
+      full_name: 'Legitimate Student',
+    };
+
+    const mock = createMockAdminForSync([existingStudentProfile]);
+    const studentUser = {
+      id: 'student-uuid-1',
+      email: 'student@school.edu',
+      user_metadata: { role: 'super_admin', tenant_id: 'arbitrary-tenant-id' },
+    };
+
+    const result = await validateAndSyncInvitedProfile(studentUser, () => mock.client);
+
+    assert.equal(result.synced, true);
+    assert.equal(result.trusted, true);
+    assert.equal(result.role, 'student', 'Existing authoritative role must be preserved');
+    assert.equal(result.tenantId, 'school-tenant-1', 'Existing authoritative tenant must be preserved');
+
+    // Verify database profile was not altered to super_admin
+    const dbProfile = mock.profiles.find((p) => p.id === 'student-uuid-1');
+    assert.ok(dbProfile);
+    assert.equal(dbProfile.role, 'student', 'Database profile role must remain student');
+    assert.equal(dbProfile.tenant_id, 'school-tenant-1', 'Database profile tenant must remain school-tenant-1');
+  });
+
+  // SEC-18: Legitimate invitation behavior is preserved using server-authoritative data
+  await t.test('SEC-18: Legitimate invitation behavior is preserved using server-authoritative data', async () => {
+    // Authorized admin invited a school_admin and pre-provisioned the profile record
+    const preprovisionedProfile = {
+      id: 'temp-placeholder-id',
+      email: 'newadmin@school.org',
+      role: 'school_admin',
+      tenant_id: 'authorized-school-uuid',
+      full_name: 'New School Admin',
+    };
+
+    const mock = createMockAdminForSync([preprovisionedProfile]);
+
+    // User accepts invite and exchanges code: their GoTrue auth id is now finalized
+    const invitedUser = {
+      id: 'final-gotrue-auth-id',
+      email: 'newadmin@school.org',
+      user_metadata: {
+        // Even if user_metadata had missing or conflicting data, server DB is authoritative
+        full_name: 'New School Admin Updated',
+      },
+    };
+
+    const result = await validateAndSyncInvitedProfile(invitedUser, () => mock.client);
+
+    assert.equal(result.synced, true);
+    assert.equal(result.trusted, true);
+    assert.equal(result.role, 'school_admin', 'Role must come from authoritative pre-provisioned DB record');
+    assert.equal(result.tenantId, 'authorized-school-uuid', 'Tenant must come from authoritative pre-provisioned DB record');
+
+    // Verify profile is re-linked to final GoTrue auth user ID
+    const finalizedProfile = mock.profiles.find((p) => p.id === 'final-gotrue-auth-id');
+    assert.ok(finalizedProfile, 'Profile must be linked to final auth user ID');
+    assert.equal(finalizedProfile.role, 'school_admin');
+    assert.equal(finalizedProfile.tenant_id, 'authorized-school-uuid');
   });
 });

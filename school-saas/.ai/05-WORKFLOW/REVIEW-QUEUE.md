@@ -152,11 +152,12 @@ Verify containment of credential exposure risks across the repository:
 3. Remediation of `pg-fallback.ts` with `server-only`, secure TLS (`rejectUnauthorized: true`), and complete removal of `createAuthUserAndProfileDirectly`.
 4. Elimination of dangerous `UPDATE auth.users SET encrypted_password` mutation in `src/app/[tenant]/login/actions.ts` without introducing new direct database fallbacks.
 5. Transition of user provisioning in `src/app/[tenant]/login/provision-auth.ts`, `src/app/actions/tenant.ts`, and `src/app/api/public/register-tenant/route.ts` to Supabase Auth Admin APIs.
-6. Replacement of ad-hoc service-role client initializations with server-only `createAdminClient()`.
-7. Enforcing secure TLS across all maintenance scripts and sourcing passwords from environment variables.
-8. Execution of automated security regression test suite `tests/security/credential-containment.test.ts` (14 subtests SEC-01 through SEC-14).
-9. Regression verification of TASK-0004 and TASK-0005 security suites (52 tests total passing).
-10. Verification of typecheck, linter, and production build.
+6. Hardening of `src/app/api/auth/callback/route.ts` and introduction of server-only `src/lib/auth/callback-sync.ts`: never trusting client-supplied `user_metadata.role` or `user_metadata.tenant_id`, and validating pre-provisioned invitation state from the database.
+7. Replacement of ad-hoc service-role client initializations with server-only `createAdminClient()`.
+8. Enforcing secure TLS across all maintenance scripts and sourcing passwords from environment variables.
+9. Execution of automated security regression test suite `tests/security/credential-containment.test.ts` (18 subtests SEC-01 through SEC-18).
+10. Regression verification of TASK-0004 and TASK-0005 security suites (56 tests total passing).
+11. Verification of typecheck, linter, and production build.
 
 ### Evidence Summary
 - 14 files deleted from git tracking (`run_migration_*.js`, `dump_applicants.js`, `test-create-session.ts`, `src/scripts/*`).
@@ -164,13 +165,14 @@ Verify containment of credential exposure risks across the repository:
 - Zero occurrences of known production pooler credentials, passwords, or service-role keys in working tree.
 - Zero occurrences of `rejectUnauthorized: false` across `src/` and `scripts/`.
 - Zero direct SQL mutations to `auth.users` in application source.
-- 52/52 automated tests passed (15 in `api-guard.test.ts`, 22 in `privileged-api-containment.test.ts`, 15 in `credential-containment.test.ts`).
+- Callback route profile sync hardened against privilege escalation (`SEC-15`) and cross-tenant spoofing (`SEC-16`); pre-provisioned invitations preserved via database authority (`SEC-17`, `SEC-18`).
+- 56/56 automated tests passed (15 in `api-guard.test.ts`, 22 in `privileged-api-containment.test.ts`, 19 in `credential-containment.test.ts`).
 - `npx tsc --noEmit` passed with 0 errors.
-- `npx eslint tests/security/credential-containment.test.ts` passed with 0 errors and 0 warnings.
-- `npm run build` completed successfully with 0 errors.
+- `npx eslint src/lib/auth/callback-sync.ts src/app/api/auth/callback/route.ts tests/security/credential-containment.test.ts` passed with 0 errors and 0 warnings.
+- `npm run build` completed successfully with 0 errors (all 40 routes generated).
 
 ### Supervisor Assessment & Decision
-Submitted for ChatGPT supervisory review prior to human project owner merge decision.
+Supervisory corrections applied. Resubmitted for ChatGPT supervisory review prior to human project owner merge decision. Do not merge.
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.

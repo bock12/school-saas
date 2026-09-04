@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { validateAndSyncInvitedProfile } from '@/lib/auth/callback-sync';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -45,21 +46,10 @@ export async function GET(request: Request) {
 
   const user = sessionData.user;
 
-  // ── If this was an invite, sync the profile from user_metadata ─────────────
-  // inviteTenantAdmin embeds role + tenant_id in user_metadata at invite time.
-  // We upsert here to ensure the profile is always current (handles race conditions
-  // where the pre-created profile row was not yet committed).
-  const meta = user.user_metadata ?? {};
-  if (meta.tenant_id && meta.role) {
-    const supabaseAdmin = createAdminClient();
-    await supabaseAdmin.from('profiles').upsert({
-      id: user.id,
-      email: user.email ?? '',
-      full_name: meta.full_name ?? meta.name ?? '',
-      role: meta.role,
-      tenant_id: meta.tenant_id,
-    }, { onConflict: 'id', ignoreDuplicates: false });
-  }
+  // ── Establish and validate trusted invitation/provisioning source ───────────
+  // NEVER trust user_metadata.role or user_metadata.tenant_id as authoritative authorization data.
+  // Authoritative authorization state is strictly validated against the server database.
+  await validateAndSyncInvitedProfile(user, createAdminClient);
 
   // 2. Determine if this is a tenant-specific login by parsing the `next` path.
   //    e.g. next="/greenwood" → tenantSlug="greenwood"
