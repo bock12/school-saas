@@ -203,6 +203,7 @@ function createMockTransport(config: {
       const filters: Array<{ col: string; val: any; op: string }> = [];
       let insertPayload: any = null;
       let updatePayload: any = null;
+      let isDelete = false;
 
       const builder: any = {
         select(cols?: string, opts?: any) {
