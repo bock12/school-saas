@@ -8,9 +8,9 @@ All implementation follows `.ai/AGENTS.md`. Every task requires owner, superviso
 Read-only inventory completed for privileged Supabase/PostgreSQL/auth-user access, protected APIs, server actions, tenant resolution, RLS, RBAC and test gaps. No implementation change was made. See `.ai/04-SECURITY/SECURITY-ARCHITECTURE.md` and the preserved historical audit record.
 
 ## TASK-0002 — Credential exposure incident containment
-**Status:** BACKLOG · **Priority:** Critical · **Owner:** Human/security owner
+**Status:** IN_REVIEW · **Priority:** Critical · **Owner:** ChatGPT Supervision · **Target:** Gemini/Antigravity
 
-Rotate/revoke exposed database credentials, assess repository/history exposure, remove embedded credentials through an approved recovery plan, and add secret scanning. Human-controlled operation; no credential rotation, history rewrite or database execution without explicit approval.
+Eliminate credential and secret exposure across the repository: purge ad-hoc migration scripts and committed scratch directories, enforce strict remote database TLS verification, sanitize utility scripts to source from environment without logging plaintext credentials, enforce server-only isolation for administrative clients, eliminate dangerous raw SQL auth.users password overwrites, and establish a comprehensive automated security regression suite (SEC-01 through SEC-14). Specification: `.ai/05-WORKFLOW/TASK-0002.md`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Review: `REVIEW-TASK-0002`. Response: `.ai/05-WORKFLOW/messages/MSG-0010.md`.
 
 ## TASK-0003 — Privileged API & Tenant Isolation Security Investigation
 **Status:** IMPLEMENTED · **Priority:** Critical · **Owner:** ChatGPT supervision · **Target:** Gemini/Antigravity

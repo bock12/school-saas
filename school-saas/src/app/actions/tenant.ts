@@ -1,7 +1,6 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createAuthUserAndProfileDirectly } from '@/lib/db/pg-fallback';
 
 export type AdminRole = 'school_admin' | 'org_admin' | 'super_admin';
 
@@ -38,25 +37,7 @@ export async function inviteTenantAdmin(
         throw new Error(`A user with email "${email}" already exists.`);
       }
 
-      // Check if Auth Admin API is unavailable or missing service role key
-      const isAuthKeyError =
-        authErr.message.includes('Bearer token') ||
-        authErr.message.includes('Unregistered API key') ||
-        authErr.message.includes('API key') ||
-        authErr.status === 401;
-
-      if (isAuthKeyError) {
-        console.warn(`[inviteTenantAdmin] Auth Admin API unavailable (${authErr.message}). Using database fallback.`);
-        return await createAuthUserAndProfileDirectly({
-          email,
-          name,
-          role,
-          tenantId,
-          tempPassword,
-        });
-      } else {
-        throw new Error(`Failed to create user account: ${authErr.message}`);
-      }
+      throw new Error(`Failed to create user account: ${authErr.message}`);
     } else {
       userId = user.user?.id;
     }
@@ -77,24 +58,7 @@ export async function inviteTenantAdmin(
         throw new Error(`A user with email "${email}" already exists or has a pending invite.`);
       }
 
-      // Check if Auth Admin API is unavailable or missing service role key
-      const isAuthKeyError =
-        error.message.includes('Bearer token') ||
-        error.message.includes('Unregistered API key') ||
-        error.message.includes('API key') ||
-        error.status === 401;
-
-      if (isAuthKeyError) {
-        console.warn(`[inviteTenantAdmin] Auth Admin API unavailable (${error.message}). Using database fallback.`);
-        return await createAuthUserAndProfileDirectly({
-          email,
-          name,
-          role,
-          tenantId,
-        });
-      } else {
-        throw new Error(`Failed to send invite to ${email}: ${error.message}`);
-      }
+      throw new Error(`Failed to send invite to ${email}: ${error.message}`);
     } else {
       userId = data.user?.id;
     }
@@ -119,14 +83,8 @@ export async function inviteTenantAdmin(
     }, { onConflict: 'id', ignoreDuplicates: false });
 
     if (profileError) {
-      console.error("[inviteTenantAdmin] Profile upsert failed, attempting database fallback:", profileError);
-      return await createAuthUserAndProfileDirectly({
-        email,
-        name,
-        role,
-        tenantId,
-        tempPassword,
-      });
+      console.error("[inviteTenantAdmin] Profile upsert failed:", profileError);
+      throw new Error(`Profile creation failed: ${profileError.message}`);
     }
 
     return { success: true, userId: targetId };
@@ -355,19 +313,7 @@ export async function addStaffMember(
       }).eq('id', result.userId);
 
       if (patchErr) {
-        await createAuthUserAndProfileDirectly({
-          email: opts.email,
-          name: opts.name,
-          role: opts.role,
-          tenantId: opts.tenantId,
-          tempPassword: opts.tempPassword,
-          department: opts.department,
-          office: opts.office,
-          jobTitle: opts.jobTitle,
-          staffId: opts.staffId,
-          phone: opts.phone,
-          avatarUrl: opts.avatarUrl,
-        });
+        console.error("[addStaffMemberDirectly] Profile fields update failed:", patchErr);
       }
     }
 

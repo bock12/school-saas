@@ -135,6 +135,44 @@ Verify the security containment of remaining high-risk privileged API routes ide
 ### Supervisor Assessment & Decision
 Supervisory corrections applied. Resubmitted for ChatGPT review and Human Project Owner merge decision.
 
+## REVIEW-TASK-0002 — Credential Exposure Containment Review
+**Task:** TASK-0002  
+**Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor) & Human Project Owner  
+**Status:** OPEN (SUBMITTED FOR SUPERVISORY REVIEW)  
+**Priority:** P1 (Critical Security Containment)  
+**Branch:** `ai-eos/task-0002-credential-exposure-containment` (Unmerged)  
+**Specification:** `.ai/05-WORKFLOW/TASK-0002.md`  
+**Implementation Report:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`  
+**Submission Message:** `.ai/05-WORKFLOW/messages/MSG-0010.md`
+
+### Scope
+Verify containment of credential exposure risks across the repository:
+1. Deletion of 14 unvetted scripts containing hardcoded Supabase pooler credentials and root debug scripts.
+2. Complete untracking of `scratch/` directory and `.gitignore` update.
+3. Remediation of `pg-fallback.ts` with `server-only`, secure TLS (`rejectUnauthorized: true`), and complete removal of `createAuthUserAndProfileDirectly`.
+4. Elimination of dangerous `UPDATE auth.users SET encrypted_password` mutation in `src/app/[tenant]/login/actions.ts` without introducing new direct database fallbacks.
+5. Transition of user provisioning in `src/app/[tenant]/login/provision-auth.ts`, `src/app/actions/tenant.ts`, and `src/app/api/public/register-tenant/route.ts` to Supabase Auth Admin APIs.
+6. Replacement of ad-hoc service-role client initializations with server-only `createAdminClient()`.
+7. Enforcing secure TLS across all maintenance scripts and sourcing passwords from environment variables.
+8. Execution of automated security regression test suite `tests/security/credential-containment.test.ts` (14 subtests SEC-01 through SEC-14).
+9. Regression verification of TASK-0004 and TASK-0005 security suites (52 tests total passing).
+10. Verification of typecheck, linter, and production build.
+
+### Evidence Summary
+- 14 files deleted from git tracking (`run_migration_*.js`, `dump_applicants.js`, `test-create-session.ts`, `src/scripts/*`).
+- `scratch/` purged from tracking and `.gitignore` updated.
+- Zero occurrences of known production pooler credentials, passwords, or service-role keys in working tree.
+- Zero occurrences of `rejectUnauthorized: false` across `src/` and `scripts/`.
+- Zero direct SQL mutations to `auth.users` in application source.
+- 52/52 automated tests passed (15 in `api-guard.test.ts`, 22 in `privileged-api-containment.test.ts`, 15 in `credential-containment.test.ts`).
+- `npx tsc --noEmit` passed with 0 errors.
+- `npx eslint tests/security/credential-containment.test.ts` passed with 0 errors and 0 warnings.
+- `npm run build` completed successfully with 0 errors.
+
+### Supervisor Assessment & Decision
+Submitted for ChatGPT supervisory review prior to human project owner merge decision.
+
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.
+
 

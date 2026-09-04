@@ -18,15 +18,20 @@ const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 require('dotenv').config({ path: '.env.local' });
 
-const TENANT_SLUG   = 'school-a';
-const ADMIN_EMAIL   = 'admin@greenwood.edu';
-const ADMIN_PASSWORD = 'Admin1234!';
+const TENANT_SLUG   = process.env.TENANT_SLUG || 'school-a';
+const ADMIN_EMAIL   = process.env.ADMIN_EMAIL || 'admin@greenwood.edu';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const ADMIN_NAME    = 'School Administrator';
 const ADMIN_ROLE    = 'school_admin';
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!ADMIN_PASSWORD) {
+    console.error('❌  Missing ADMIN_PASSWORD in environment variables');
+    process.exit(1);
+  }
 
   if (!url || !serviceKey) {
     console.error('❌  Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local');
@@ -88,7 +93,7 @@ async function main() {
   console.log('─'.repeat(40));
   console.log(`  URL:      http://localhost:3000/${TENANT_SLUG}/login`);
   console.log(`  Email:    ${ADMIN_EMAIL}`);
-  console.log(`  Password: ${ADMIN_PASSWORD}`);
+  console.log(`  Password: [CONFIGURED VIA ENV]`);
   console.log('─'.repeat(40));
 }
 

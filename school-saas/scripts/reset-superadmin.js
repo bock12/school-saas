@@ -41,8 +41,13 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   realtime: { transport: class { constructor() {} addEventListener() {} removeEventListener() {} close() {} } }
 });
 
-const NEW_EMAIL    = 'superadmin@schoolsaas.com';
-const NEW_PASSWORD = 'SuperAdmin@2026!';
+const NEW_EMAIL    = process.env.NEW_EMAIL || 'superadmin@schoolsaas.com';
+const NEW_PASSWORD = process.env.NEW_PASSWORD || process.env.SUPERADMIN_PASSWORD;
+
+if (!NEW_PASSWORD) {
+  console.error('❌  Missing NEW_PASSWORD or SUPERADMIN_PASSWORD in environment variables');
+  process.exit(1);
+}
 
 async function resetSuperAdmin() {
   console.log('\n🔍  Searching for existing super admin account...');
@@ -107,7 +112,7 @@ async function resetSuperAdmin() {
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('  Login URL : http://localhost:3000/super-admin/login');
   console.log(`  Email     : ${NEW_EMAIL}`);
-  console.log(`  Password  : ${NEW_PASSWORD}`);
+  console.log(`  Password  : [CONFIGURED VIA ENV]`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   console.log('⚠️   IMPORTANT: Change this password immediately after first login!\n');
 }

@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -50,18 +51,7 @@ export async function GET(request: Request) {
   // where the pre-created profile row was not yet committed).
   const meta = user.user_metadata ?? {};
   if (meta.tenant_id && meta.role) {
-    const supabaseAdmin = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll(); },
-          setAll(cookiesToSet) {
-            try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); } catch {}
-          },
-        },
-      }
-    );
+    const supabaseAdmin = createAdminClient();
     await supabaseAdmin.from('profiles').upsert({
       id: user.id,
       email: user.email ?? '',

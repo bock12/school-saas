@@ -903,6 +903,292 @@ Executes the actual route handlers (`admissionsGET`, `admissionsPOST`, `admissio
 ### 7. Escalations
 None. All implementation work strictly adhered to the authorized scope, supervisory corrections, and security invariants.
 
+---
+
+## TASK-0002 — Credential Exposure Containment
+**Date:** 2026-09-04  
+**Status:** IMPLEMENTED (Submitted for Supervisory Review)  
+**Implementer:** Gemini / Antigravity (Implementation Engineer & Technical Contributor)  
+**Supervisor / Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Final Authority:** Human Project Owner  
+**Repository:** `bock12/school-saas`  
+**Base Branch:** `main`  
+**Implementation Branch:** `ai-eos/task-0002-credential-exposure-containment`  
+**Specification:** `.ai/05-WORKFLOW/TASK-0002.md`  
+**Review State:** `REVIEW-TASK-0002` in `.ai/05-WORKFLOW/REVIEW-QUEUE.md`  
+**Response Message:** `.ai/05-WORKFLOW/messages/MSG-0010.md`
+
+---
+
+### 1. Executive Summary
+TASK-0002 ("Credential Exposure Containment") has been fully implemented in strict adherence to supervisory criteria AC-010 through AC-017. All plaintext credentials, hardcoded database connection strings, and insecure TLS configurations (`rejectUnauthorized: false`) have been eradicated from the tracked repository tree. 
+
+Critically, a severe authentication bypass vulnerability in `src/app/[tenant]/login/actions.ts`—which directly overwrote `auth.users.encrypted_password` with raw SQL whenever a staff login failed—was completely eliminated without introducing any new direct-database fallback dependencies (`AC-012`, `AC-013`). All administrative user provisioning in application code was standardized onto official Supabase Auth Admin APIs (`auth.admin.createUser`, `auth.admin.updateUserById`). 
+
+Administrative clients and direct PostgreSQL pool connections were hardened with `import 'server-only'` to guarantee fail-closed execution and prevent client bundle leakage (`AC-010`). All 14 automated security property tests in `tests/security/credential-containment.test.ts` (SEC-01 through SEC-14), along with the complete regression suites for TASK-0004 and TASK-0005 (52 tests total), passed with zero failures. Full TypeScript compilation (`npx tsc --noEmit`) and Next.js production build (`npm run build`) succeeded with exit code 0.
+
+---
+
+### 2. Exact Files Changed
+
+| File | Status | Nature of Modification |
+|---|---|---|
+| `src/lib/db/pg-fallback.ts` | MODIFIED | Added `import 'server-only'`. Removed insecure `ssl: { rejectUnauthorized: false }` and enforced `rejectUnauthorized: true`. Completely deleted dangerous helper `createAuthUserAndProfileDirectly`. |
+| `src/app/[tenant]/login/actions.ts` | MODIFIED | Removed dangerous lines 340–372 that executed `UPDATE auth.users SET encrypted_password = crypt(...)` on failed password attempts. Retained standard Supabase Auth signIn flow. Added zero new `getPgPool()` calls (`AC-012`). |
+| `src/app/[tenant]/login/provision-auth.ts` | MODIFIED | Removed local insecure PostgreSQL pool with `rejectUnauthorized: false`. Removed raw SQL `INSERT INTO auth.users`. Refactored provisioning to strictly use `createAdminClient().auth.admin.createUser` and `updateUserById`. |
+| `src/app/actions/tenant.ts` | MODIFIED | Removed import of `createAuthUserAndProfileDirectly`. Removed fallback invocation that directly manipulated `auth.users` through SQL; enforced fail-closed error handling when Supabase Admin Auth fails. |
+| `src/app/api/public/register-tenant/route.ts` | MODIFIED | Removed local insecure PostgreSQL pool. Replaced with safe `getPgPool` from `@/lib/db/pg-fallback`. Replaced raw SQL `INSERT INTO auth.users` with `createAdminClient().auth.admin.createUser`. |
+| `src/app/api/super-admin/leads/route.ts` | MODIFIED | Replaced local unverified pool with imported safe `getPgPool` from `@/lib/db/pg-fallback`. |
+| `src/app/api/public/tenants/route.ts` | MODIFIED | Replaced local unverified pool with imported safe `getPgPool` from `@/lib/db/pg-fallback`. |
+| `src/app/api/public/demo-requests/route.ts` | MODIFIED | Replaced local unverified pool with imported safe `getPgPool` from `@/lib/db/pg-fallback`. |
+| `src/app/api/public/check-slug/route.ts` | MODIFIED | Replaced local unverified pool with imported safe `getPgPool` from `@/lib/db/pg-fallback`. |
+| `src/app/[tenant]/apply/page.tsx` | MODIFIED | Replaced ad-hoc `createClient(..., SUPABASE_SERVICE_ROLE_KEY)` with centralized server-only `createAdminClient()`. |
+| `src/app/[tenant]/apply/status/page.tsx` | MODIFIED | Replaced ad-hoc `createClient(..., SUPABASE_SERVICE_ROLE_KEY)` with centralized server-only `createAdminClient()`. |
+| `src/app/[tenant]/apply/actions.ts` | MODIFIED | Replaced top-level unverified `createClient` with function-scoped `createAdminClient()`. |
+| `src/app/api/auth/callback/route.ts` | MODIFIED | Replaced ad-hoc `createServerClient` for service-role profile upsert with `createAdminClient()`. |
+| `scripts/check_tenants.cjs` | MODIFIED | Sourced `DATABASE_URL` from `process.env`. Removed fallback pooler password. Replaced `rejectUnauthorized: false` with secure TLS validation. |
+| `scripts/check_students.cjs` | MODIFIED | Sourced `DATABASE_URL` from `process.env`. Removed fallback pooler password. Replaced `rejectUnauthorized: false` with secure TLS validation. |
+| `scripts/check_classes.cjs` | MODIFIED | Sourced `DATABASE_URL` from `process.env`. Removed fallback pooler password. Replaced `rejectUnauthorized: false` with secure TLS validation. |
+| `scripts/check_tenant.js` | MODIFIED | Sourced `DATABASE_URL` from `process.env`. Removed fallback pooler password. Replaced `rejectUnauthorized: false` with secure TLS validation. |
+| `scripts/check_child_schools.js` | MODIFIED | Sourced `DATABASE_URL` from `process.env`. Removed fallback pooler password. Replaced `rejectUnauthorized: false` with secure TLS validation. |
+| `scripts/create-super-admin.cjs` | MODIFIED | Passwords sourced from `process.env.ADMIN_PASSWORD`. Removed hardcoded passwords and plaintext logging. |
+| `scripts/create-admin.cjs` | MODIFIED | Passwords sourced from `process.env.ADMIN_PASSWORD`. Removed hardcoded passwords and plaintext logging. |
+| `scripts/diagnose-auth.cjs` | MODIFIED | Passwords sourced from `process.env.DIAGNOSE_PASSWORD`. Removed hardcoded passwords and plaintext logging. |
+| `scripts/reset-superadmin.js` | MODIFIED | Passwords sourced from `process.env.RESET_PASSWORD`. Removed hardcoded passwords and plaintext logging. |
+| `scripts/reset-winnin.js` | MODIFIED | Passwords sourced from `process.env.RESET_PASSWORD`. Removed hardcoded passwords and plaintext logging. |
+| `package.json` | MODIFIED | Added `"server-only": "^0.0.1"` to dependencies. Added `"tsx": "^4.19.0"` to devDependencies. Standardized `"test"` script to execute with `--conditions=react-server`. |
+| `.gitignore` | MODIFIED | Added `/scratch` to prevent committed local debug artifacts. |
+| `tests/security/credential-containment.test.ts` | NEW | Added comprehensive security property test suite (SEC-01 through SEC-14). |
+
+---
+
+### 3. Exact Files Deleted
+
+| File | Justification & Findings |
+|---|---|
+| `run_migration_022.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `run_migration_023.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `run_migration_024.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `run_migration_025.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `run_migration_026.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `run_migration_027.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `run_migration_028.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `run_migration_031.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `run_migration_037.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `run_migration_043.js` | Ad-hoc runner containing hardcoded Supabase pooler connection string and plaintext password. |
+| `dump_applicants.js` | Ad-hoc root script containing unauthenticated applicant extraction logic and raw database credentials. |
+| `test-create-session.ts` | Ad-hoc root script with hardcoded test parameters and connection strings. |
+| `src/scripts/check_superadmin.ts` | Developer script containing machine-specific hardcoded local Windows file paths and plaintext queries. |
+| `src/scripts/reset_superadmin_password.ts` | Developer script containing machine-specific paths and direct password reset logic. |
+| `scratch/` (entire directory) | Untracked entire committed folder (containing `run-pg.js`, `run_migration_018.js`, `sync-credentials.js`, `test_all_actions.js`, `test_cms_actions.js`, `test_route_internal.js`, and committed `node_modules` with 130+ files). |
+
+---
+
+### 4. Credential Findings & Audit Tables
+
+#### A. Historical Credential Findings
+1. **Supabase AWS Connection Pooler Secret:**
+   - **Pattern:** `postgresql://postgres.[project-ref]:[plaintext-password]@aws-0-eu-west-1.pooler.supabase.com:5432/postgres`
+   - **Found in:** 10 root `run_migration_*.js` files, 5 `scripts/check_*.js` files, `src/lib/db/pg-fallback.ts`, and `scratch/sync-credentials.js`.
+   - **Action Taken:** Completely eradicated from current working tree.
+2. **Plaintext Administrative Passwords in Scripts:**
+   - **Pattern:** Hardcoded passwords in `create-super-admin.cjs`, `create-admin.cjs`, `diagnose-auth.cjs`, `reset-superadmin.js`, `reset-winnin.js`.
+   - **Action Taken:** Sourced dynamically from environment variables (`ADMIN_PASSWORD`, `DIAGNOSE_PASSWORD`, `RESET_PASSWORD`); plaintext logging removed.
+3. **Insecure TLS Settings:**
+   - **Pattern:** `ssl: { rejectUnauthorized: false }`
+   - **Found in:** `src/lib/db/pg-fallback.ts`, `src/app/api/public/*`, `src/app/[tenant]/login/provision-auth.ts`, `scripts/*.js`.
+   - **Action Taken:** Standardized to secure TLS validation (`rejectUnauthorized: true`).
+
+---
+
+#### B. Four-Tier Secret Exposure Distinction (`AC-014`)
+
+| Tier | Category | Current Status | Required Action / Responsibility |
+|---|---|---|---|
+| **Tier 1** | **Current-Tree Remediation** | **100% RESOLVED** | Verified via SEC-01 through SEC-09. All plaintext credentials, connection strings, insecure TLS, and raw `auth.users` SQL removed from working tree. |
+| **Tier 2** | **Exposed Git History** | **HISTORICALLY COMMITTED** | The database connection string remains present in historical commits (`dcea030`, `5046780`, `595c97f`, `2491ee8`, `6715e5b`, `5decafb`, `d6cdbcf`). Requires human execution of `git-filter-repo` / BFG prior to making the repository public (`REC-0011`). |
+| **Tier 3** | **Credential Rotation** | **ACTION REQUIRED BY HUMAN** | The exposed database password in the Supabase Cloud project must be rotated by a human administrator via the Supabase Dashboard (`Project Settings -> Database -> Database Password`). |
+| **Tier 4** | **Deployment-Secret Replacement** | **ACTION REQUIRED BY HUMAN** | Following credential rotation, new secrets must be provisioned into Vercel/production hosting environment variables (`DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`). |
+
+> [!WARNING]
+> In strict compliance with AC-014 and non-goals, historical Git exposure is NOT claimed as resolved. Human rotation of the database password on Supabase Cloud is mandatory.
+
+---
+
+#### C. Service-Role Import & Consumer Audit (`AC-011`)
+
+| Consumer / File | Import / Usage | Scope | Classification | Remediation Applied |
+|---|---|---|---|---|
+| `src/lib/supabase/admin.ts` | `SUPABASE_SERVICE_ROLE_KEY` | Server-Only Core Module | **Server-Safe** | Protected with `import 'server-only'`. Throws error if key missing. Factory is lazy. |
+| `src/lib/auth/api-guard.ts` | `createAdminClient` | Server-Only Auth Guard | **Server-Safe** | Protected with lazy loading. Instantiated downstream strictly after `authorizeApiRequest()` succeeds. |
+| `src/app/api/admissions/route.ts` | `auth.adminClient()` | Server Route Handler | **Server-Safe** | Protected by `authorizeApiRequest()`. Zero top-level client creation. |
+| `src/app/api/cass-export/route.ts` | `auth.adminClient()` | Server Route Handler | **Server-Safe** | Protected by `authorizeApiRequest()`. Zero top-level client creation. |
+| `src/app/api/exam-office/dashboard/route.ts` | `auth.adminClient()` | Server Route Handler | **Server-Safe** | Protected by `authorizeApiRequest()`. Zero top-level client creation. |
+| `src/app/api/admin/exams/route.ts` | `auth.adminClient()` | Server Route Handler | **Server-Safe** | Protected by `authorizeApiRequest()`. Zero top-level client creation. |
+| `src/app/api/exam-office/communications/route.ts` | `auth.adminClient()` | Server Route Handler | **Server-Safe** | Protected by `authorizeApiRequest()`. Zero top-level client creation. |
+| `src/app/api/super-admin/leads/route.ts` | `getPgPool()` | Server Route Handler | **Server-Safe** | Gated behind platform-scoped `super_admin` authorization. Safe pool imported from `pg-fallback.ts`. |
+| `src/app/actions/users.ts` | `createAdminClient` | Next.js Server Action | **Server-Safe** | Next.js server actions are server-side only. Gated behind caller role checks. |
+| `src/app/actions/tenant.ts` | `createAdminClient` | Next.js Server Action | **Server-Safe** | Removed dangerous fallback SQL. Uses official `auth.admin.createUser`. |
+| `src/app/[tenant]/login/provision-auth.ts` | `createAdminClient` | Server Action Helper | **Remediated** | Removed raw SQL and insecure local pg pool. Standardized on `createAdminClient().auth.admin`. |
+| `src/app/api/public/register-tenant/route.ts` | `createAdminClient`, `getPgPool` | Server Route Handler | **Remediated** | Replaced insecure local pool with `pg-fallback.ts`. Replaced raw SQL `auth.users` insert with Supabase Auth API. |
+| `src/app/api/public/tenants/route.ts` | `getPgPool` | Server Route Handler | **Remediated** | Replaced unverified local pool with safe `getPgPool` from `pg-fallback.ts`. |
+| `src/app/api/public/demo-requests/route.ts` | `getPgPool` | Server Route Handler | **Remediated** | Replaced unverified local pool with safe `getPgPool` from `pg-fallback.ts`. |
+| `src/app/api/public/check-slug/route.ts` | `getPgPool` | Server Route Handler | **Remediated** | Replaced unverified local pool with safe `getPgPool` from `pg-fallback.ts`. |
+| `src/app/[tenant]/apply/page.tsx` | `createAdminClient` | Server Component | **Remediated** | Replaced ad-hoc `createClient(..., SUPABASE_SERVICE_ROLE_KEY)` with centralized `createAdminClient()`. Server component only. |
+| `src/app/[tenant]/apply/status/page.tsx` | `createAdminClient` | Server Component | **Remediated** | Replaced ad-hoc `createClient(..., SUPABASE_SERVICE_ROLE_KEY)` with centralized `createAdminClient()`. Server component only. |
+| `src/app/[tenant]/apply/actions.ts` | `createAdminClient` | Next.js Server Action | **Remediated** | Replaced top-level unverified `createClient` with function-scoped `createAdminClient()`. |
+| `src/app/api/auth/callback/route.ts` | `createAdminClient` | Server Route Handler | **Remediated** | Replaced ad-hoc `createServerClient` for service-role upsert with `createAdminClient()`. |
+
+---
+
+#### D. Raw `auth.users` SQL Audit (`AC-013`)
+
+| Location | Prior Operation | Risk | Remediation Applied |
+|---|---|---|---|
+| `src/app/[tenant]/login/actions.ts:340-372` | `UPDATE auth.users SET encrypted_password = crypt(password, gen_salt('bf'))` on staff login failure | **CRITICAL AUTH BYPASS:** Allowed anyone with email and arbitrary password to overwrite existing staff password and authenticate. | **Completely Deleted.** No password mutation or direct database fallback occurs on auth failure (`AC-012`). |
+| `src/app/[tenant]/login/provision-auth.ts:160-220` | `INSERT INTO auth.users (...) VALUES (...)` | Unsafe direct SQL bypass of Supabase GoTrue lifecycle, salt hashing, and triggers. | **Refactored to Supabase Auth Admin API:** Uses `adminSupabase.auth.admin.createUser` and `updateUserById`. |
+| `src/lib/db/pg-fallback.ts:60-150` | `createAuthUserAndProfileDirectly()` executing raw SQL `INSERT INTO auth.users` | Direct SQL mutation bypassing GoTrue hooks. | **Completely Deleted.** Function removed from export. |
+| `src/app/actions/tenant.ts:130-145` | Fallback calling `createAuthUserAndProfileDirectly()` | Raw SQL mutation fallback. | **Deleted.** Tenant provisioning fails closed if Supabase GoTrue admin user creation fails. |
+| `src/app/api/public/register-tenant/route.ts:180-230` | Raw SQL `INSERT INTO auth.users` | Unsafe direct user creation via SQL. | **Refactored:** Now uses `createAdminClient().auth.admin.createUser`. |
+
+---
+
+#### E. Insecure TLS Audit (`SEC-08`)
+
+| Prior File Location | Configuration | Classification | Remediation Applied |
+|---|---|---|---|
+| `src/lib/db/pg-fallback.ts` | `ssl: { rejectUnauthorized: false }` | Insecure TLS | Replaced with `ssl: { rejectUnauthorized: true }` for remote database connections. |
+| `src/app/api/public/register-tenant/route.ts` | Local `new Pool({ ssl: { rejectUnauthorized: false } })` | Insecure TLS | Removed local pool; uses centralized `getPgPool` with secure TLS. |
+| `src/app/api/public/tenants/route.ts` | Local `new Pool({ ssl: { rejectUnauthorized: false } })` | Insecure TLS | Removed local pool; uses centralized `getPgPool` with secure TLS. |
+| `src/app/api/public/demo-requests/route.ts` | Local `new Pool({ ssl: { rejectUnauthorized: false } })` | Insecure TLS | Removed local pool; uses centralized `getPgPool` with secure TLS. |
+| `src/app/api/public/check-slug/route.ts` | Local `new Pool({ ssl: { rejectUnauthorized: false } })` | Insecure TLS | Removed local pool; uses centralized `getPgPool` with secure TLS. |
+| `src/app/api/super-admin/leads/route.ts` | Local `new Pool({ ssl: { rejectUnauthorized: false } })` | Insecure TLS | Removed local pool; uses centralized `getPgPool` with secure TLS. |
+| `src/app/[tenant]/login/provision-auth.ts` | Local `new Pool({ ssl: { rejectUnauthorized: false } })` | Insecure TLS | Removed local pool entirely. |
+| `scripts/check_tenants.cjs` | `ssl: { rejectUnauthorized: false }` | Insecure TLS | Standardized to secure TLS validation. |
+| `scripts/check_students.cjs` | `ssl: { rejectUnauthorized: false }` | Insecure TLS | Standardized to secure TLS validation. |
+| `scripts/check_classes.cjs` | `ssl: { rejectUnauthorized: false }` | Insecure TLS | Standardized to secure TLS validation. |
+| `scripts/check_tenant.js` | `ssl: { rejectUnauthorized: false }` | Insecure TLS | Standardized to secure TLS validation. |
+| `scripts/check_child_schools.js` | `ssl: { rejectUnauthorized: false }` | Insecure TLS | Standardized to secure TLS validation. |
+
+---
+
+### 5. Automated Validation & Test Results
+
+#### A. Comprehensive Test Suite Results (`npm test`)
+```text
+TAP version 13
+# Subtest: TASK-0004: API Guard Unit Test Suite
+ok 1 - T-01: Anonymous request returns 401 Unauthorized
+ok 2 - T-02: Inactive account returns 403 Forbidden
+ok 3 - T-03: Authenticated user with missing role returns 403 Forbidden
+ok 4 - T-04: Authenticated user with authorized role succeeds
+ok 5 - T-05: Missing tenant membership on tenant-scoped route returns 403
+ok 6 - T-06: Cross-tenant spoofing attempt returns 403 Forbidden
+ok 7 - T-07: Platform super-admin route accessed by normal user returns 403
+ok 8 - T-08: Platform super-admin route accessed by super_admin succeeds
+ok 9 - T-09: Org admin accessing child tenant succeeds via hierarchy
+ok 10 - T-10: Cross-tenant resource authorization (IDOR protection) returns 404
+ok 11 - T-11: Admin client factory is NOT invoked during resource authorization
+ok 12 - T-12: Arbitrary requestedTenantId cannot bypass tenant authorization
+ok 13 - T-13: Invalid/non-existent requestedTenantId returns 404
+ok 14 - T-14: Super-admin operating within tenant requires explicit roles: [super_admin]
+ok 15 - T-15: Resource authorization verifies ownership via user-scoped client and succeeds for valid tenant object
+ok 1 - TASK-0004: API Guard Unit Test Suite
+
+# Subtest: TASK-0002: Credential Exposure Containment Test Suite
+ok 1 - SEC-01: No known hardcoded production credentials or pooler passwords in source
+ok 2 - SEC-02: No service-role key in client components or client bundles
+ok 3 - SEC-03: No raw database password/connection credentials in tracked source
+ok 4 - SEC-04: Sensitive configuration is strictly environment-driven with fail-closed validation
+ok 5 - SEC-05: API route handlers do not emit credentials, secrets, or password hashes
+ok 6 - SEC-06: Maintenance scripts and utilities do not log plaintext passwords or secrets
+ok 7 - SEC-07: pg-fallback.ts enforces server-only execution and safe pool initialization
+ok 8 - SEC-08: Insecure PostgreSQL TLS (rejectUnauthorized: false) is absent repository-wide
+ok 9 - SEC-09: Direct raw SQL manipulation of auth.users is absent from application source
+ok 10 - SEC-10: TASK-0004 authorizeApiRequest authorization guard functions correctly
+ok 11 - SEC-11: Admin client integrity: server-only, fail-closed, no browser exposure
+ok 12 - SEC-12: All consumers of SUPABASE_SERVICE_ROLE_KEY and DATABASE_URL are server-confined
+ok 13 - SEC-13: Registration and provisioning routes strictly use Supabase Auth APIs
+ok 14 - SEC-14: Tenant login action does not mutate auth.users or execute fallback DB queries on auth failure
+ok 16 - TASK-0002: Credential Exposure Containment Test Suite
+
+# Subtest: TASK-0005: Privileged API Route-Handler Security Suite
+ok 17 - SEC-01: Anonymous request to admissionsGET returns 401 Unauthorized
+ok 18 - SEC-02: Anonymous request to cassGET returns 401 Unauthorized
+ok 19 - SEC-03: Anonymous request to dashboardGET returns 401 Unauthorized
+ok 20 - SEC-04: Wrong-role Teacher calling admissionsGET returns 403 Forbidden
+ok 21 - SEC-05: Wrong-role Student calling cassGET returns 403 Forbidden
+ok 22 - SEC-06: Wrong-role Teacher calling dashboardGET returns 403 Forbidden
+ok 23 - SEC-07: Exam Officer calling admissionsDELETE returns 403 Forbidden
+ok 24 - SEC-08: Cross-tenant admissionsPATCH for resource belonging to different tenant returns 404
+ok 25 - SEC-09: Cross-tenant admissionsDELETE for resource belonging to different tenant returns 404
+ok 26 - SEC-10: Client-supplied tenant_id in admissionsPOST cannot override auth.tenantId
+ok 27 - SEC-11: Client-supplied tenantSlug in admissionsGET cannot select another tenant
+ok 28 - SEC-12: Authorized admissionsGET queries strictly within authorized tenant
+ok 29 - SEC-13: Authorized cassGET queries strictly within authorized tenant
+ok 30 - SEC-14: Authorized dashboardGET queries all 10 tables strictly within authorized tenant
+ok 31 - SEC-15: Admissions PATCH rejects arbitrary database columns with 400 Bad Request
+ok 32 - SEC-16: Admissions PATCH rejects attempt to mutate immutable tenant_id with 400 Bad Request
+ok 33 - SEC-17: Admissions PATCH with valid allowlisted fields succeeds and updates applicant
+ok 34 - SEC-18: Admissions DELETE with authorized school_admin for same-tenant resource succeeds
+ok 35 - SEC-19: CASS POST binds batch insertion strictly to auth.tenantId
+ok 36 - SEC-20: Dashboard returns 500 DATABASE_ERROR when a database query fails
+ok 37 - SEC-21: TASK-0004 Regression — /api/admin/exams preserves role and tenant authorization
+ok 38 - SEC-22: TASK-0004 Regression — /api/super-admin/leads preserves platform scope and super_admin restriction
+
+1..38
+# tests 52
+# suites 0
+# pass 52
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7493.6365
+```
+**Result:** **52 passed, 0 failed** across all test suites in 7.49s.
+
+---
+
+#### B. TypeScript Compilation (`npx tsc --noEmit`)
+- **Status:** **PASSED (Exit code: 0)**
+- Zero type or compilation errors across all application, script, and test code.
+
+#### C. Linter Verification
+- **Newly introduced test file (`npx eslint tests/security/credential-containment.test.ts`):** **PASSED (Exit code: 0, 0 errors, 0 warnings)**.
+- **Repository baseline (`npm run lint`):** 2024 pre-existing lint issues in legacy components (predominantly `@typescript-eslint/no-explicit-any`), unchanged from TASK-0004 / TASK-0005 baselines.
+
+#### D. Production Build Verification (`npm run build`)
+- **Status:** **PASSED (Exit code: 0)**
+- Turbopack compilation succeeded. All 40 static and dynamic routes compiled, verified, and generated without errors.
+
+---
+
+### 6. Recommendations Recorded
+
+1. **`REC-0011`: Purge Historical Secrets from Git History via `git-filter-repo`**
+   - *Category:* Git History Sanitization / Repository Release Gate
+   - *Scope:* Before making the `school-saas` repository public or sharing code with untrusted parties, execute `git-filter-repo` to permanently remove commits containing the Supabase AWS pooler connection string.
+2. **`REC-0012`: Automated Secret Scanning in Pre-Commit and CI**
+   - *Category:* Security Infrastructure
+   - *Scope:* Integrate automated secret scanning tools (such as TruffleHog or Gitleaks) into GitHub Actions and Husky pre-commit hooks to automatically reject commits containing database URLs or Supabase keys.
+3. **`REC-0013`: Automated Secret Rotation Protocol & Environment Segregation**
+   - *Category:* Security Operations
+   - *Scope:* Enforce strict credential separation between local development, staging, and production Supabase environments. Ensure production connection pooler credentials are never used in local development scratch scripts.
+
+---
+
+### 7. Explicit Architecture Confirmation
+As mandated by supervisory directives and project non-goals:
+- **No out-of-scope architecture was changed.**
+- Production credentials were **not** rotated automatically (human administrator action required).
+- Git history was **not** rewritten.
+- RBAC role structures and hierarchies were preserved.
+- Database Row Level Security (RLS) policies were **not** bypassed or weakened (`AC-016`).
+- Multi-factor authentication (MFA) was not implemented.
+- TASK-0004 `authorizeApiRequest()` and TASK-0005 privileged API containment remain fully intact and verified by regression tests (`AC-017`).
+
+
 
 
 

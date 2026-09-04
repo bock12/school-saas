@@ -1,9 +1,17 @@
 const { Client } = require('pg');
+try { require('dotenv').config({ path: '.env.local' }); } catch (e) {}
 
 async function checkTenants() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    console.error('DATABASE_URL is not configured.');
+    process.exit(1);
+  }
+
+  const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
   const client = new Client({
-    connectionString: 'postgresql://postgres.yhrvmppfwjxninvbblrt:vV648%40a56R8S%25%232@aws-0-eu-west-1.pooler.supabase.com:5432/postgres',
-    ssl: { rejectUnauthorized: false }
+    connectionString,
+    ssl: isLocal ? undefined : { rejectUnauthorized: true }
   });
   await client.connect();
 

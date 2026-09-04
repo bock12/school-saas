@@ -10,16 +10,24 @@ async function main() {
     realtime: { transport: ws }
   });
 
-  console.log('Resetting password for winnin@school.com...');
+  const userId = process.env.USER_ID;
+  const newPassword = process.env.NEW_PASSWORD;
+
+  if (!userId || !newPassword) {
+    console.error('Usage: USER_ID=... NEW_PASSWORD=... node scripts/reset-winnin.js');
+    process.exit(1);
+  }
+
+  console.log(`Resetting password for user ${userId}...`);
   const { data, error } = await supabase.auth.admin.updateUserById(
-    'e00b21d7-6087-4a54-be11-1180d8922a5f',
-    { password: 'Admin1234!' }
+    userId,
+    { password: newPassword }
   );
 
   if (error) {
     console.error('Error:', error.message);
   } else {
-    console.log('Success! Password updated to: Admin1234!');
+    console.log('Success! Password updated.');
   }
 }
 main().catch(console.error);

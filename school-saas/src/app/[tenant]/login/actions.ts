@@ -337,39 +337,6 @@ export async function loginToTenant(tenantSlug: string, formData: FormData) {
     password,
   });
 
-  if ((authError || !authData?.user) && matchedStaffProfile) {
-    // If sign in fails for a staff member (e.g. initial temp password setup or fallback hash sync)
-    try {
-      if (pool) {
-        await pool.query(
-          `UPDATE auth.users
-           SET encrypted_password = crypt($1, gen_salt('bf')),
-               confirmation_token = '',
-               recovery_token = '',
-               email_change_token_new = '',
-               email_change = '',
-               email_change_token_current = '',
-               reauthentication_token = '',
-               phone_change = '',
-               phone_change_token = '',
-               email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
-               updated_at = NOW()
-           WHERE email = $2`,
-          [password, emailToSignIn]
-        );
-
-        // Retry sign in after password sync
-        const retryRes = await supabase.auth.signInWithPassword({
-          email: emailToSignIn,
-          password,
-        });
-        authData = retryRes.data;
-        authError = retryRes.error;
-      }
-    } catch (e) {
-      console.error("[loginToTenant] Staff password sync error:", e);
-    }
-  }
 
   if (authError || !authData?.user) {
     if (matchedStaffProfile) {
