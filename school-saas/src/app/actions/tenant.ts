@@ -1,12 +1,14 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import { createAuthoritativeInvitation } from '@/lib/auth/invitations';
 
 export type AdminRole = 'school_admin' | 'org_admin' | 'super_admin';
 
 /**
  * Invites a user to be an admin or staff member for a tenant.
- * Uses Supabase Admin Auth when available, and falls back to direct database insertion if service key is unregistered.
+ * Records a server-authoritative invitation in `user_invitations` and dispatches via Supabase Auth Admin.
  */
 export async function inviteTenantAdmin(
   email: string,
@@ -20,6 +22,36 @@ export async function inviteTenantAdmin(
   if (!tenantId) throw new Error('Tenant ID is required');
 
   const supabaseAdmin = createAdminClient();
+
+  // Resolve calling actor if available for authorization hierarchy enforcement
+  let actor: { id: string; role: string; tenant_id: string | null } | undefined;
+  try {
+    const supabase = await createClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (authUser) {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('id, role, tenant_id')
+        .eq('id', authUser.id)
+        .maybeSingle();
+      if (profile) {
+        actor = { id: profile.id, role: profile.role, tenant_id: profile.tenant_id };
+      }
+    }
+  } catch {
+    // In background or non-cookie contexts, proceed without actor check
+  }
+
+  // Create authoritative invitation record
+  const invResult = await createAuthoritativeInvitation(
+    { email, tenantId, role, fullName: name },
+    actor,
+    () => supabaseAdmin
+  );
+
+  if (!invResult.success) {
+    throw new Error(`Invitation authorization failed: ${invResult.error}`);
+  }
 
   let userId: string | undefined;
 
@@ -38,16 +70,39 @@ export async function inviteTenantAdmin(
       }
 
       throw new Error(`Failed to create user account: ${authErr.message}`);
-    } else {
-      userId = user.user?.id;
+    }
+
+    userId = user.user?.id;
+
+    if (userId) {
+      const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
+        id: userId,
+        email,
+        full_name: name || 'Staff Member',
+        role,
+        tenant_id: tenantId,
+      }, { onConflict: 'id', ignoreDuplicates: false });
+
+      if (profileError) {
+        console.error("[inviteTenantAdmin] Profile upsert failed:", profileError);
+        throw new Error(`Profile creation failed: ${profileError.message}`);
+      }
+
+      if (invResult.invitation?.id) {
+        await supabaseAdmin.from('user_invitations').update({
+          status: 'accepted',
+          accepted_at: new Date().toISOString(),
+          accepted_by: userId,
+        }).eq('id', invResult.invitation.id);
+      }
+
+      return { success: true, userId };
     }
   } else {
     // Invite flow
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       data: {
         full_name: name,
-        role,
-        tenant_id: tenantId,
       },
       redirectTo: redirectTo ?? `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback?next=/set-password`,
     });
@@ -59,35 +114,10 @@ export async function inviteTenantAdmin(
       }
 
       throw new Error(`Failed to send invite to ${email}: ${error.message}`);
-    } else {
-      userId = data.user?.id;
-    }
-  }
-
-  // Pre-create/upsert the profile row
-  if (userId) {
-    const { data: existingProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle();
-
-    const targetId = existingProfile?.id || userId;
-
-    const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
-      id: targetId,
-      email,
-      full_name: name || 'Staff Member',
-      role,
-      tenant_id: tenantId,
-    }, { onConflict: 'id', ignoreDuplicates: false });
-
-    if (profileError) {
-      console.error("[inviteTenantAdmin] Profile upsert failed:", profileError);
-      throw new Error(`Profile creation failed: ${profileError.message}`);
     }
 
-    return { success: true, userId: targetId };
+    userId = data.user?.id;
+    return { success: true, userId, invitationId: invResult.invitation?.id };
   }
 
   return { success: true, userId };
@@ -220,8 +250,9 @@ export async function addSchoolToOrg(
     }
 
     return { success: true, schoolId: result.id };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to add school.' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to add school.';
+    return { success: false, error: message };
   }
 }
 
@@ -259,8 +290,9 @@ export async function assignSchoolAdmin(
       await inviteTenantAdmin(opts.email, opts.name ?? 'School Admin', schoolId, 'school_admin', opts.tempPassword, redirectTo);
     }
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to assign admin.' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to assign admin.';
+    return { success: false, error: message };
   }
 }
 
@@ -318,8 +350,9 @@ export async function addStaffMember(
     }
 
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to add staff member.' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to add staff member.';
+    return { success: false, error: message };
   }
 }
 
@@ -344,7 +377,7 @@ export async function updateStaffProfile(
 
   const supabaseAdmin = createAdminClient();
   try {
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (opts.name !== undefined) updateData.full_name = opts.name;
     if (opts.role !== undefined) updateData.role = opts.role;
     if (opts.tenantId !== undefined) updateData.tenant_id = opts.tenantId;
@@ -378,8 +411,9 @@ export async function updateStaffProfile(
     }
 
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to update staff member.' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to update staff member.';
+    return { success: false, error: message };
   }
 }
 
