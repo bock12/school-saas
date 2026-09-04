@@ -731,7 +731,7 @@ ok 15 - T-15: Resource authorization verifies ownership via user-scoped client a
 
 ## TASK-0005 — Privileged API Containment
 **Date:** 2026-09-04  
-**Status:** IMPLEMENTED — READY FOR SUPERVISORY REVIEW  
+**Status:** IMPLEMENTED (Supervisory Corrections Applied · Resubmitted for ChatGPT Review)  
 **Implementer:** Gemini / Antigravity (Implementation Engineer & Technical Contributor)  
 **Supervisor / Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
 **Final Authority:** Human Project Owner  
@@ -753,206 +753,156 @@ Harden the remaining high-risk privileged API routes identified during the TASK-
 ---
 
 ### 2. Files Changed
-1. `src/app/api/admissions/route.ts` (MODIFIED — secured GET, POST, PATCH, DELETE; removed module-level admin client)
-2. `src/app/api/cass-export/route.ts` (MODIFIED — secured GET, POST; removed module-level admin client)
-3. `src/app/api/exam-office/dashboard/route.ts` (MODIFIED — secured GET, POST, PATCH, DELETE; removed module-level admin client; strictly scoped all 10 queries to `auth.tenantId`)
-4. `src/app/api/test-db/route.ts` (DELETED — decommissioned per REC-0007)
-5. `tests/security/privileged-api-containment.test.ts` (NEW — 27 automated security tests)
-6. `.ai/05-WORKFLOW/TASK-0005.md` (NEW — task contract and implementation plan)
-7. `.ai/05-WORKFLOW/CONTROL-STATE.yaml` (MODIFIED — workflow tracking state)
-8. `.ai/05-WORKFLOW/TASK-QUEUE.md` (MODIFIED — task queue tracking)
-9. `.ai/05-WORKFLOW/REVIEW-QUEUE.md` (MODIFIED — review queue tracking)
-10. `.ai/05-WORKFLOW/messages/MSG-0009.md` (NEW — supervisory review submission message)
+1. `src/lib/auth/api-guard.ts` (MODIFIED — added `setTestClientOverride` and `resetTestClientOverride` for deterministic route-handler transport testing)
+2. `src/app/api/admissions/route.ts` (MODIFIED — secured GET, POST, PATCH, DELETE; removed module-level admin client; strict PATCH allowlist)
+3. `src/app/api/cass-export/route.ts` (MODIFIED — secured GET, POST; removed module-level admin client; all lookups bound to `auth.tenantId`)
+4. `src/app/api/exam-office/dashboard/route.ts` (MODIFIED — secured GET, POST, PATCH, DELETE; removed module-level admin client; all 10 queries strictly scoped to `auth.tenantId`; concurrent execution with explicit database query error handling)
+5. `src/app/api/test-db/route.ts` (DELETED — decommissioned per REC-0007)
+6. `tests/security/privileged-api-containment.test.ts` (UPDATED — 22 automated route-handler security tests directly calling route functions)
+7. `tests/auth/api-guard.test.ts` (MAINTAINED — 15 unit tests testing core guard logic)
+8. `.ai/05-WORKFLOW/TASK-0005.md` (NEW — task contract and implementation plan)
+9. `.ai/05-WORKFLOW/CONTROL-STATE.yaml` (MODIFIED — workflow tracking state)
+10. `.ai/05-WORKFLOW/TASK-QUEUE.md` (MODIFIED — task queue tracking)
+11. `.ai/05-WORKFLOW/REVIEW-QUEUE.md` (MODIFIED — review queue tracking)
+12. `.ai/05-WORKFLOW/RECOMMENDATIONS.md` (MODIFIED — recorded REC-0007, REC-0008, REC-0009, REC-0010)
+13. `.ai/05-WORKFLOW/messages/MSG-0009.md` (UPDATED — supervisory review response message)
 
 ---
 
-### 3. Route-by-Route Migration Matrix
+### 3. Route-by-Route Migration & Role Authorization Decisions Matrix
 
-| Route | HTTP Methods | Allowed Roles | Tenancy Scope | Resource Check / IDOR Defense | Admin Client Lifecycle |
-|---|---|---|---|---|---|
-| `/api/admissions` | `GET`, `POST`, `PATCH` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | `tenant` (`requestedTenantSlug` query/body param resolved server-side) | Queries filter `.eq('tenant_id', auth.tenantId)`. In mutations: `resource: { table: 'applicants', id, tenantColumn: 'tenant_id' }` verified via user client. | Instantiated downstream via `auth.adminClient()` only after authorization. |
-| `/api/admissions` | `DELETE` | `['school_admin', 'org_admin', 'super_admin']` (*`exam_officer` denied*) | `tenant` | `resource: { table: 'applicants', id, tenantColumn: 'tenant_id' }` checked via user client, then deleted with `.eq('id', id).eq('tenant_id', auth.tenantId)`. | Instantiated downstream via `auth.adminClient()` only after authorization. |
-| `/api/cass-export` | `GET`, `POST` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | `tenant` (`requestedTenantSlug` query/body param) | All applicant and config lookups filter `.eq('tenant_id', auth.tenantId)`. POST inserts batch record with `tenant_id: auth.tenantId`. | Instantiated downstream via `auth.adminClient()` only after authorization. |
-| `/api/exam-office/dashboard` | `GET`, `POST`, `PATCH`, `DELETE` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | `tenant` (`requestedTenantSlug` query/body param) | All 10 queries across sessions, spotlights, distributions, student details, approvals, class-gender matrix, subject results, and subject averages strictly query `.eq('tenant_id', auth.tenantId)` without NULL fallback. | Instantiated downstream via `auth.adminClient()` only after authorization. |
-| `/api/test-db` | `GET` | N/A | N/A | Route DELETED per REC-0007. No arbitrary DB probe endpoint remains. | N/A |
+| Route | Method | Allowed Roles | Evidence / Source & Rationale |
+|---|---|---|---|
+| `/api/admissions` | `GET` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | **Source:** `src/app/[tenant]/admin/admissions/page.tsx` & `src/app/[tenant]/exam-office/page.tsx`. School administrators manage admissions pools; exam officers review candidate entrance exam scores (NPSE/BECE) for stream placement. |
+| `/api/admissions` | `POST` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | **Source:** `src/app/actions/admissions.ts`. Admissions intake staff and exam officers register applicants and record national examination aggregate scores. |
+| `/api/admissions` | `PATCH` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | **Source:** `src/app/[tenant]/admin/admissions/page.tsx`. Admins update admission stages (`Interview`, `Assessment`, `Accepted`); exam officers update stream assignments (`Science`, `Arts`, `Commercial`, `Technical`). |
+| `/api/admissions` | `DELETE` | `['school_admin', 'org_admin', 'super_admin']` (*`exam_officer` denied*) | **Source:** Institutional Data Governance Policy (`.ai/04-SECURITY/RBAC.md`). Deleting an applicant permanently destroys personal educational records and audit history. Operational exam staff are restricted from destructive actions; data deletion is reserved exclusively for school/org leadership. |
+| `/api/cass-export` | `GET` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | **Source:** `src/app/[tenant]/exam-office/page.tsx`. Official Continuous Assessment (CASS) exports are generated by the Exam Officer or School Principal for submission to MBSSE / WAEC. |
+| `/api/cass-export` | `POST` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | **Source:** `037_sierra_leone_national_education.sql` (`sl_cass_export_batches`). Recording an audit batch record when an export package is compiled. |
+| `/api/exam-office/dashboard` | `GET` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | **Source:** `031_exam_analytics_dashboard.sql` & `src/app/[tenant]/exam-office/page.tsx`. Operational dashboard for exam sessions, spotlights, grade distributions, moderations, and class matrices. Non-exam staff (teachers, students, parents) have no access. |
+| `/api/exam-office/dashboard` | `POST` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | **Source:** Exam office administrative actions (e.g. creating/updating spotlights and session configurations). |
+| `/api/exam-office/dashboard` | `PATCH` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | **Source:** Updating examination moderation thresholds, approvals, or spotlight metrics. |
+| `/api/exam-office/dashboard` | `DELETE` | `['school_admin', 'org_admin', 'super_admin', 'exam_officer']` | **Source:** Resetting/clearing temporary session cache or dashboard spotlights. |
+| `/api/test-db` | `GET` | *None (DELETED)* | **Source:** Route deleted per REC-0007. Unauthenticated arbitrary database probe eliminated. |
 
 ---
 
-### 4. Implementation Details & Invariants
+### 4. Implementation Details & Security Invariants
 
 #### A. Elimination of Module-Level Privileged Clients
 Previously, `src/app/api/admissions/route.ts`, `src/app/api/cass-export/route.ts`, and `src/app/api/exam-office/dashboard/route.ts` executed:
 ```typescript
 const supabaseAdmin = createAdminClient();
 ```
-at the top-level module scope, instantiating the service-role client before request execution and prior to authentication.
-All three routes have been refactored so that `createAdminClient()` is never called at module level. Instead, privileged access is provided strictly through `auth.adminClient()` downstream of successful `authorizeApiRequest()` validation.
+at the top-level module scope. All three routes have been refactored so that `createAdminClient()` is never called at module level. Instead, privileged access is provided strictly through `auth.adminClient()` downstream of successful `authorizeApiRequest()` validation.
 
 #### B. Tenant Isolation & Client Parameter Untrust
 Client-supplied tenant parameters (`tenantSlug` in query string or JSON payload) are treated as untrusted requested targets (`requestedTenantSlug`).
 - The server validates the actor's profile and tenant membership via `authorizeApiRequest({ scope: 'tenant', requestedTenantSlug })`.
 - If an actor attempts to pass another school's slug, the guard rejects the request with HTTP 403 Forbidden.
-- All subsequent database queries and mutations bind strictly to `auth.tenantId`. Any client-supplied `tenant_id` in request payloads is ignored or overwritten.
+- All subsequent database queries and mutations bind strictly to `auth.tenantId`. Any client-supplied `tenant_id` in request payloads is ignored or rejected.
 
-#### C. IDOR / BOLA Prevention (Application-Layer Verification)
-- For resource mutations (`PATCH` and `DELETE` on `/api/admissions`):
-  1. `authorizeApiRequest` verifies existence and tenant ownership via `resource: { table: 'applicants', id, tenantColumn: 'tenant_id' }` using the authenticated, user-scoped client. If the applicant does not belong to the authorized tenant, HTTP 404 Not Found is returned immediately.
-  2. The update/delete query applies compound filtering:
-     ```typescript
-     .eq('id', id).eq('tenant_id', auth.tenantId)
-     ```
-  3. `tenant_id` is explicitly stripped from payload updates (`delete patchData.tenant_id`) to prevent tenant reassignment attacks.
-- *Note:* In accordance with instructions, this is clearly documented as **Application/API-layer authorization**. Verification of database-level PostgreSQL schema RLS policies is deferred to TASK-0008.
+#### C. Admissions PATCH Strict Field Allowlist (Correction 2)
+In response to supervisory review, dynamic field fallback (`fieldMap[k] ?? k`) has been replaced with strict allowlisting.
+1. The following fields are immutable and rejected with HTTP 400 if supplied in PATCH updates:
+   - `id`, `tenant_id`, `tenantId`, `tenantSlug`.
+2. All editable fields must match `ALLOWED_APPLICANT_PATCH_FIELDS` (covering verified applicant schema columns: names, contact details, grades, aggregate exam scores, stream allocations, stage/status).
+3. Any arbitrary database column (e.g. `is_admin`, `password_hash`, `arbitrary_column_attack`) or unapproved key is rejected immediately with:
+   ```typescript
+   return apiError(`Unsupported applicant field: ${key}`, 'INVALID_REQUEST', 400);
+   ```
+4. Regression test `SEC-15` verifies that arbitrary database columns return 400 Bad Request. `SEC-16` verifies that attempting to modify `tenant_id` returns 400 Bad Request.
 
-#### D. Exam Office Dashboard Tenant Strictness
-Schema investigation of `031_exam_analytics_dashboard.sql` confirmed that rows with `tenant_id IS NULL` contain seeded sample student names ("Luka Magic", "Kinara Zuri") and mock distribution metrics, rather than global system defaults. Allowing a NULL fallback would leak mock student records across schools.
-Therefore, all queries in `/api/exam-office/dashboard` enforce strict multi-tenant isolation:
+#### D. Examination Dashboard Query Reliability (Correction 5)
+Previously, the 10 dashboard queries were executed sequentially and ignored errors, silently defaulting to empty arrays and masking database failures.
+- Refactored to execute all 10 queries concurrently via `Promise.all`.
+- Added explicit error checking across all 10 queries:
+  ```typescript
+  const queryError = sessionsError || approvalsError || ... || classGenderMatrixError;
+  if (queryError) {
+    console.error('[Exam Office Dashboard] Database query failure:', queryError);
+    return apiError('Failed to fetch dashboard metrics due to database query error', 'DATABASE_ERROR', 500);
+  }
+  ```
+- Regression test `SEC-20` verifies that database query failures return HTTP 500 `DATABASE_ERROR` rather than silently succeeding with empty data.
+
+#### E. Multi-Table Dashboard Tenant Strictness
+Schema investigation of `031_exam_analytics_dashboard.sql` confirmed that rows with `tenant_id IS NULL` contain seeded sample student names ("Luka Magic", "Kinara Zuri") and mock distribution metrics, rather than global system defaults. All queries in `/api/exam-office/dashboard` enforce strict multi-tenant isolation:
 ```typescript
 .eq('tenant_id', tenantId)
 ```
 with zero `.or('tenant_id.is.null')` fallback.
 
-#### E. Recommendations Disposition
-1. **REC-0007 (Decommission `/api/test-db`):** Completed in this task. File `src/app/api/test-db/route.ts` and directory removed.
-2. **REC-0008 (Defer `/api/exam-office/communication-rules` and `communication-templates`):** Confirmed deferred to a dedicated exam communication module containment task.
-3. **REC-0009 (Defer `/api/notifications`):** Confirmed deferred to notification service architecture review.
+#### F. Documentation of CASS Synthetic Data (Correction 3)
+- **Investigation:** Git history inspection confirms that the synthetic score calculation formulas in `src/app/api/cass-export/route.ts` (`ca1 = 8.5 + (i % 2)`, `ca2 = 9.0 - (i % 1.5)`, `exam = 52.0 + ((i * 3) % 25)`) were authored in initial commit `44a03ac` (2026-08-16) as a prototype demo of the MBSSE 30/70 formula and CSV formatting.
+- **Classification:** High-priority functional/data-integrity finding. Current CASS export output produces mock/synthetic marks rather than authoritative school grades.
+- **Recommendation:** Recorded as `REC-0010` for follow-up implementation.
+- **Declaration:** In accordance with instructions, this endpoint is explicitly declared non-authoritative and unsafe for official WAEC/MBSSE examination submissions until connected to verified continuous assessment gradebook tables.
 
 ---
 
 ### 5. Automated Verification & Test Results
 
-#### A. Unit Test Suite (`tests/auth/api-guard.test.ts`)
-```text
-TAP version 13
-# Subtest: T-01: Anonymous request returns 401 Unauthorized
-ok 1 - T-01: Anonymous request returns 401 Unauthorized
-# Subtest: T-02: Inactive account returns 403 Forbidden
-ok 2 - T-02: Inactive account returns 403 Forbidden
-# Subtest: T-03: Authenticated user with missing role returns 403 Forbidden
-ok 3 - T-03: Authenticated user with missing role returns 403 Forbidden
-# Subtest: T-04: Authenticated user with authorized role succeeds
-ok 4 - T-04: Authenticated user with authorized role succeeds
-# Subtest: T-05: Missing tenant membership on tenant-scoped route returns 403
-ok 5 - T-05: Missing tenant membership on tenant-scoped route returns 403
-# Subtest: T-06: Cross-tenant spoofing attempt returns 403 Forbidden
-ok 6 - T-06: Cross-tenant spoofing attempt returns 403 Forbidden
-# Subtest: T-07: Platform super-admin route accessed by normal user returns 403
-ok 7 - T-07: Platform super-admin route accessed by normal user returns 403
-# Subtest: T-08: Platform super-admin route accessed by super_admin succeeds
-ok 8 - T-08: Platform super-admin route accessed by super_admin succeeds
-# Subtest: T-09: Org admin accessing child tenant succeeds via hierarchy
-ok 9 - T-09: Org admin accessing child tenant succeeds via hierarchy
-# Subtest: T-10: Cross-tenant resource authorization (IDOR protection) returns 404
-ok 10 - T-10: Cross-tenant resource authorization (IDOR protection) returns 404
-# Subtest: T-11: Admin client factory is NOT invoked during resource authorization
-ok 11 - T-11: Admin client factory is NOT invoked during resource authorization
-# Subtest: T-12: Arbitrary requestedTenantId cannot bypass tenant authorization
-ok 12 - T-12: Arbitrary requestedTenantId cannot bypass tenant authorization
-# Subtest: T-13: Invalid/non-existent requestedTenantId returns 404
-ok 13 - T-13: Invalid/non-existent requestedTenantId returns 404
-# Subtest: T-14: Super-admin operating within tenant requires explicit roles: [super_admin]
-ok 14 - T-14: Super-admin operating within tenant requires explicit roles: [super_admin]
-# Subtest: T-15: Resource authorization verifies ownership via user-scoped client and succeeds for valid tenant object
-ok 15 - T-15: Resource authorization verifies ownership via user-scoped client and succeeds for valid tenant object
-1..15
-# tests 15
-# suites 0
-# pass 15
-# fail 0
-# cancelled 0
-# skipped 0
-# todo 0
-# duration_ms 2293.7614
-```
-**Result:** 15 passed, 0 failed.
+#### Category 1: Guard Unit Tests (`tests/auth/api-guard.test.ts`)
+Validates pure guard logic, actor resolution, role evaluation, tenant candidate verification, and user-client resource checks:
+- **Command:** `npx tsx --test tests/auth/api-guard.test.ts`
+- **Result:** **15 passed, 0 failed** (6.17s)
+- **Scenarios:** T-01 through T-15.
 
-#### B. Security Test Suite (`tests/security/privileged-api-containment.test.ts`)
-```text
-TAP version 13
-# Subtest: SEC-01: Anonymous request to /api/admissions returns 401 Unauthorized
-ok 1 - SEC-01: Anonymous request to /api/admissions returns 401 Unauthorized
-# Subtest: SEC-02: Anonymous request to /api/cass-export returns 401 Unauthorized
-ok 2 - SEC-02: Anonymous request to /api/cass-export returns 401 Unauthorized
-# Subtest: SEC-03: Anonymous request to /api/exam-office/dashboard returns 401 Unauthorized
-ok 3 - SEC-03: Anonymous request to /api/exam-office/dashboard returns 401 Unauthorized
-# Subtest: SEC-04: Teacher calling /api/admissions returns 403 Forbidden
-ok 4 - SEC-04: Teacher calling /api/admissions returns 403 Forbidden
-# Subtest: SEC-05: Student calling /api/cass-export returns 403 Forbidden
-ok 5 - SEC-05: Student calling /api/cass-export returns 403 Forbidden
-# Subtest: SEC-06: Teacher calling /api/exam-office/dashboard returns 403 Forbidden
-ok 6 - SEC-06: Teacher calling /api/exam-office/dashboard returns 403 Forbidden
-# Subtest: SEC-07: Exam officer calling DELETE /api/admissions returns 403 Forbidden (deletion restricted to admins)
-ok 7 - SEC-07: Exam officer calling DELETE /api/admissions returns 403 Forbidden (deletion restricted to admins)
-# Subtest: SEC-08: Same-tenant request with authorized role succeeds
-ok 8 - SEC-08: Same-tenant request with authorized role succeeds
-# Subtest: SEC-09: Cross-tenant request (requestedTenantSlug: other-school) returns 403 Forbidden
-ok 9 - SEC-09: Cross-tenant request (requestedTenantSlug: other-school) returns 403 Forbidden
-# Subtest: SEC-10: Arbitrary requestedTenantId cannot bypass tenant authorization (returns 403)
-ok 10 - SEC-10: Arbitrary requestedTenantId cannot bypass tenant authorization (returns 403)
-# Subtest: SEC-11: Non-existent requestedTenantId returns 404
-ok 11 - SEC-11: Non-existent requestedTenantId returns 404
-# Subtest: SEC-12: Missing tenant on tenant-scoped route returns 403 Forbidden
-ok 12 - SEC-12: Missing tenant on tenant-scoped route returns 403 Forbidden
-# Subtest: SEC-13: Admissions PATCH for resource belonging to different tenant returns 404 (IDOR defense)
-ok 13 - SEC-13: Admissions PATCH for resource belonging to different tenant returns 404 (IDOR defense)
-# Subtest: SEC-14: Admissions DELETE for resource belonging to different tenant returns 404 (IDOR defense)
-ok 14 - SEC-14: Admissions DELETE for resource belonging to different tenant returns 404 (IDOR defense)
-# Subtest: SEC-15: Admissions PATCH for valid same-tenant resource succeeds
-ok 15 - SEC-15: Admissions PATCH for valid same-tenant resource succeeds
-# Subtest: SEC-16: Unauthorized request to /api/admissions does NOT invoke adminClientFactory
-ok 16 - SEC-16: Unauthorized request to /api/admissions does NOT invoke adminClientFactory
-# Subtest: SEC-17: Unauthorized request to /api/cass-export does NOT invoke adminClientFactory
-ok 17 - SEC-17: Unauthorized request to /api/cass-export does NOT invoke adminClientFactory
-# Subtest: SEC-18: Unauthorized request to /api/exam-office/dashboard does NOT invoke adminClientFactory
-ok 18 - SEC-18: Unauthorized request to /api/exam-office/dashboard does NOT invoke adminClientFactory
-# Subtest: SEC-19: Resource authorization does NOT invoke adminClientFactory
-ok 19 - SEC-19: Resource authorization does NOT invoke adminClientFactory
-# Subtest: SEC-20: Admissions POST with client-supplied tenant_id is bound strictly to auth.tenantId
-ok 20 - SEC-20: Admissions POST with client-supplied tenant_id is bound strictly to auth.tenantId
-# Subtest: SEC-21: Admissions POST with authorized Tenant A actor requesting tenantSlug for Tenant B is rejected
-ok 21 - SEC-21: Admissions POST with authorized Tenant A actor requesting tenantSlug for Tenant B is rejected
-# Subtest: SEC-22: Admissions PATCH attempting to modify tenant_id is stripped and constrained to auth.tenantId
-ok 22 - SEC-22: Admissions PATCH attempting to modify tenant_id is stripped and constrained to auth.tenantId
-# Subtest: SEC-23: Admissions DELETE with valid ID from Tenant A while authorized against Tenant B deletes no record (returns 404)
-ok 23 - SEC-23: Admissions DELETE with valid ID from Tenant A while authorized against Tenant B deletes no record (returns 404)
-# Subtest: SEC-24: CASS POST with client-supplied tenant_id binds batch strictly to auth.tenantId
-ok 24 - SEC-24: CASS POST with client-supplied tenant_id binds batch strictly to auth.tenantId
-# Subtest: SEC-25: Exam dashboard strictly constrains queries to auth.tenantId without NULL fallback
-ok 25 - SEC-25: Exam dashboard strictly constrains queries to auth.tenantId without NULL fallback
-# Subtest: SEC-26: TASK-0004 Regression - /api/admin/exams preserves role and tenant authorization
-ok 26 - SEC-26: TASK-0004 Regression - /api/admin/exams preserves role and tenant authorization
-# Subtest: SEC-27: TASK-0004 Regression - /api/super-admin/leads preserves platform scope and super_admin restriction
-ok 27 - SEC-27: TASK-0004 Regression - /api/super-admin/leads preserves platform scope and super_admin restriction
-1..27
-# tests 27
-# suites 0
-# pass 27
-# fail 0
-# cancelled 0
-# skipped 0
-# todo 0
-# duration_ms 1331.3463
-```
-**Result:** 27 passed, 0 failed.
+#### Category 2: Route-Handler Security Tests (`tests/security/privileged-api-containment.test.ts`)
+Executes the actual route handlers (`admissionsGET`, `admissionsPOST`, `admissionsPATCH`, `admissionsDELETE`, `cassGET`, `cassPOST`, `dashboardGET`, `adminExamsGET`, `superAdminLeadsGET`) with real `NextRequest` objects and controlled mock transports:
+- **Command:** `npx tsx --test tests/security/privileged-api-containment.test.ts`
+- **Result:** **22 passed, 0 failed** (11.28s)
+- **Scenarios covered:**
+  1. `SEC-01`: Anonymous request to `admissionsGET` returns 401.
+  2. `SEC-02`: Anonymous request to `cassGET` returns 401.
+  3. `SEC-03`: Anonymous request to `dashboardGET` returns 401.
+  4. `SEC-04`: Teacher calling `admissionsGET` returns 403.
+  5. `SEC-05`: Student calling `cassGET` returns 403.
+  6. `SEC-06`: Teacher calling `dashboardGET` returns 403.
+  7. `SEC-07`: Exam Officer calling `admissionsDELETE` returns 403 (administrative role restriction).
+  8. `SEC-08`: Cross-tenant `admissionsPATCH` for resource belonging to another tenant returns 404.
+  9. `SEC-09`: Cross-tenant `admissionsDELETE` for resource belonging to another tenant returns 404.
+  10. `SEC-10`: Client-supplied `tenant_id` in `admissionsPOST` cannot override `auth.tenantId`.
+  11. `SEC-11`: Client-supplied `tenantSlug` in `admissionsGET` cannot select another tenant (returns 403).
+  12. `SEC-12`: Authorized `admissionsGET` queries strictly within authorized tenant.
+  13. `SEC-13`: Authorized `cassGET` queries strictly within authorized tenant.
+  14. `SEC-14`: Authorized `dashboardGET` queries all 10 tables strictly within authorized tenant with zero NULL fallback.
+  15. `SEC-15`: Admissions PATCH rejects arbitrary database columns with 400 Bad Request (Strict allowlist test).
+  16. `SEC-16`: Admissions PATCH rejects attempt to mutate immutable `tenant_id` with 400 Bad Request.
+  17. `SEC-17`: Admissions PATCH with valid allowlisted fields succeeds and updates applicant.
+  18. `SEC-18`: Admissions DELETE with authorized `school_admin` for same-tenant resource succeeds.
+  19. `SEC-19`: CASS POST binds batch insertion strictly to `auth.tenantId`.
+  20. `SEC-20`: Dashboard returns 500 `DATABASE_ERROR` when a database query fails (no silent failure).
+  21. `SEC-21`: TASK-0004 Regression — `/api/admin/exams` preserves role and tenant authorization.
+  22. `SEC-22`: TASK-0004 Regression — `/api/super-admin/leads` preserves platform scope and super_admin restriction.
 
-#### C. Typecheck & Build Results
+#### Category 3: Live Database & RLS Tests
+- **Status:** Explicitly scheduled for **TASK-0008**. No live Supabase/PostgreSQL testing claimed in TASK-0005.
+
+#### Typecheck, Lint, and Build Results
 1. **TypeScript Typecheck (`npx tsc --noEmit`):**
    - **Status:** PASSED (Exit code: 0).
-   - Zero compilation or type errors.
-2. **Next.js Production Build (`npm run build`):**
+   - Zero compilation or type errors across the entire codebase.
+2. **ESLint (`npm run lint`):**
+   - **Status:** Repository baseline contains 2051 pre-existing lint problems in legacy files.
+   - All newly added test and guard code passed with zero unaddressed errors.
+3. **Next.js Production Build (`npm run build`):**
    - **Status:** PASSED (Exit code: 0).
-   - Production compilation and optimization completed successfully. All modified API routes verified as dynamic server routes (`ƒ`).
+   - All 40 static and dynamic routes compiled and optimized. Confirmed `/api/test-db` is removed and modified API routes (`/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`) are verified dynamic server routes (`ƒ`).
 
 ---
 
 ### 6. Known Limitations
-1. **Application-Layer Boundary:** All tests verify application/API-layer authorization logic and query filter constructions. Database-level PostgreSQL RLS policy verification against live Supabase instances is deferred to **TASK-0008**.
-2. **Deferred Audit Targets:** Endpoints `/api/exam-office/communication-rules`, `/api/exam-office/communication-templates`, and `/api/notifications` remain as audit findings to be addressed in subsequent dedicated tasks (`REC-0008` and `REC-0009`).
+1. **CASS Synthetic Data Warning:** `/api/cass-export` generates candidate Continuous Assessment and exam scores using synthetic index-based formulas rather than authoritative gradebook tables (pre-existing prototype code from commit `44a03ac`). This endpoint is **unsafe for official WAEC/MBSSE submissions** until connected to real continuous assessment records under follow-up task `REC-0010`.
+2. **Application-Layer Authorization Boundary:** All tests verify application/API-layer authorization logic, route handlers, and query filter constructions. Database-level PostgreSQL RLS policy verification against live Supabase instances is deferred to **TASK-0008**.
+3. **Deferred Audit Targets:** Endpoints `/api/exam-office/communication-rules`, `/api/exam-office/communication-templates`, and `/api/notifications` remain as audit findings to be addressed in subsequent dedicated tasks (`REC-0008` and `REC-0009`).
 
 ---
 
 ### 7. Escalations
-None. All implementation work strictly adhered to the authorized scope, security invariants, and instructions.
+None. All implementation work strictly adhered to the authorized scope, supervisory corrections, and security invariants.
+
 
 
 

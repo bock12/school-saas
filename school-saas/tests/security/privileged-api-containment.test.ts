@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import {
-  authorizeApiRequest,
   setTestClientOverride,
   resetTestClientOverride,
   AppRole,
@@ -204,7 +203,6 @@ function createMockTransport(config: {
       const filters: Array<{ col: string; val: any; op: string }> = [];
       let insertPayload: any = null;
       let updatePayload: any = null;
-      let isDelete = false;
 
       const builder: any = {
         select(cols?: string, opts?: any) {
@@ -740,8 +738,9 @@ test('SEC-21: TASK-0004 Regression — /api/admin/exams preserves role and tenan
 });
 
 test('SEC-22: TASK-0004 Regression — /api/super-admin/leads preserves platform scope and super_admin restriction', async () => {
-  const transport = createMockTransport({ user: USER_ADMIN_A, profile: PROFILE_ADMIN_A });
-  setTestClientOverride(transport.userClient, transport.adminClientFactory);
+  // Non-super-admin is denied (403)
+  const transportForbidden = createMockTransport({ user: USER_ADMIN_A, profile: PROFILE_ADMIN_A });
+  setTestClientOverride(transportForbidden.userClient, transportForbidden.adminClientFactory);
   try {
     const req = createMockRequest('http://localhost:3000/api/super-admin/leads');
     const res = await superAdminLeadsGET(req);
@@ -749,6 +748,18 @@ test('SEC-22: TASK-0004 Regression — /api/super-admin/leads preserves platform
     assert.equal(res.status, 403);
     const json = await res.json();
     assert.equal(json.code, 'INSUFFICIENT_ROLE');
+  } finally {
+    resetTestClientOverride();
+  }
+
+  // Super-admin passes platform guard check
+  const transportAllowed = createMockTransport({ user: USER_SUPER_ADMIN, profile: PROFILE_SUPER_ADMIN });
+  setTestClientOverride(transportAllowed.userClient, transportAllowed.adminClientFactory);
+  try {
+    const req = createMockRequest('http://localhost:3000/api/super-admin/leads');
+    // Handler attempts pg query which may fail in unit test transport, but guard allows access past 403
+    const res = await superAdminLeadsGET(req);
+    assert.notEqual(res.status, 403);
   } finally {
     resetTestClientOverride();
   }

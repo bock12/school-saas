@@ -309,3 +309,26 @@ Address communication-rules and communication-templates in a dedicated subsequen
 #### Recommendation
 Review and harden `/api/notifications` in a dedicated task following the completion of privileged API containment.
 
+---
+
+### REC-0010 — Replace CASS Export Synthetic Score Generator with Authoritative Assessment Pipeline
+
+- **Task:** TASK-0005
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Functional / Data Integrity
+- **Severity:** High
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+`src/app/api/cass-export/route.ts` currently calculates candidate continuous assessment marks (CA1, CA2, CA3) and final examination marks using synthetic index-based formulas (`ca1 = 8.5 + (i % 2)`, `ca2 = 9.0 - (i % 1.5)`, `exam = 52.0 + ((i * 3) % 25)`). Git history inspection confirms this code was authored in commit `44a03ac` (2026-08-16) as a prototype demonstration of the MBSSE 30/70 formula and CSV formatting. It does not query real continuous assessment gradebook tables.
+
+#### Repository Evidence
+`src/app/api/cass-export/route.ts:58-74` (historical commit `44a03acff0506757a8f2033fbbdbc415d49d6f39`).
+
+#### Impact
+If an institution submits the generated export to the Ministry of Basic and Senior Secondary Education (MBSSE) or WAEC, synthetic scores would be submitted rather than actual student grades, posing a severe data-integrity and compliance risk.
+
+#### Recommendation
+Author a dedicated follow-up task to connect `/api/cass-export` to the authoritative gradebook and assessment results tables (`student_term_marks`, `exam_marks`, or continuous assessment tables), computing the 30% CA + 70% Final Exam aggregate from verified records rather than synthetic formulas. Mark `/api/cass-export` as non-production in documentation until this pipeline is implemented.
+

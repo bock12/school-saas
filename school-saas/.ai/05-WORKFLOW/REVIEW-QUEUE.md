@@ -116,22 +116,24 @@ Verify the security containment of remaining high-risk privileged API routes ide
 2. `src/app/api/cass-export/route.ts` (GET, POST)
 3. `src/app/api/exam-office/dashboard/route.ts` (GET, POST, PATCH, DELETE)
 4. `src/app/api/test-db/route.ts` (DELETED per REC-0007)
-5. `tests/security/privileged-api-containment.test.ts` (27 automated security tests)
-6. Regression check of TASK-0004 foundation
+5. `tests/security/privileged-api-containment.test.ts` (22 automated route-handler security tests invoking actual handlers)
+6. `tests/auth/api-guard.test.ts` (15 unit tests)
+7. Regression check of TASK-0004 foundation
 
 ### Evidence Summary
 - Top-level module-scope `createAdminClient()` eliminated from all three routes.
 - Downstream privileged access instantiated exclusively via `auth.adminClient()` after successful authentication and tenant authorization.
 - Method-specific role gates enforced (`DELETE /api/admissions` restricted strictly to `school_admin`, `org_admin`, `super_admin`; `exam_officer` denied).
 - Candidate tenant parameters treated as untrusted requested targets; all operations bind strictly to server-authorized `auth.tenantId`.
-- Application-layer IDOR / BOLA defense verified via user-scoped client checks and compound `.eq('id', id).eq('tenant_id', auth.tenantId)` filtering.
-- Multi-table exam office dashboard queries (10 tables) strictly filtered to `auth.tenantId` with zero NULL-tenant fallback.
-- 27/27 automated security tests in `tests/security/privileged-api-containment.test.ts` passed (1.33s).
-- 15/15 unit tests in `tests/auth/api-guard.test.ts` passed (2.29s).
+- Admissions PATCH strictly allowlisted against `ALLOWED_APPLICANT_PATCH_FIELDS`; immutable fields (`id`, `tenant_id`, `tenantId`, `tenantSlug`) and arbitrary columns rejected with 400.
+- Multi-table exam office dashboard queries (10 tables) executed concurrently via `Promise.all` with zero NULL-tenant fallback and explicit database query error handling returning 500 DATABASE_ERROR.
+- CASS export synthetic data documented as pre-existing prototype code; non-production status declared; `REC-0010` recorded.
+- 22/22 route-handler security tests in `tests/security/privileged-api-containment.test.ts` passed (11.28s).
+- 15/15 guard unit tests in `tests/auth/api-guard.test.ts` passed (6.17s).
 - `npx tsc --noEmit` and Next.js production build (`npm run build`) passed with 0 errors.
 
 ### Supervisor Assessment & Decision
-Pending ChatGPT review and Human Project Owner merge decision.
+Supervisory corrections applied. Resubmitted for ChatGPT review and Human Project Owner merge decision.
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.
