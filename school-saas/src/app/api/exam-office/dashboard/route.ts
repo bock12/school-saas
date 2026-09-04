@@ -1,78 +1,113 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { authorizeApiRequest, apiError } from '@/lib/auth/api-guard';
 
-const supabase = createAdminClient();
-
-export async function GET() {
+// GET: Fetch active examination overview and strictly tenant-isolated analytics
+export async function GET(req: NextRequest) {
   try {
-    // 1. Fetch active exam sessions from database
-    const { data: sessions } = await supabase
+    const { searchParams } = new URL(req.url);
+    const requestedTenantSlug =
+      searchParams.get('tenantSlug') || searchParams.get('tenant') || undefined;
+
+    const auth = await authorizeApiRequest(req, {
+      roles: ['exam_officer', 'school_admin', 'org_admin', 'super_admin'],
+      scope: 'tenant',
+      requestedTenantSlug,
+    });
+
+    if (!auth.ok) {
+      return auth.response;
+    }
+
+    const adminClient = auth.adminClient();
+    const tenantId = auth.tenantId!;
+
+    // 1. Fetch active exam sessions strictly constrained to authorized tenant
+    const { data: sessions } = await adminClient
       .from('exam_sessions')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false });
 
-    // 2. Fetch pending approvals
-    const { data: approvals } = await supabase
+    // 2. Fetch pending approvals strictly constrained to authorized tenant
+    const { data: approvals } = await adminClient
       .from('exam_results_approval')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('submitted_at', { ascending: false });
 
-    // 3. Fetch malpractice incidents
-    const { data: malpractices } = await supabase
+    // 3. Fetch malpractice incidents strictly constrained to authorized tenant
+    const { data: malpractices } = await adminClient
       .from('exam_malpractices')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('reported_at', { ascending: false });
 
-    // 4. Fetch appeals
-    const { data: appeals } = await supabase
+    // 4. Fetch appeals strictly constrained to authorized tenant
+    const { data: appeals } = await adminClient
       .from('exam_appeals')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false });
 
-    // 5. Fetch student spotlights
-    const { data: spotlights } = await supabase
+    // 5. Fetch student spotlights strictly constrained to authorized tenant
+    const { data: spotlights } = await adminClient
       .from('exam_student_spotlights')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('created_at', { ascending: true });
 
-    // 6. Fetch grade distributions
-    const { data: gradeDistributions } = await supabase
+    // 6. Fetch grade distributions strictly constrained to authorized tenant
+    const { data: gradeDistributions } = await adminClient
       .from('exam_grade_distributions')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('grade_name', { ascending: true });
 
-    // 7. Fetch student details
-    const { data: studentDetails } = await supabase
+    // 7. Fetch student details strictly constrained to authorized tenant
+    const { data: studentDetails } = await adminClient
       .from('exam_student_details')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('created_at', { ascending: true });
 
-    // 8. Fetch subject results
-    const { data: subjectResults } = await supabase
+    // 8. Fetch subject results strictly constrained to authorized tenant
+    const { data: subjectResults } = await adminClient
       .from('exam_subject_results')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('created_at', { ascending: true });
 
-    // 9. Fetch subject averages
-    const { data: subjectAverages } = await supabase
+    // 9. Fetch subject averages strictly constrained to authorized tenant
+    const { data: subjectAverages } = await adminClient
       .from('exam_subject_averages')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('created_at', { ascending: true });
 
-    // 10. Fetch class x gender drill-down matrix
-    const { data: classGenderMatrix } = await supabase
+    // 10. Fetch class x gender drill-down matrix strictly constrained to authorized tenant
+    const { data: classGenderMatrix } = await adminClient
       .from('exam_class_gender_counts')
       .select('*')
+      .eq('tenant_id', tenantId)
       .order('class_arm', { ascending: true });
 
     // Summary KPIs
-    const activeExams = sessions?.filter(s => s.status === 'Ongoing' || s.status === 'Timetabled' || s.status === 'Upcoming') || [];
-    const completedExams = sessions?.filter(s => s.status === 'Completed' || s.status === 'Published' || s.status === 'Approved') || [];
-    const pendingModerations = approvals?.filter(a => !a.hod_approved) || [];
-    const pendingApprovals = approvals?.filter(a => a.hod_approved && !a.principal_approved) || [];
+    const activeExams =
+      sessions?.filter(
+        (s: any) => s.status === 'Ongoing' || s.status === 'Timetabled' || s.status === 'Upcoming'
+      ) || [];
+    const completedExams =
+      sessions?.filter(
+        (s: any) =>
+          s.status === 'Completed' ||
+          s.status === 'Published' ||
+          s.status === 'Approved'
+      ) || [];
+    const pendingModerations = approvals?.filter((a: any) => !a.hod_approved) || [];
+    const pendingApprovals = approvals?.filter((a: any) => a.hod_approved && !a.principal_approved) || [];
 
-    // Map spotlights to frontend props if database returned records
-    const formattedSpotlights = spotlights?.map(s => ({
+    // Map spotlights
+    const formattedSpotlights = spotlights?.map((s: any) => ({
       category: s.category,
       score: s.score,
       name: s.name,
@@ -85,8 +120,8 @@ export async function GET() {
       badgeColor: s.badge_color,
     }));
 
-    // Map grade distribution to frontend props including categoryType
-    const formattedGradeDist = gradeDistributions?.map(g => ({
+    // Map grade distributions
+    const formattedGradeDist = gradeDistributions?.map((g: any) => ({
       name: g.grade_name,
       percentage: Number(g.percentage),
       count: g.student_count,
@@ -95,7 +130,7 @@ export async function GET() {
     }));
 
     // Map class x gender matrix
-    const formattedClassGenderMatrix = classGenderMatrix?.map(c => ({
+    const formattedClassGenderMatrix = classGenderMatrix?.map((c: any) => ({
       classArm: c.class_arm,
       level: c.level,
       stream: c.stream,
@@ -107,7 +142,7 @@ export async function GET() {
     }));
 
     // Map student details
-    const formattedStudentDetails = studentDetails?.map(sd => ({
+    const formattedStudentDetails = studentDetails?.map((sd: any) => ({
       id: sd.id,
       name: sd.name,
       gender: sd.gender,
@@ -124,7 +159,7 @@ export async function GET() {
     }));
 
     // Map subject results
-    const formattedSubjectResults = subjectResults?.map(sr => ({
+    const formattedSubjectResults = subjectResults?.map((sr: any) => ({
       subject: sr.subject,
       Pass: sr.pass_count,
       Average: sr.average_count,
@@ -133,7 +168,7 @@ export async function GET() {
     }));
 
     // Map subject averages
-    const formattedSubjectAverages = subjectAverages?.map(sa => ({
+    const formattedSubjectAverages = subjectAverages?.map((sa: any) => ({
       subject: sa.subject,
       score: Number(sa.score),
       color: sa.color,
@@ -167,14 +202,41 @@ export async function GET() {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(message, 'INTERNAL_ERROR', 500);
   }
 }
 
+// POST: Create a new exam session strictly bound to authorized tenant
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { name, academic_year, term, type, mode, weightage, start_date, end_date, status, classes_count, candidates_count } = body;
+    const body = await req.json().catch(() => ({}));
+    const {
+      tenantSlug,
+      name,
+      academic_year,
+      term,
+      type,
+      mode,
+      weightage,
+      start_date,
+      end_date,
+      status,
+      classes_count,
+      candidates_count,
+    } = body;
+
+    const auth = await authorizeApiRequest(req, {
+      roles: ['school_admin', 'exam_officer', 'org_admin', 'super_admin'],
+      scope: 'tenant',
+      requestedTenantSlug: tenantSlug || undefined,
+    });
+
+    if (!auth.ok) {
+      return auth.response;
+    }
+
+    const adminClient = auth.adminClient();
+    const tenantId = auth.tenantId!;
 
     const parseDate = (d: string | null | undefined, fallbackDays: number) => {
       if (d && typeof d === 'string' && d.trim() !== '') {
@@ -184,9 +246,10 @@ export async function POST(req: NextRequest) {
       return new Date(Date.now() + fallbackDays * 86400000).toISOString();
     };
 
-    const { data: newSession, error } = await supabase
+    const { data: newSession, error } = await adminClient
       .from('exam_sessions')
       .insert({
+        tenant_id: tenantId,
         name,
         academic_year: academic_year || '2025-26',
         term: term || '3rd Term',
@@ -202,29 +265,50 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
 
-    if (error) {
-      console.error('Database POST Insert Error:', error);
-      throw error;
-    }
+    if (error) throw error;
 
     return NextResponse.json({ success: true, data: newSession });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('POST Handler Catch Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(message, 'INTERNAL_ERROR', 500);
   }
 }
 
+// PATCH: Update exam session with resource-level IDOR check
 export async function PATCH(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { id, status, approved_by, name, mark_deadline, clearance_required } = body;
+    const body = await req.json().catch(() => ({}));
+    const { id, status, approved_by, name, mark_deadline, clearance_required, tenantSlug } = body;
 
-    if (!id) {
-      return NextResponse.json({ success: false, error: 'Session ID is required' }, { status: 400 });
+    if (!id || typeof id !== 'string') {
+      return apiError('Session ID is required', 'INVALID_REQUEST', 400);
     }
 
-    const updatePayload: Record<string, string | boolean | undefined> = { updated_at: new Date().toISOString() };
+    const { searchParams } = new URL(req.url);
+    const requestedTenantSlug =
+      searchParams.get('tenantSlug') || searchParams.get('tenant') || tenantSlug || undefined;
+
+    const auth = await authorizeApiRequest(req, {
+      roles: ['school_admin', 'exam_officer', 'org_admin', 'super_admin'],
+      scope: 'tenant',
+      requestedTenantSlug,
+      resource: {
+        table: 'exam_sessions',
+        id,
+        tenantColumn: 'tenant_id',
+      },
+    });
+
+    if (!auth.ok) {
+      return auth.response;
+    }
+
+    const adminClient = auth.adminClient();
+    const tenantId = auth.tenantId!;
+
+    const updatePayload: Record<string, string | boolean | undefined> = {
+      updated_at: new Date().toISOString(),
+    };
     if (status) updatePayload.status = status;
     if (name) updatePayload.name = name;
     if (mark_deadline !== undefined) updatePayload.mark_deadline = mark_deadline;
@@ -234,10 +318,11 @@ export async function PATCH(req: NextRequest) {
       updatePayload.approved_at = new Date().toISOString();
     }
 
-    const { data: updated, error } = await supabase
+    const { data: updated, error } = await adminClient
       .from('exam_sessions')
       .update(updatePayload)
       .eq('id', id)
+      .eq('tenant_id', tenantId)
       .select()
       .single();
 
@@ -246,29 +331,52 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ success: true, data: updated });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(message, 'INTERNAL_ERROR', 500);
   }
 }
 
+// DELETE: Delete exam session (restricted strictly to administrators; exam officers excluded)
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json({ success: false, error: 'Session ID is required' }, { status: 400 });
+    if (!id || typeof id !== 'string') {
+      return apiError('Session ID is required', 'INVALID_REQUEST', 400);
     }
 
-    const { error } = await supabase
+    const requestedTenantSlug =
+      searchParams.get('tenantSlug') || searchParams.get('tenant') || undefined;
+
+    const auth = await authorizeApiRequest(req, {
+      roles: ['school_admin', 'org_admin', 'super_admin'],
+      scope: 'tenant',
+      requestedTenantSlug,
+      resource: {
+        table: 'exam_sessions',
+        id,
+        tenantColumn: 'tenant_id',
+      },
+    });
+
+    if (!auth.ok) {
+      return auth.response;
+    }
+
+    const adminClient = auth.adminClient();
+    const tenantId = auth.tenantId!;
+
+    const { error } = await adminClient
       .from('exam_sessions')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('tenant_id', tenantId);
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'Session deleted successfully.' });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return apiError(message, 'INTERNAL_ERROR', 500);
   }
 }

@@ -22,10 +22,10 @@ Read-only security architecture investigation and remediation-planning task cove
 
 Create the centralized request-safe `authorizeApiRequest` boundary for Next.js Route Handlers. Authentication, trusted tenant resolution, explicit role/permission checks, standardized JSON 401/403 responses, and strict separation from privileged-client creation must be established before TASK-0005 secures vulnerable route families. Specification: `.ai/05-WORKFLOW/TASK-0004.md`. Authorization: `.ai/05-WORKFLOW/messages/MSG-0007.md`. Implementation Response: `.ai/05-WORKFLOW/messages/MSG-0008.md`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Review: `REVIEW-TASK-0004`.
 
-## TASK-0005 — Tenant resolution and RLS correction
-**Status:** BACKLOG · **Priority:** High · **Owner:** ChatGPT design; Gemini/Antigravity after approval
+## TASK-0005 — Privileged API Containment
+**Status:** IN_REVIEW · **Priority:** Critical · **Owner:** ChatGPT / Architecture & Security Supervision · **Target:** Gemini/Antigravity
 
-Fail-closed canonical tenant resolution; correct examination RLS; establish notification RLS; verify staff-attendance write roles. Requires ADR, migration/RLS review, safe test environment and human approval.
+Harden high-risk privileged API routes identified during TASK-0003 (/api/admissions, /api/cass-export, /api/exam-office/dashboard) by applying the unified authorizeApiRequest() security boundary. Eliminate module-level admin clients, enforce method-specific role authorization, prevent IDOR/BOLA, and ensure strict tenant containment. Regression-check TASK-0004 routes. Specification: `.ai/05-WORKFLOW/TASK-0005.md`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Review: `REVIEW-TASK-0005`. Response: `.ai/05-WORKFLOW/messages/MSG-0009.md`.
 
 ## TASK-0006 — Authorization regression test foundation
 **Status:** BACKLOG · **Priority:** High · **Owner:** Gemini/Antigravity after approval

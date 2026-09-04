@@ -249,3 +249,63 @@ Security posture remains unverified and susceptible to silent regressions.
 #### Decision Required
 Authorization of proposed TASK-0008.
 
+---
+
+### REC-0007 — Decommission and Remove Unauthenticated Test DB Endpoint (`/api/test-db`)
+
+- **Task:** TASK-0005
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Security / Attack Surface Reduction
+- **Severity:** High
+- **Status:** IMPLEMENTED
+- **ChatGPT Disposition:** ACCEPTED (Incorporated in TASK-0005)
+
+#### Problem
+`src/app/api/test-db/route.ts` exposed an unauthenticated GET endpoint that executed arbitrary database probes (`SELECT NOW()`) using a direct `pg.Pool` connection, bypassing all authentication, authorization, and tenant isolation layers.
+
+#### Repository Evidence
+`src/app/api/test-db/route.ts:1-29` connected directly via `pg.Pool` without middleware or guards.
+
+#### Impact
+Information leakage and unnecessary exposure of database infrastructure to anonymous internet traffic.
+
+#### Recommendation
+Decommission and completely remove `src/app/api/test-db/route.ts`.
+
+#### Implementation
+Executed as part of TASK-0005. File and directory removed. Next.js build output confirms endpoint is no longer present.
+
+---
+
+### REC-0008 — Defer Exam Office Communication Rules and Templates to Dedicated Containment Task
+
+- **Task:** TASK-0005
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Security / Scope Management
+- **Severity:** Medium
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+Endpoints `src/app/api/exam-office/communication-rules/route.ts` and `src/app/api/exam-office/communication-templates/route.ts` contain unauthenticated handlers and privileged client usage. However, bundling them into TASK-0005 risks scope creep away from the core privileged API containment targets (`admissions`, `cass-export`, `exam-office/dashboard`).
+
+#### Recommendation
+Address communication-rules and communication-templates in a dedicated subsequent exam communication security task.
+
+---
+
+### REC-0009 — Defer Notifications API to Dedicated Notification System Review
+
+- **Task:** TASK-0005
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Security / Architecture
+- **Severity:** Medium
+- **Status:** PROPOSED
+- **ChatGPT Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+`src/app/api/notifications/route.ts` serves both internal system notifications and external alert dispatch. Containing it requires architectural decisions on server-sent events, notification dispatch permissions, and recipient user filtering.
+
+#### Recommendation
+Review and harden `/api/notifications` in a dedicated task following the completion of privileged API containment.
+
