@@ -116,6 +116,26 @@ export default function AcademicsDashboardPage() {
       category: 'curriculum'
     },
     {
+      id: 'curriculum-versions',
+      label: 'Curriculum & Syllabi Builder',
+      desc: 'Multi-version syllabi, competency trees & learning outcomes',
+      href: `/${tenant}/admin/academics/curriculum`,
+      icon: BookOpen,
+      category: 'curriculum',
+      primary: true,
+      badge: 'v2026.1'
+    },
+    {
+      id: 'curriculum-coverage',
+      label: 'Curriculum Coverage & Pacing',
+      desc: 'Track syllabus completion percentages, pacing deficits & lesson logs',
+      href: `/${tenant}/admin/academics/coverage`,
+      icon: BarChart3,
+      category: 'curriculum',
+      primary: true,
+      badge: 'Live Pacing'
+    },
+    {
       id: 'teacher-allocation',
       label: 'Teacher Allocation',
       desc: 'Assign subject teachers to classes & compute workload hours',

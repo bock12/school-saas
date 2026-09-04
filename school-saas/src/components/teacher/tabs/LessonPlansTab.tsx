@@ -237,14 +237,23 @@ export function LessonPlansTab({ teacher }: { teacher: TeacherData }) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowModal(true)}
-          className="px-5 py-2.5 rounded-xl bg-[hsl(var(--accent))] hover:opacity-90 text-white text-xs font-black shadow-md shadow-[hsl(var(--accent)/0.25)] transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Lesson Plan</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href={`/${teacher.tenantSlug}/teacher/coverage`}
+            className="px-4 py-2.5 rounded-xl bg-[hsl(var(--bg-tertiary))] hover:bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--accent))] border border-[hsl(var(--border))] text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Syllabus Coverage Logger</span>
+          </a>
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="px-5 py-2.5 rounded-xl bg-[hsl(var(--accent))] hover:opacity-90 text-white text-xs font-black shadow-md shadow-[hsl(var(--accent)/0.25)] transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Lesson Plan</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary KPI Strip */}

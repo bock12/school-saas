@@ -980,3 +980,79 @@ export const TERM_OFFERING_STATUS_META: Record<TermOfferingStatus, { label: stri
   completed: { label: 'Completed', color: '#3b82f6' },
   cancelled: { label: 'Cancelled', color: '#ef4444' },
 };
+
+// ─────────────────────────────────────────────────────────────
+// 14. CURRICULUM COVERAGE & LESSON LOGGER (PHASE 8)
+// ─────────────────────────────────────────────────────────────
+
+export type TopicProgressStatus = 'planned' | 'started' | 'completed' | 'deferred' | 'skipped' | 'revised';
+
+export interface CurriculumCoverageRecord {
+  id: string;
+  offering_id: string;
+  topic_id: string;
+  outcome_id?: string | null;
+  status: TopicProgressStatus;
+  logged_by?: string | null;
+  logged_at: string;
+  notes?: string | null;
+  teacher_name?: string;
+}
+
+export interface TopicWithCoverage {
+  id: string;
+  curriculum_version_id: string;
+  title: string;
+  description?: string | null;
+  sequence: number;
+  term: number | null;
+  estimated_periods: number;
+  parent_topic_id?: string | null;
+  outcomes: Array<{
+    id: string;
+    code?: string | null;
+    description: string;
+    cognitive_level?: string | null;
+  }>;
+  coverage_id?: string | null;
+  status: TopicProgressStatus;
+  logged_at?: string | null;
+  logged_by_name?: string | null;
+  notes?: string | null;
+}
+
+export interface OfferingCoverageSummary {
+  offering_id: string;
+  subject_id: string;
+  subject_name: string;
+  subject_code: string;
+  class_name: string;
+  section_name?: string | null;
+  teacher_name?: string | null;
+  periods_per_week: number;
+  curriculum_version_label?: string | null;
+  total_topics: number;
+  completed_topics: number;
+  started_topics: number;
+  deferred_topics: number;
+  coverage_percentage: number;
+  pacing_status: 'on_track' | 'behind' | 'ahead';
+  last_logged_at?: string | null;
+}
+
+export interface LogTopicProgressPayload {
+  offering_id: string;
+  topic_id: string;
+  outcome_id?: string | null;
+  status: TopicProgressStatus;
+  notes?: string;
+}
+
+export const TOPIC_PROGRESS_META: Record<TopicProgressStatus, { label: string; color: string; badgeClass: string }> = {
+  planned:   { label: 'Planned',   color: '#6b7280', badgeClass: 'bg-gray-500/10 text-gray-400 border-gray-500/20' },
+  started:   { label: 'In Progress', color: '#3b82f6', badgeClass: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+  completed: { label: 'Completed', color: '#10b981', badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  deferred:  { label: 'Deferred',  color: '#f59e0b', badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  skipped:   { label: 'Skipped',   color: '#ef4444', badgeClass: 'bg-red-500/10 text-red-400 border-red-500/20' },
+  revised:   { label: 'Revised',   color: '#8b5cf6', badgeClass: 'bg-violet-500/10 text-violet-400 border-violet-500/20' },
+};
