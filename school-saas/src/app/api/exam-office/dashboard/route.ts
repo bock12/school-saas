@@ -21,75 +21,87 @@ export async function GET(req: NextRequest) {
     const adminClient = auth.adminClient();
     const tenantId = auth.tenantId!;
 
-    // 1. Fetch active exam sessions strictly constrained to authorized tenant
-    const { data: sessions } = await adminClient
-      .from('exam_sessions')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
+    // Execute all 10 dashboard queries strictly constrained to authorized tenant
+    const [
+      { data: sessions, error: sessionsError },
+      { data: approvals, error: approvalsError },
+      { data: malpractices, error: malpracticesError },
+      { data: appeals, error: appealsError },
+      { data: spotlights, error: spotlightsError },
+      { data: gradeDistributions, error: gradeDistributionsError },
+      { data: studentDetails, error: studentDetailsError },
+      { data: subjectResults, error: subjectResultsError },
+      { data: subjectAverages, error: subjectAveragesError },
+      { data: classGenderMatrix, error: classGenderMatrixError },
+    ] = await Promise.all([
+      adminClient
+        .from('exam_sessions')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false }),
+      adminClient
+        .from('exam_results_approval')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('submitted_at', { ascending: false }),
+      adminClient
+        .from('exam_malpractices')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('reported_at', { ascending: false }),
+      adminClient
+        .from('exam_appeals')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false }),
+      adminClient
+        .from('exam_student_spotlights')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: true }),
+      adminClient
+        .from('exam_grade_distributions')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('grade_name', { ascending: true }),
+      adminClient
+        .from('exam_student_details')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: true }),
+      adminClient
+        .from('exam_subject_results')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: true }),
+      adminClient
+        .from('exam_subject_averages')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: true }),
+      adminClient
+        .from('exam_class_gender_counts')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('class_arm', { ascending: true }),
+    ]);
 
-    // 2. Fetch pending approvals strictly constrained to authorized tenant
-    const { data: approvals } = await adminClient
-      .from('exam_results_approval')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('submitted_at', { ascending: false });
+    const queryError =
+      sessionsError ||
+      approvalsError ||
+      malpracticesError ||
+      appealsError ||
+      spotlightsError ||
+      gradeDistributionsError ||
+      studentDetailsError ||
+      subjectResultsError ||
+      subjectAveragesError ||
+      classGenderMatrixError;
 
-    // 3. Fetch malpractice incidents strictly constrained to authorized tenant
-    const { data: malpractices } = await adminClient
-      .from('exam_malpractices')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('reported_at', { ascending: false });
-
-    // 4. Fetch appeals strictly constrained to authorized tenant
-    const { data: appeals } = await adminClient
-      .from('exam_appeals')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
-
-    // 5. Fetch student spotlights strictly constrained to authorized tenant
-    const { data: spotlights } = await adminClient
-      .from('exam_student_spotlights')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: true });
-
-    // 6. Fetch grade distributions strictly constrained to authorized tenant
-    const { data: gradeDistributions } = await adminClient
-      .from('exam_grade_distributions')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('grade_name', { ascending: true });
-
-    // 7. Fetch student details strictly constrained to authorized tenant
-    const { data: studentDetails } = await adminClient
-      .from('exam_student_details')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: true });
-
-    // 8. Fetch subject results strictly constrained to authorized tenant
-    const { data: subjectResults } = await adminClient
-      .from('exam_subject_results')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: true });
-
-    // 9. Fetch subject averages strictly constrained to authorized tenant
-    const { data: subjectAverages } = await adminClient
-      .from('exam_subject_averages')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: true });
-
-    // 10. Fetch class x gender drill-down matrix strictly constrained to authorized tenant
-    const { data: classGenderMatrix } = await adminClient
-      .from('exam_class_gender_counts')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('class_arm', { ascending: true });
+    if (queryError) {
+      console.error('[Exam Office Dashboard] Database query failure:', queryError);
+      return apiError('Failed to fetch dashboard metrics due to database query error', 'DATABASE_ERROR', 500);
+    }
 
     // Summary KPIs
     const activeExams =

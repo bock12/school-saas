@@ -274,16 +274,20 @@ export async function PATCH(req: NextRequest) {
     const adminClient = auth.adminClient();
     const tenantId = auth.tenantId!;
 
-    // Sanitize updates: strictly disallow modifying tenant_id or id
-    delete updates.tenant_id;
-    delete updates.tenantId;
-    delete updates.tenantSlug;
-    delete updates.id;
+    // Explicitly reject any attempts to mutate immutable identifiers
+    const IMMUTABLE_FIELDS = ['id', 'tenant_id', 'tenantId', 'tenantSlug'];
+    for (const imm of IMMUTABLE_FIELDS) {
+      if (imm in updates) {
+        return apiError(`Cannot modify immutable field: ${imm}`, 'INVALID_REQUEST', 400);
+      }
+    }
 
     const dbFields: Record<string, unknown> = {};
-    const fieldMap: Record<string, string> = {
+    const ALLOWED_APPLICANT_PATCH_FIELDS: Record<string, string> = {
       firstName: 'first_name',
+      first_name: 'first_name',
       lastName: 'last_name',
+      last_name: 'last_name',
       dob: 'dob',
       gender: 'gender',
       email: 'email',
@@ -291,23 +295,63 @@ export async function PATCH(req: NextRequest) {
       address: 'address',
       city: 'city',
       schoolLevel: 'school_level',
+      school_level: 'school_level',
       targetGrade: 'target_grade',
+      target_grade: 'target_grade',
+      previousSchool: 'previous_school',
+      previous_school: 'previous_school',
+      parentName: 'parent_name',
+      parent_name: 'parent_name',
+      parentPhone: 'parent_phone',
+      parent_phone: 'parent_phone',
+      parentEmail: 'parent_email',
+      parent_email: 'parent_email',
+      parentRelation: 'parent_relation',
+      parent_relation: 'parent_relation',
       stage: 'stage',
+      status: 'status',
+      rejectionReason: 'rejection_reason',
+      rejection_reason: 'rejection_reason',
       targetStream: 'target_stream',
+      target_stream: 'target_stream',
       npseAggregate: 'npse_aggregate',
+      npse_aggregate: 'npse_aggregate',
       beceAggregate: 'bece_aggregate',
+      bece_aggregate: 'bece_aggregate',
       beceSubjects: 'bece_subjects',
+      bece_subjects: 'bece_subjects',
       wassceCredits: 'wassce_credits',
+      wassce_credits: 'wassce_credits',
       wassceSubjects: 'wassce_subjects',
+      wassce_subjects: 'wassce_subjects',
       streamAutoPlaced: 'stream_auto_placed',
+      stream_auto_placed: 'stream_auto_placed',
       streamPlacedAt: 'stream_placed_at',
+      stream_placed_at: 'stream_placed_at',
       admissionLetterSent: 'admission_letter_sent',
+      admission_letter_sent: 'admission_letter_sent',
       admissionLetterSentAt: 'admission_letter_sent_at',
+      admission_letter_sent_at: 'admission_letter_sent_at',
+      docsVerified: 'docs_verified',
+      docs_verified: 'docs_verified',
+      interviewScore: 'interview_score',
+      interview_score: 'interview_score',
+      assessmentScore: 'assessment_score',
+      assessment_score: 'assessment_score',
+      nationalIndexNo: 'national_index_no',
+      national_index_no: 'national_index_no',
     };
 
-    for (const [k, v] of Object.entries(updates)) {
-      const dbKey = fieldMap[k] ?? k;
-      dbFields[dbKey] = v;
+    for (const [key, value] of Object.entries(updates)) {
+      const dbKey = ALLOWED_APPLICANT_PATCH_FIELDS[key];
+      if (!dbKey) {
+        return apiError(
+          `Unsupported applicant field: ${key}`,
+          'INVALID_REQUEST',
+          400
+        );
+      }
+      dbFields[dbKey] = value;
     }
 
     if (dbFields['target_stream'] !== undefined) {
