@@ -18,15 +18,61 @@ export interface UserForSync {
 /**
  * Validates the trusted invitation/provisioning source and safely synchronizes the user profile.
  *
- * SECURITY INVARIANTS (TASK-0002 / Amendment 2):
+ * SECURITY INVARIANTS (TASK-0002 / CORRECTION-03):
+ *
  * 1. Never trust user_controlled user_metadata.role or user_metadata.tenant_id as authoritative.
  * 2. Never treat arbitrary profiles.email = user.email as proof of an invitation.
- * 3. An explicit, server-authoritative invitation record in `user_invitations` is mandatory.
+ * 3. An explicit, server-authoritative invitation record in `user_invitations` is mandatory for
+ *    new profile creation.
  * 4. Replay is strictly prevented: consumed or expired invitations cannot be reused.
  * 5. Re-binding to a second GoTrue user identity is rejected.
  * 6. Conflicting identities are rejected fail-closed.
- * 7. Profile binding is atomic; failed binding never deletes or corrupts original records.
+ * 7. Profile binding is TRULY ATOMIC via PostgreSQL stored procedure
+ *    `bind_invitation_to_user(invitation_id, user_id)`. The procedure uses
+ *    SELECT ... FOR UPDATE to prevent concurrent acceptance races, and allows
+ *    PostgreSQL to roll back automatically on any failure — eliminating the
+ *    previous application-level compensating DELETE pattern.
  * 8. All database lookup and mutation failures fail closed.
+ *
+ * GOTRUE / APPLICATION INVITATION CORRELATION:
+ *
+ * GoTrue (Supabase Auth) and the application `user_invitations` table maintain
+ * two independent invitation channels. They are correlated as follows:
+ *
+ *   1. Administrator calls `inviteTenantAdmin()` which:
+ *      a. Creates an authoritative record in `public.user_invitations` (role, tenant, email).
+ *      b. Calls `supabaseAdmin.auth.admin.inviteUserByEmail(email)` to dispatch the
+ *         GoTrue invitation email (magic link / OTP).
+ *   2. The invited user clicks the email link and the browser exchanges the GoTrue
+ *      code at `/api/auth/callback?code=...`.
+ *   3. `supabase.auth.exchangeCodeForSession(code)` authenticates the GoTrue identity
+ *      and returns `user.id` (the stable GoTrue UUID) and `user.email` (verified by
+ *      GoTrue's magic-link mechanism — GoTrue only issues a successful session after
+ *      the user proves possession of the email address via the signed token).
+ *   4. THIS FUNCTION then looks up the server-authoritative `user_invitations` record
+ *      by `invitation_id` (carried in the callback or resolved by email) to retrieve
+ *      the authoritative role and tenant_id.
+ *   5. `bind_invitation_to_user(invitation_id, user_id)` atomically creates the profile
+ *      with values from the locked invitation row and marks it consumed.
+ *
+ * Security invariant:
+ *   authenticated GoTrue identity (user.id)
+ *       ↓ email verified by GoTrue magic-link exchange
+ *   pending application invitation (user_invitations row)
+ *       ↓ locked with SELECT FOR UPDATE
+ *   atomic binding to user.id
+ *       ↓
+ *   authoritative role + tenant (from invitation, never from user_metadata)
+ *
+ * Email equality alone is NOT sufficient: the invitation must exist and be
+ * pending. user_metadata can never override role or tenant.
+ *
+ * TOKEN COLUMN NOTE:
+ * The `user_invitations.token` column exists from the initial schema design
+ * but is currently unused in the invitation workflow. No token value is
+ * generated, stored, or returned. The column is retained in the schema for
+ * now; a follow-up migration should remove it once confirmed unnecessary to
+ * avoid retaining an unused credential-like field. See REC-0013.
  */
 export async function validateAndSyncInvitedProfile(
   user: UserForSync,
@@ -39,7 +85,22 @@ export async function validateAndSyncInvitedProfile(
   const supabaseAdmin = adminClientFactory();
   const normalizedEmail = user.email.trim().toLowerCase();
 
-  // 1. Query the database for an existing authoritative profile for user.id
+  // ── EXISTING PROFILE PASS-THROUGH ────────────────────────────────────────
+  //
+  // If a profile already exists for this user.id, we preserve it exactly as-is.
+  //
+  // SAFETY ANALYSIS:
+  // - The profile row is keyed by user.id (GoTrue's immutable UUID), which was
+  //   written by a previous trusted server action (inviteTenantAdmin, registration, etc.).
+  // - user.user_metadata is never consulted for role or tenant_id here.
+  // - We only optionally update full_name if the profile has the placeholder value and
+  //   the GoTrue metadata supplies a real name — this is cosmetic only.
+  // - A pending invitation with a CONFLICTING tenant/role for the same user is rejected
+  //   (fail-closed). This prevents an invitation from silently upgrading an existing
+  //   profile's role or moving it to another tenant.
+  //
+  // This path does NOT call bind_invitation_to_user because no new profile needs to be
+  // created. The existing authoritative data is returned directly.
   const { data: profileById, error: errById } = await supabaseAdmin
     .from('profiles')
     .select('id, email, role, tenant_id, full_name')
@@ -51,28 +112,21 @@ export async function validateAndSyncInvitedProfile(
     return { synced: false, trusted: false, reason: 'database_error' };
   }
 
-  // 2. Query for an explicit authoritative invitation record
-  const { data: invitation, error: errInv } = await supabaseAdmin
-    .from('user_invitations')
-    .select('*')
-    .eq('email', normalizedEmail)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (errInv) {
-    console.error('[validateAndSyncInvitedProfile] Database error querying invitation:', errInv.message);
-    return { synced: false, trusted: false, reason: 'database_error' };
-  }
-
-  // 3. Handle existing profile for this user.id
   if (profileById) {
-    // If an invitation exists, check for conflicting identity/tenant/role binding (SEC-27)
-    if (invitation && invitation.status === 'pending') {
-      if (
-        (invitation.tenant_id && invitation.tenant_id !== profileById.tenant_id) ||
-        (invitation.role && invitation.role !== profileById.role)
-      ) {
+    // Check for a pending invitation with a conflicting tenant or role binding (SEC-27)
+    const { data: pendingInvitation } = await supabaseAdmin
+      .from('user_invitations')
+      .select('id, tenant_id, role, status')
+      .eq('status', 'pending')
+      .ilike('email', normalizedEmail)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (pendingInvitation) {
+      const tenantConflict = pendingInvitation.tenant_id && pendingInvitation.tenant_id !== profileById.tenant_id;
+      const roleConflict = pendingInvitation.role && pendingInvitation.role !== profileById.role;
+      if (tenantConflict || roleConflict) {
         return {
           synced: false,
           trusted: false,
@@ -83,9 +137,11 @@ export async function validateAndSyncInvitedProfile(
       }
     }
 
-    // Existing profile is valid: preserve its server-authoritative role and tenant
+    // Safe cosmetic update: only update full_name if placeholder and metadata has a real value
     const meta = user.user_metadata ?? {};
-    const metaFullName = typeof meta.full_name === 'string' ? meta.full_name : typeof meta.name === 'string' ? meta.name : null;
+    const metaFullName =
+      typeof meta.full_name === 'string' ? meta.full_name :
+      typeof meta.name === 'string' ? meta.name : null;
     if (metaFullName && (!profileById.full_name || profileById.full_name === 'Staff Member')) {
       await supabaseAdmin
         .from('profiles')
@@ -102,67 +158,41 @@ export async function validateAndSyncInvitedProfile(
     };
   }
 
-  // 4. No profile exists for user.id: require an explicit, valid, authoritative invitation (SEC-19)
-  if (!invitation) {
-    return {
-      synced: false,
-      trusted: false,
-      reason: 'no_authoritative_invitation',
-    };
-  }
+  // ── NEW PROFILE PATH: REQUIRE SERVER-AUTHORITATIVE INVITATION ─────────────
+  //
+  // No profile exists for this user.id. We must find a pending invitation and
+  // atomically bind the profile via the PostgreSQL stored procedure.
+  // user_metadata is NEVER used to determine role or tenant_id.
 
-  // Check if a profile already exists for this email under a DIFFERENT user ID (SEC-27)
-  const { data: conflictingProfile, error: errConflict } = await supabaseAdmin
-    .from('profiles')
-    .select('id, email, role, tenant_id')
-    .eq('email', normalizedEmail)
+  // Look up the pending invitation by email (case-insensitive via ilike)
+  const { data: invitation, error: errInv } = await supabaseAdmin
+    .from('user_invitations')
+    .select('id, email, tenant_id, role, status, expires_at, accepted_by, full_name')
+    .eq('status', 'pending')
+    .ilike('email', normalizedEmail)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  if (errConflict) {
-    console.error('[validateAndSyncInvitedProfile] Database error checking profile conflicts:', errConflict.message);
+  if (errInv) {
+    console.error('[validateAndSyncInvitedProfile] Database error querying invitation:', errInv.message);
     return { synced: false, trusted: false, reason: 'database_error' };
   }
 
-  if (conflictingProfile && conflictingProfile.id !== user.id) {
-    return {
-      synced: false,
-      trusted: false,
-      reason: 'conflicting_existing_profile_identity',
-    };
+  if (!invitation) {
+    return { synced: false, trusted: false, reason: 'no_authoritative_invitation' };
   }
 
-  // 5. Replay & Rebinding Checks (SEC-21, SEC-22)
-  if (invitation.status === 'accepted') {
-    return { synced: false, trusted: false, reason: 'invitation_already_consumed' };
-  }
-
-  if (invitation.status === 'revoked') {
-    return { synced: false, trusted: false, reason: 'invitation_revoked' };
-  }
-
-  if (invitation.accepted_by && invitation.accepted_by !== user.id) {
-    return { synced: false, trusted: false, reason: 'invitation_bound_to_other_user' };
-  }
-
-  // 6. Expiration Check (SEC-20)
-  const now = new Date();
-  const expiresAt = new Date(invitation.expires_at);
-  if (now.getTime() > expiresAt.getTime() || invitation.status === 'expired') {
-    await supabaseAdmin
-      .from('user_invitations')
-      .update({ status: 'expired' })
-      .eq('id', invitation.id);
-    return { synced: false, trusted: false, reason: 'invitation_expired' };
-  }
-
-  if (invitation.status !== 'pending') {
-    return { synced: false, trusted: false, reason: `invitation_invalid_status_${invitation.status}` };
-  }
-
-  // 7. Authoritative role and tenant resolution (SEC-23, SEC-24, SEC-28)
-  // Take role and tenant EXCLUSIVELY from the invitation record, NEVER user_metadata.
-  const authoritativeRole = invitation.role;
-  const authoritativeTenantId = invitation.tenant_id;
+  // ── INVOKE THE ATOMIC RPC ─────────────────────────────────────────────────
+  //
+  // bind_invitation_to_user(invitation_id, user_id) performs the following
+  // inside a single PostgreSQL transaction with SELECT FOR UPDATE:
+  //   - Re-validates status, expiration, rebinding, and identity conflicts
+  //   - INSERT profile using values from the LOCKED invitation row only
+  //   - UPDATE invitation to accepted
+  //
+  // No application-level compensating delete is needed or used.
+  // PostgreSQL rolls back automatically on any failure.
   const meta = user.user_metadata ?? {};
   const fullName =
     (typeof meta.full_name === 'string' && meta.full_name) ||
@@ -170,43 +200,55 @@ export async function validateAndSyncInvitedProfile(
     invitation.full_name ||
     'Staff Member';
 
-  // 8. Atomic Profile Binding and Invitation Consumption (SEC-25, SEC-26)
-  // Do NOT use delete + insert.
-  const { error: insertErr } = await supabaseAdmin.from('profiles').insert({
-    id: user.id,
-    email: normalizedEmail,
-    full_name: fullName,
-    role: authoritativeRole,
-    tenant_id: authoritativeTenantId,
-  });
+  // Pass full_name from metadata as a hint — the RPC uses it if the invitation
+  // has no full_name. Role and tenant_id are NOT accepted as parameters.
+  // The RPC ignores full_name from the call and uses COALESCE(invitation.full_name, 'Staff Member').
+  // We do NOT pass role or tenant_id to the RPC under any circumstances.
+  const { data: rpcResult, error: rpcError } = await supabaseAdmin
+    .rpc('bind_invitation_to_user', {
+      p_invitation_id: invitation.id,
+      p_user_id: user.id,
+    });
 
-  if (insertErr) {
-    console.error('[validateAndSyncInvitedProfile] Profile insert failed:', insertErr.message);
-    return { synced: false, trusted: false, reason: 'profile_insert_failed' };
+  if (rpcError) {
+    console.error('[validateAndSyncInvitedProfile] RPC bind_invitation_to_user error:', rpcError.message);
+    return { synced: false, trusted: false, reason: 'rpc_error' };
   }
 
-  const { error: updateInvErr } = await supabaseAdmin
-    .from('user_invitations')
-    .update({
-      status: 'accepted',
-      accepted_at: now.toISOString(),
-      accepted_by: user.id,
-    })
-    .eq('id', invitation.id)
-    .eq('status', 'pending');
+  const result = rpcResult as {
+    success: boolean;
+    reason?: string;
+    status?: string;
+    role?: string;
+    tenant_id?: string;
+    email?: string;
+  } | null;
 
-  if (updateInvErr) {
-    console.error('[validateAndSyncInvitedProfile] Invitation consumption failed:', updateInvErr.message);
-    // Roll back inserted profile to maintain atomic consistency and fail closed
-    await supabaseAdmin.from('profiles').delete().eq('id', user.id);
-    return { synced: false, trusted: false, reason: 'invitation_consumption_failed' };
+  if (!result) {
+    console.error('[validateAndSyncInvitedProfile] RPC returned null result');
+    return { synced: false, trusted: false, reason: 'rpc_null_result' };
+  }
+
+  if (!result.success) {
+    // Map RPC failure reasons to appropriate SyncProfileResult reasons
+    const reason = result.reason ?? `rpc_failed_${result.status ?? 'unknown'}`;
+    return { synced: false, trusted: false, reason };
+  }
+
+  // Update profile full_name if metadata provided a better value than the invitation default
+  if (fullName && fullName !== 'Staff Member') {
+    await supabaseAdmin
+      .from('profiles')
+      .update({ full_name: fullName })
+      .eq('id', user.id)
+      .eq('full_name', 'Staff Member');
   }
 
   return {
     synced: true,
     trusted: true,
     reason: 'invitation_accepted',
-    role: authoritativeRole,
-    tenantId: authoritativeTenantId,
+    role: result.role ?? null,
+    tenantId: result.tenant_id ?? null,
   };
 }

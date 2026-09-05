@@ -1,4 +1,4 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -417,173 +417,229 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
     [key: string]: unknown;
   }
 
+  /**
+   * Creates a mock Supabase admin client for validateAndSyncInvitedProfile() tests.
+   *
+   * CORRECTION-03 changes:
+   * - Added .ilike() to select builder (callback-sync uses .ilike() for email lookup)
+   * - Added .rpc('bind_invitation_to_user', ...) simulating the PostgreSQL stored procedure's
+   *   atomic binding: SELECT FOR UPDATE, validation, profile insert, invitation consumption.
+   * - rpcFailMode allows tests to simulate RPC/transaction failure (rollback scenario).
+   */
   function createMockAdminForSync(
     existingProfiles: MockProfile[] = [],
     existingInvitations: MockInvitation[] = [],
     options: {
       failOnTable?: string;
       failOnOperation?: string;
+      rpcFailMode?: 'error' | 'false_success' | null;
     } = {}
   ) {
     const profiles = [...existingProfiles];
     const invitations = [...existingInvitations];
     const operations: { type: string; table: string; data: unknown; filters: Record<string, unknown> }[] = [];
 
-    return {
-      profiles,
-      invitations,
-      operations,
-      client: {
-        from: (table: string) => {
-          const filters: Record<string, unknown> = {};
-          const isErrorTable = options.failOnTable === table;
+    // Simulates bind_invitation_to_user() PostgreSQL stored procedure.
+    // Security invariants mirrored from the real function:
+    //   - Role, tenant_id, email taken from LOCKED invitation â€” not from parameters.
+    //   - Profile insert and invitation consumption are atomic (or both rolled back).
+    function simulateBindInvitationRpc(params: { p_invitation_id: string; p_user_id: string }) {
+      const now = new Date();
+      const inv = invitations.find((i) => i.id === params.p_invitation_id);
+      if (!inv) {
+        return { data: { success: false, reason: 'invitation_not_found' }, error: null };
+      }
+      if (inv.status !== 'pending') {
+        return { data: { success: false, reason: 'invitation_not_pending', status: inv.status }, error: null };
+      }
+      if (now > new Date(inv.expires_at)) {
+        inv.status = 'expired';
+        return { data: { success: false, reason: 'invitation_expired' }, error: null };
+      }
+      if (inv.accepted_by && inv.accepted_by !== params.p_user_id) {
+        return { data: { success: false, reason: 'invitation_bound_to_other_user' }, error: null };
+      }
+      const emailLower = (inv.email as string).toLowerCase();
+      const conflicting = profiles.find(
+        (p) => (p.email ?? '').toLowerCase() === emailLower && p.id !== params.p_user_id
+      );
+      if (conflicting) {
+        return { data: { success: false, reason: 'conflicting_existing_profile_identity' }, error: null };
+      }
+      if (!profiles.find((p) => p.id === params.p_user_id)) {
+        profiles.push({
+          id: params.p_user_id,
+          email: emailLower,
+          full_name: (inv.full_name as string | null) ?? 'Staff Member',
+          role: inv.role,
+          tenant_id: inv.tenant_id,
+        });
+        operations.push({ type: 'rpc_insert_profile', table: 'profiles', data: { id: params.p_user_id }, filters: {} });
+      }
+      inv.status = 'accepted';
+      inv.accepted_at = now.toISOString();
+      inv.accepted_by = params.p_user_id;
+      operations.push({ type: 'rpc_update_invitation', table: 'user_invitations', data: { status: 'accepted' }, filters: { id: inv.id } });
+      return {
+        data: { success: true, role: inv.role, tenant_id: inv.tenant_id, email: emailLower },
+        error: null,
+      };
+    }
 
-          const queryBuilder = {
-            select: () => {
-              if (isErrorTable && (!options.failOnOperation || options.failOnOperation === 'select')) {
-                const failBuilder = {
-                  eq: () => failBuilder,
-                  order: () => failBuilder,
-                  limit: () => failBuilder,
-                  maybeSingle: async () => ({ data: null, error: new Error(`Simulated select error on ${table}`) }),
-                };
-                return failBuilder;
-              }
+    const client = {
+      from: (table: string) => {
+        const filters: Record<string, unknown> = {};
+        const isErrorTable = options.failOnTable === table;
 
-              const selectBuilder = {
-                eq: (col: string, val: unknown) => {
-                  filters[col] = val;
-                  return selectBuilder;
-                },
-                order: () => selectBuilder,
-                limit: () => selectBuilder,
-                maybeSingle: async () => {
-                  if (isErrorTable && (!options.failOnOperation || options.failOnOperation === 'select')) {
-                    return { data: null, error: new Error(`Simulated select error on ${table}`) };
-                  }
-                  const list: Record<string, unknown>[] = table === 'profiles' ? profiles : invitations;
-                  const found = list.find((item: Record<string, unknown>) => {
-                    return Object.entries(filters).every(([k, v]) => item[k] === v);
-                  });
-                  return { data: found ? { ...found } : null, error: null };
-                },
+        const queryBuilder = {
+          select: () => {
+            if (isErrorTable && (!options.failOnOperation || options.failOnOperation === 'select')) {
+              const failBuilder = {
+                eq: () => failBuilder,
+                ilike: () => failBuilder,
+                order: () => failBuilder,
+                limit: () => failBuilder,
+                maybeSingle: async () => ({ data: null, error: new Error(`Simulated select error on ${table}`) }),
               };
-              return selectBuilder;
-            },
-            delete: () => ({
-              eq: (col: string, val: unknown) => {
-                if (isErrorTable && (!options.failOnOperation || options.failOnOperation === 'delete')) {
-                  return Promise.resolve({ error: new Error(`Simulated delete error on ${table}`) });
-                }
-                operations.push({ type: 'delete', table, data: null, filters: { [col]: val } });
-                if (table === 'profiles') {
-                  const idx = profiles.findIndex((p: Record<string, unknown>) => p[col] === val);
-                  if (idx !== -1) profiles.splice(idx, 1);
-                } else if (table === 'user_invitations') {
-                  const idx = invitations.findIndex((i: Record<string, unknown>) => i[col] === val);
-                  if (idx !== -1) invitations.splice(idx, 1);
-                }
-                return Promise.resolve({ error: null });
+              return failBuilder;
+            }
+            const selectBuilder = {
+              eq: (col: string, val: unknown) => { filters[col] = val; return selectBuilder; },
+              ilike: (col: string, val: unknown) => {
+                filters[`ilike:${col}`] = (val as string).toLowerCase();
+                return selectBuilder;
               },
-            }),
-            insert: (data: unknown) => {
-              if (isErrorTable && (!options.failOnOperation || options.failOnOperation === 'insert')) {
-                return Promise.resolve({ data: null, error: new Error(`Simulated insert error on ${table}`) });
+              order: () => selectBuilder,
+              limit: () => selectBuilder,
+              maybeSingle: async () => {
+                const list: Record<string, unknown>[] = table === 'profiles' ? profiles : invitations;
+                const found = list.find((item) =>
+                  Object.entries(filters).every(([k, v]) => {
+                    if (k.startsWith('ilike:')) {
+                      const field = k.replace('ilike:', '');
+                      return ((item[field] as string) ?? '').toLowerCase() === v;
+                    }
+                    return item[k] === v;
+                  })
+                );
+                return { data: found ? { ...found } : null, error: null };
+              },
+            };
+            return selectBuilder;
+          },
+          delete: () => ({
+            eq: (col: string, val: unknown) => {
+              if (isErrorTable && (!options.failOnOperation || options.failOnOperation === 'delete')) {
+                return Promise.resolve({ error: new Error(`Simulated delete error on ${table}`) });
               }
-              operations.push({ type: 'insert', table, data, filters: {} });
+              operations.push({ type: 'delete', table, data: null, filters: { [col]: val } });
               if (table === 'profiles') {
-                profiles.push({ ...(data as MockProfile) });
+                const idx = profiles.findIndex((p) => p[col] === val);
+                if (idx !== -1) profiles.splice(idx, 1);
               } else if (table === 'user_invitations') {
-                invitations.push({ ...(data as MockInvitation) });
+                const idx = invitations.findIndex((i) => i[col] === val);
+                if (idx !== -1) invitations.splice(idx, 1);
               }
-              return Promise.resolve({ data, error: null });
+              return Promise.resolve({ error: null });
             },
-            update: (data: unknown) => {
-              const updateBuilder = {
-                eq: (col: string, val: unknown) => {
-                  filters[col] = val;
-                  return updateBuilder;
-                },
-                then: (resolve: (arg: unknown) => unknown) => {
-                  if (isErrorTable && (!options.failOnOperation || options.failOnOperation === 'update')) {
-                    return resolve({ error: new Error(`Simulated update error on ${table}`) });
-                  }
-                  operations.push({ type: 'update', table, data, filters });
-                  const list: Record<string, unknown>[] = table === 'profiles' ? profiles : invitations;
-                  const target = list.find((item: Record<string, unknown>) => {
-                    return Object.entries(filters).every(([k, v]) => item[k] === v);
-                  });
-                  if (target) Object.assign(target, data);
-                  return resolve({ error: null });
-                },
-              };
-              return updateBuilder;
-            },
-          };
+          }),
+          insert: (data: unknown) => {
+            if (isErrorTable && (!options.failOnOperation || options.failOnOperation === 'insert')) {
+              return Promise.resolve({ data: null, error: new Error(`Simulated insert error on ${table}`) });
+            }
+            operations.push({ type: 'insert', table, data, filters: {} });
+            if (table === 'profiles') profiles.push({ ...(data as MockProfile) });
+            else if (table === 'user_invitations') invitations.push({ ...(data as MockInvitation) });
+            return Promise.resolve({ data, error: null });
+          },
+          update: (data: unknown) => {
+            const updateFilters: Record<string, unknown> = {};
+            const updateBuilder = {
+              eq: (col: string, val: unknown) => { updateFilters[col] = val; return updateBuilder; },
+              ilike: (col: string, val: unknown) => {
+                updateFilters[`ilike:${col}`] = (val as string).toLowerCase();
+                return updateBuilder;
+              },
+              then: (resolve: (arg: unknown) => unknown) => {
+                if (isErrorTable && (!options.failOnOperation || options.failOnOperation === 'update')) {
+                  return resolve({ error: new Error(`Simulated update error on ${table}`) });
+                }
+                operations.push({ type: 'update', table, data, filters: updateFilters });
+                const list: Record<string, unknown>[] = table === 'profiles' ? profiles : invitations;
+                const target = list.find((item) =>
+                  Object.entries(updateFilters).every(([k, v]) => item[k] === v)
+                );
+                if (target) Object.assign(target, data);
+                return resolve({ error: null });
+              },
+            };
+            return updateBuilder;
+          },
+        };
+        return queryBuilder;
+      },
+      // RPC handler â€” simulates bind_invitation_to_user() PostgreSQL stored procedure
+      rpc: (fn: string, params: Record<string, unknown>) => {
+        if (fn === 'bind_invitation_to_user') {
+          if (options.rpcFailMode === 'error') {
+            return Promise.resolve({ data: null, error: new Error('Simulated RPC execution error') });
+          }
+          if (options.rpcFailMode === 'false_success') {
+            return Promise.resolve({ data: { success: false, reason: 'simulated_rpc_rejection' }, error: null });
+          }
+          return Promise.resolve(
+            simulateBindInvitationRpc(params as { p_invitation_id: string; p_user_id: string })
+          );
+        }
+        return Promise.resolve({ data: null, error: new Error(`Unknown RPC function: ${fn}`) });
+      },
+    } as unknown as ReturnType<typeof createAdminClient>;
 
-          return queryBuilder;
-        },
-      } as unknown as ReturnType<typeof createAdminClient>,
-    };
+    return { profiles, invitations, operations, client };
   }
 
-  // SEC-15: Callback route rejects or ignores untrusted user_metadata.role (privilege escalation defense)
+  // SEC-15: Callback route rejects untrusted user_metadata.role (privilege escalation defense)
   await t.test('SEC-15: Callback route rejects or ignores untrusted user_metadata.role (privilege escalation defense)', async () => {
     const callbackPath = path.join(ROOT_DIR, 'src/app/api/auth/callback/route.ts');
     const content = fs.readFileSync(callbackPath, 'utf8');
+    assert.ok(!content.includes('role: meta.role'),
+      'src/app/api/auth/callback/route.ts must not directly write role: meta.role into profiles');
 
-    // Static security assertion: callback route must never upsert raw meta.role
-    assert.ok(
-      !content.includes('role: meta.role'),
-      'src/app/api/auth/callback/route.ts must not directly write role: meta.role into profiles'
-    );
-
-    // Behavioral assertion: self-registered attacker attempting privilege escalation without invitation
     const mock = createMockAdminForSync([]);
     const attackerUser = {
       id: 'attacker-uuid-1',
       email: 'attacker@evil.com',
       user_metadata: { role: 'super_admin', tenant_id: 'target-tenant-uuid' },
     };
-
     const result = await validateAndSyncInvitedProfile(attackerUser, () => mock.client);
-
     assert.equal(result.synced, false, 'Unprovisioned user sync must fail');
     assert.equal(result.trusted, false, 'Unprovisioned user must not be trusted');
     assert.notEqual(result.role, 'super_admin', 'Attacker must not be assigned super_admin role');
-    assert.equal(mock.profiles.length, 0, 'No profile row must be created in the database for untrusted user');
+    assert.equal(mock.profiles.length, 0, 'No profile row must be created for untrusted user');
   });
 
-  // SEC-16: Callback route rejects or ignores untrusted user_metadata.tenant_id (cross-tenant spoofing defense)
+  // SEC-16: Callback route rejects untrusted user_metadata.tenant_id (cross-tenant spoofing)
   await t.test('SEC-16: Callback route rejects or ignores untrusted user_metadata.tenant_id (cross-tenant spoofing defense)', async () => {
     const callbackPath = path.join(ROOT_DIR, 'src/app/api/auth/callback/route.ts');
     const content = fs.readFileSync(callbackPath, 'utf8');
+    assert.ok(!content.includes('tenant_id: meta.tenant_id'),
+      'src/app/api/auth/callback/route.ts must not directly write tenant_id: meta.tenant_id into profiles');
 
-    // Static security assertion: callback route must never upsert raw meta.tenant_id
-    assert.ok(
-      !content.includes('tenant_id: meta.tenant_id'),
-      'src/app/api/auth/callback/route.ts must not directly write tenant_id: meta.tenant_id into profiles'
-    );
-
-    // Behavioral assertion: attacker attempting to reassign/spoof another tenant without invitation
     const mock = createMockAdminForSync([]);
     const attackerUser = {
       id: 'attacker-uuid-2',
       email: 'spoofed@evil.com',
       user_metadata: { role: 'school_admin', tenant_id: 'victim-school-uuid' },
     };
-
     const result = await validateAndSyncInvitedProfile(attackerUser, () => mock.client);
-
     assert.equal(result.synced, false, 'Untrusted tenant spoofing sync must fail');
     assert.equal(result.trusted, false, 'Untrusted tenant spoofing must not be marked trusted');
     assert.notEqual(result.tenantId, 'victim-school-uuid', 'Attacker must not be bound to victim tenant');
     assert.equal(mock.profiles.length, 0, 'No profile row must be created for untrusted tenant request');
   });
 
-  // SEC-17: Callback route establishes and validates trusted invitation/provisioning source first
+  // SEC-17: Existing profile preserves authoritative role/tenant against metadata escalation
   await t.test('SEC-17: Callback route establishes and validates trusted invitation/provisioning source first', async () => {
-    // Existing user with student role attempts to escalate to super_admin via metadata
     const existingStudentProfile = {
       id: 'student-uuid-1',
       email: 'student@school.edu',
@@ -591,31 +647,25 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       tenant_id: 'school-tenant-1',
       full_name: 'Legitimate Student',
     };
-
     const mock = createMockAdminForSync([existingStudentProfile]);
     const studentUser = {
       id: 'student-uuid-1',
       email: 'student@school.edu',
       user_metadata: { role: 'super_admin', tenant_id: 'arbitrary-tenant-id' },
     };
-
     const result = await validateAndSyncInvitedProfile(studentUser, () => mock.client);
-
     assert.equal(result.synced, true);
     assert.equal(result.trusted, true);
     assert.equal(result.role, 'student', 'Existing authoritative role must be preserved');
     assert.equal(result.tenantId, 'school-tenant-1', 'Existing authoritative tenant must be preserved');
-
-    // Verify database profile was not altered to super_admin
     const dbProfile = mock.profiles.find((p) => p.id === 'student-uuid-1');
     assert.ok(dbProfile);
     assert.equal(dbProfile.role, 'student', 'Database profile role must remain student');
     assert.equal(dbProfile.tenant_id, 'school-tenant-1', 'Database profile tenant must remain school-tenant-1');
   });
 
-  // SEC-18: Legitimate invitation behavior is preserved using server-authoritative data
+  // SEC-18: Legitimate invitation acceptance works via server-authoritative data
   await t.test('SEC-18: Legitimate invitation behavior is preserved using server-authoritative data', async () => {
-    // Authorized admin invited a school_admin and created an authoritative invitation record
     const authoritativeInvitation: MockInvitation = {
       id: 'inv-legit-1',
       email: 'newadmin@school.org',
@@ -625,41 +675,29 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       status: 'pending',
       expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
     };
-
     const mock = createMockAdminForSync([], [authoritativeInvitation]);
-
-    // User accepts invite and exchanges code: their GoTrue auth id is finalized
     const invitedUser = {
       id: 'final-gotrue-auth-id',
       email: 'newadmin@school.org',
-      user_metadata: {
-        full_name: 'New School Admin Updated',
-      },
+      user_metadata: { full_name: 'New School Admin Updated' },
     };
-
     const result = await validateAndSyncInvitedProfile(invitedUser, () => mock.client);
-
     assert.equal(result.synced, true);
     assert.equal(result.trusted, true);
     assert.equal(result.role, 'school_admin', 'Role must come from authoritative invitation record');
     assert.equal(result.tenantId, 'authorized-school-uuid', 'Tenant must come from authoritative invitation record');
-
-    // Verify profile is cleanly created for final GoTrue auth user ID
     const createdProfile = mock.profiles.find((p) => p.id === 'final-gotrue-auth-id');
     assert.ok(createdProfile, 'Profile must be linked to final auth user ID');
     assert.equal(createdProfile.role, 'school_admin');
     assert.equal(createdProfile.tenant_id, 'authorized-school-uuid');
-
-    // Verify invitation is marked accepted
     const inv = mock.invitations.find((i) => i.id === 'inv-legit-1');
     assert.ok(inv);
     assert.equal(inv.status, 'accepted');
     assert.equal(inv.accepted_by, 'final-gotrue-auth-id');
   });
 
-  // SEC-19: Arbitrary existing profile by email is not sufficient evidence of invitation
+  // SEC-19: Arbitrary existing profile by email is not proof of invitation
   await t.test('SEC-19: Arbitrary existing profile by email is not sufficient evidence of invitation', async () => {
-    // A profile exists in profiles with an email, but NO record exists in user_invitations
     const existingProfile = {
       id: 'target-existing-id',
       email: 'victim@school.edu',
@@ -667,18 +705,13 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       tenant_id: 'victim-school-uuid',
       full_name: 'Existing Staff',
     };
-
     const mock = createMockAdminForSync([existingProfile], []);
-
-    // Attacker signs up with the victim's email under a new GoTrue auth ID
     const attackerUser = {
       id: 'attacker-gotrue-id',
       email: 'victim@school.edu',
       user_metadata: {},
     };
-
     const result = await validateAndSyncInvitedProfile(attackerUser, () => mock.client);
-
     assert.equal(result.synced, false, 'Arbitrary email match without invitation must fail sync');
     assert.equal(result.trusted, false, 'Arbitrary email match without invitation must not be trusted');
     assert.equal(mock.profiles.length, 1, 'No new profile row or overwrite permitted');
@@ -693,18 +726,11 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       role: 'teacher',
       tenant_id: 'school-uuid-1',
       status: 'pending',
-      expires_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+      expires_at: new Date(Date.now() - 3600000).toISOString(),
     };
-
     const mock = createMockAdminForSync([], [expiredInvitation]);
-    const lateUser = {
-      id: 'late-user-gotrue-id',
-      email: 'lateuser@school.org',
-      user_metadata: {},
-    };
-
+    const lateUser = { id: 'late-user-gotrue-id', email: 'lateuser@school.org', user_metadata: {} };
     const result = await validateAndSyncInvitedProfile(lateUser, () => mock.client);
-
     assert.equal(result.synced, false, 'Expired invitation must fail sync');
     assert.equal(result.trusted, false, 'Expired invitation must not be trusted');
     assert.equal(result.reason, 'invitation_expired');
@@ -723,19 +749,12 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       accepted_by: 'original-user-id',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
     };
-
     const mock = createMockAdminForSync([], [consumedInvitation]);
-    const replayUser = {
-      id: 'replay-attacker-id',
-      email: 'invited@school.org',
-      user_metadata: {},
-    };
-
+    const replayUser = { id: 'replay-attacker-id', email: 'invited@school.org', user_metadata: {} };
     const result = await validateAndSyncInvitedProfile(replayUser, () => mock.client);
-
     assert.equal(result.synced, false, 'Replayed invitation must fail sync');
     assert.equal(result.trusted, false, 'Replayed invitation must not be trusted');
-    assert.equal(result.reason, 'invitation_already_consumed');
+    assert.equal(result.reason, 'no_authoritative_invitation', 'Consumed invitation not found via pending-only lookup');
     assert.equal(mock.profiles.length, 0, 'No profile created for consumed invitation');
   });
 
@@ -750,16 +769,9 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       accepted_by: 'first-user-uuid',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
     };
-
     const mock = createMockAdminForSync([], [boundInvitation]);
-    const secondUser = {
-      id: 'second-user-uuid',
-      email: 'bound@school.org',
-      user_metadata: {},
-    };
-
+    const secondUser = { id: 'second-user-uuid', email: 'bound@school.org', user_metadata: {} };
     const result = await validateAndSyncInvitedProfile(secondUser, () => mock.client);
-
     assert.equal(result.synced, false, 'Rebinding invitation to second user must fail');
     assert.equal(result.trusted, false, 'Rebinding invitation must not be trusted');
     assert.equal(result.reason, 'invitation_bound_to_other_user');
@@ -771,26 +783,22 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
     const invitation: MockInvitation = {
       id: 'inv-role-test',
       email: 'staff@school.org',
-      role: 'teacher', // Authoritative role is teacher
+      role: 'teacher',
       tenant_id: 'school-uuid-1',
       status: 'pending',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
     };
-
     const mock = createMockAdminForSync([], [invitation]);
     const userWithMetadata = {
       id: 'staff-auth-id',
       email: 'staff@school.org',
-      user_metadata: { role: 'super_admin' }, // Malicious attempt to self-elevate
+      user_metadata: { role: 'super_admin' },
     };
-
     const result = await validateAndSyncInvitedProfile(userWithMetadata, () => mock.client);
-
     assert.equal(result.synced, true);
     assert.equal(result.trusted, true);
     assert.equal(result.role, 'teacher', 'Resulting role must come strictly from invitation');
     assert.notEqual(result.role, 'super_admin', 'Attacker metadata role must be ignored');
-
     const created = mock.profiles.find((p) => p.id === 'staff-auth-id');
     assert.ok(created);
     assert.equal(created.role, 'teacher', 'Database profile role must be teacher');
@@ -802,38 +810,38 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       id: 'inv-tenant-test',
       email: 'staff2@school.org',
       role: 'teacher',
-      tenant_id: 'school-uuid-legit', // Authoritative tenant
+      tenant_id: 'school-uuid-legit',
       status: 'pending',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
     };
-
     const mock = createMockAdminForSync([], [invitation]);
     const userWithMetadata = {
       id: 'staff2-auth-id',
       email: 'staff2@school.org',
-      user_metadata: { tenant_id: 'victim-tenant-spoofed' }, // Malicious attempt to spoof tenant
+      user_metadata: { tenant_id: 'victim-tenant-spoofed' },
     };
-
     const result = await validateAndSyncInvitedProfile(userWithMetadata, () => mock.client);
-
     assert.equal(result.synced, true);
     assert.equal(result.trusted, true);
     assert.equal(result.tenantId, 'school-uuid-legit', 'Resulting tenant must come strictly from invitation');
     assert.notEqual(result.tenantId, 'victim-tenant-spoofed', 'Attacker metadata tenant must be ignored');
-
     const created = mock.profiles.find((p) => p.id === 'staff2-auth-id');
     assert.ok(created);
     assert.equal(created.tenant_id, 'school-uuid-legit', 'Database profile tenant must be school-uuid-legit');
   });
 
-  // SEC-25: Profile binding is atomic / failed binding does not delete the original record
+  // SEC-25: Profile binding is atomic â€” uses RPC, no compensating delete
   await t.test('SEC-25: Profile binding is atomic / failed binding does not delete the original record', async () => {
-    // Static assertion: callback-sync must NEVER use delete + insert for profile relinking
     const callbackSyncPath = path.join(ROOT_DIR, 'src/lib/auth/callback-sync.ts');
     const syncSource = fs.readFileSync(callbackSyncPath, 'utf8');
     assert.ok(
-      !syncSource.includes('.delete().eq(\'id\', profileByEmail.id)'),
-      'callback-sync.ts must not contain delete + insert pattern on profiles'
+      syncSource.includes("rpc('bind_invitation_to_user'"),
+      'callback-sync.ts must use the atomic RPC for new profile binding'
+    );
+    assert.ok(
+      !syncSource.includes(".delete().eq('id', user.id)") &&
+      !syncSource.includes('.delete().eq("id", user.id)'),
+      'callback-sync.ts must not contain application-level compensating delete on profiles'
     );
 
     const invitation: MockInvitation = {
@@ -844,28 +852,15 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       status: 'pending',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
     };
-
-    // Simulate database failure during profile insert
-    const mock = createMockAdminForSync([], [invitation], {
-      failOnTable: 'profiles',
-      failOnOperation: 'insert',
-    });
-
-    const user = {
-      id: 'atomic-auth-id',
-      email: 'atomic@school.org',
-      user_metadata: {},
-    };
-
+    const mock = createMockAdminForSync([], [invitation], { rpcFailMode: 'error' });
+    const user = { id: 'atomic-auth-id', email: 'atomic@school.org', user_metadata: {} };
     const result = await validateAndSyncInvitedProfile(user, () => mock.client);
-
-    assert.equal(result.synced, false, 'Failed profile insertion must report sync failure');
-    assert.equal(result.trusted, false, 'Failed profile insertion must not be marked trusted');
-
-    // Verify original invitation was NOT deleted or corrupted
+    assert.equal(result.synced, false, 'RPC failure must report sync failure');
+    assert.equal(result.trusted, false, 'RPC failure must not be marked trusted');
     const inv = mock.invitations.find((i) => i.id === 'inv-atomic-test');
     assert.ok(inv, 'Original invitation must be preserved');
-    assert.equal(inv.status, 'pending', 'Original invitation status must remain pending');
+    assert.equal(inv.status, 'pending', 'Invitation status must remain pending after RPC failure (rollback)');
+    assert.equal(mock.profiles.length, 0, 'No profile must exist after RPC failure (rollback)');
   });
 
   // SEC-26: Database errors fail closed
@@ -878,21 +873,12 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       status: 'pending',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
     };
-
-    // Simulate select failure on user_invitations
     const mock = createMockAdminForSync([], [invitation], {
       failOnTable: 'user_invitations',
       failOnOperation: 'select',
     });
-
-    const user = {
-      id: 'dberr-auth-id',
-      email: 'dberror@school.org',
-      user_metadata: {},
-    };
-
+    const user = { id: 'dberr-auth-id', email: 'dberror@school.org', user_metadata: {} };
     const result = await validateAndSyncInvitedProfile(user, () => mock.client);
-
     assert.equal(result.synced, false, 'Database error must fail closed');
     assert.equal(result.trusted, false, 'Database error must not be trusted');
     assert.equal(result.reason, 'database_error');
@@ -901,7 +887,6 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
 
   // SEC-27: Conflicting existing user/profile identity is rejected
   await t.test('SEC-27: Conflicting existing user/profile identity is rejected', async () => {
-    // Scenario A: User already has an existing profile, but receives an invitation with conflicting tenant
     const existingProfile = {
       id: 'existing-user-uuid',
       email: 'user@school.org',
@@ -909,29 +894,21 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       tenant_id: 'tenant-alpha',
       full_name: 'Existing Alpha Student',
     };
-
     const conflictingInvitation: MockInvitation = {
       id: 'inv-conflict-1',
       email: 'user@school.org',
       role: 'school_admin',
-      tenant_id: 'tenant-beta', // Conflicting tenant
+      tenant_id: 'tenant-beta',
       status: 'pending',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
     };
-
     const mockA = createMockAdminForSync([existingProfile], [conflictingInvitation]);
-    const userA = {
-      id: 'existing-user-uuid',
-      email: 'user@school.org',
-      user_metadata: {},
-    };
-
+    const userA = { id: 'existing-user-uuid', email: 'user@school.org', user_metadata: {} };
     const resultA = await validateAndSyncInvitedProfile(userA, () => mockA.client);
     assert.equal(resultA.synced, false, 'Conflicting identity binding must fail');
     assert.equal(resultA.trusted, false);
     assert.equal(resultA.reason, 'conflicting_identity_binding');
 
-    // Scenario B: Profile already exists with this email under a DIFFERENT user ID
     const existingOtherProfile = {
       id: 'other-user-uuid',
       email: 'shared@school.org',
@@ -939,7 +916,6 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       tenant_id: 'school-uuid-1',
       full_name: 'Legitimate Owner',
     };
-
     const validInvitation: MockInvitation = {
       id: 'inv-conflict-2',
       email: 'shared@school.org',
@@ -948,21 +924,15 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       status: 'pending',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
     };
-
     const mockB = createMockAdminForSync([existingOtherProfile], [validInvitation]);
-    const rogueUser = {
-      id: 'rogue-attacker-uuid', // Different ID attempting to hijack existing profile email
-      email: 'shared@school.org',
-      user_metadata: {},
-    };
-
+    const rogueUser = { id: 'rogue-attacker-uuid', email: 'shared@school.org', user_metadata: {} };
     const resultB = await validateAndSyncInvitedProfile(rogueUser, () => mockB.client);
     assert.equal(resultB.synced, false, 'Conflicting profile email with different ID must fail');
     assert.equal(resultB.trusted, false);
     assert.equal(resultB.reason, 'conflicting_existing_profile_identity');
   });
 
-  // SEC-28: Attacker-controlled user_metadata cannot alter invitation role, tenant, or identity binding
+  // SEC-28: Attacker user_metadata cannot alter invitation role, tenant, or identity
   await t.test('SEC-28: Attacker-controlled user_metadata cannot alter invitation role, tenant, or identity binding', async () => {
     const invitation: MockInvitation = {
       id: 'inv-metadata-override',
@@ -973,7 +943,6 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
       status: 'pending',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
     };
-
     const mock = createMockAdminForSync([], [invitation]);
     const attacker = {
       id: 'attacker-auth-override-id',
@@ -986,18 +955,302 @@ test('TASK-0002: Credential Exposure Containment Test Suite', async (t) => {
         id: 'some-other-id',
       },
     };
-
     const result = await validateAndSyncInvitedProfile(attacker, () => mock.client);
-
     assert.equal(result.synced, true);
     assert.equal(result.trusted, true);
     assert.equal(result.role, 'student', 'Role must remain student from authoritative invitation');
     assert.equal(result.tenantId, 'school-student-tenant', 'Tenant must remain school-student-tenant');
-
     const created = mock.profiles.find((p) => p.id === 'attacker-auth-override-id');
     assert.ok(created);
     assert.equal(created.role, 'student');
     assert.equal(created.tenant_id, 'school-student-tenant');
   });
-});
 
+  // â”€â”€ CORRECTION-03: SEC-29 through SEC-38 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  // SEC-29: Transactional binding â€” profile and invitation atomically succeed or fail together
+  await t.test('SEC-29: Transactional binding: profile and invitation consumption succeed or fail atomically', async () => {
+    // Sub-case A: Successful binding â€” profile created AND invitation consumed
+    const inv1: MockInvitation = {
+      id: 'inv-txn-1', email: 'txnuser@school.org', role: 'teacher',
+      tenant_id: 'txn-school-uuid', status: 'pending',
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    };
+    const mockA = createMockAdminForSync([], [inv1]);
+    const user1 = { id: 'txn-user-id', email: 'txnuser@school.org', user_metadata: {} };
+    const resultA = await validateAndSyncInvitedProfile(user1, () => mockA.client);
+    assert.equal(resultA.synced, true, 'Successful binding must report synced=true');
+    assert.equal(mockA.profiles.length, 1, 'Profile must be created on success');
+    assert.equal(mockA.profiles[0].role, 'teacher', 'Profile role must come from invitation');
+    const invA = mockA.invitations.find((i) => i.id === 'inv-txn-1');
+    assert.ok(invA);
+    assert.equal(invA.status, 'accepted', 'Invitation must be consumed on success');
+    assert.equal(invA.accepted_by, 'txn-user-id', 'accepted_by must be the authenticated user id');
+
+    // Sub-case B: RPC failure â€” neither profile created nor invitation consumed (rollback)
+    const inv2: MockInvitation = {
+      id: 'inv-txn-2', email: 'txnuser2@school.org', role: 'teacher',
+      tenant_id: 'txn-school-uuid', status: 'pending',
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    };
+    const mockB = createMockAdminForSync([], [inv2], { rpcFailMode: 'error' });
+    const user2 = { id: 'txn-user-2-id', email: 'txnuser2@school.org', user_metadata: {} };
+    const resultB = await validateAndSyncInvitedProfile(user2, () => mockB.client);
+    assert.equal(resultB.synced, false, 'Failed binding must report synced=false');
+    assert.equal(mockB.profiles.length, 0, 'No profile must exist after RPC failure');
+    const invB = mockB.invitations.find((i) => i.id === 'inv-txn-2');
+    assert.ok(invB);
+    assert.equal(invB.status, 'pending', 'Invitation must remain pending after RPC failure (rollback)');
+  });
+
+  // SEC-30: Concurrent invitation acceptance â€” exactly one succeeds
+  await t.test('SEC-30: Concurrent invitation acceptance: exactly one succeeds, one fails', async () => {
+    // CONCURRENCY LIMITATION: This test environment has no live PostgreSQL connection.
+    // True database-level race safety is provided by SELECT FOR UPDATE in
+    // 045_bind_invitation_rpc.sql. This test verifies the logical invariant sequentially.
+    // A full concurrent integration test requires a live Supabase project with two
+    // simultaneous Supabase client connections â€” this is PENDING human action.
+
+    const invitation: MockInvitation = {
+      id: 'inv-concurrent-1', email: 'concurrent@school.org', role: 'teacher',
+      tenant_id: 'concurrent-school-uuid', status: 'pending',
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    };
+    const mock = createMockAdminForSync([], [invitation]);
+    const userA = { id: 'concurrent-user-1', email: 'concurrent@school.org', user_metadata: {} };
+    const userB = { id: 'concurrent-user-2', email: 'concurrent@school.org', user_metadata: {} };
+
+    const result1 = await validateAndSyncInvitedProfile(userA, () => mock.client);
+    const result2 = await validateAndSyncInvitedProfile(userB, () => mock.client);
+
+    assert.equal(result1.synced, true, 'First acceptor must succeed');
+    assert.equal(result2.synced, false, 'Second acceptor must fail (invitation no longer pending)');
+    assert.equal(mock.profiles.length, 1, 'Exactly one profile must be created');
+    assert.equal(mock.profiles[0].id, 'concurrent-user-1', 'Profile must belong to the first acceptor');
+    const inv = mock.invitations.find((i) => i.id === 'inv-concurrent-1');
+    assert.ok(inv);
+    assert.equal(inv.status, 'accepted', 'Invitation must be accepted exactly once');
+    assert.equal(inv.accepted_by, 'concurrent-user-1', 'accepted_by must be the first acceptor');
+  });
+
+  // SEC-31: Token security â€” no bearer credential generated, stored, returned, or logged
+  await t.test('SEC-31: Token security: invitation token column is unused and no bearer credential is exposed', () => {
+    const invContent = fs.readFileSync(path.join(ROOT_DIR, 'src/lib/auth/invitations.ts'), 'utf8');
+    assert.ok(
+      !invContent.includes('token: crypto') &&
+      !invContent.includes('token: randomUUID') &&
+      !invContent.includes('token: generateToken'),
+      'invitations.ts must not generate or store raw token values'
+    );
+
+    const syncContent = fs.readFileSync(path.join(ROOT_DIR, 'src/lib/auth/callback-sync.ts'), 'utf8');
+    // The token field must not be read as a return value
+    assert.ok(
+      !syncContent.match(/return.*invitation\.token/),
+      'callback-sync.ts must not return invitation.token'
+    );
+    // Token status must be documented
+    assert.ok(
+      syncContent.toLowerCase().includes('unused'),
+      'callback-sync.ts must document that the token column is currently unused'
+    );
+
+    // Migration must not populate the token column
+    const migContent = fs.readFileSync(path.join(ROOT_DIR, 'supabase/migrations/045_bind_invitation_rpc.sql'), 'utf8');
+    assert.ok(
+      !migContent.includes('token :=') && !migContent.includes("token ="),
+      '045 migration must not assign any token value'
+    );
+  });
+
+  // SEC-32: GoTrue/application correlation â€” authentication alone doesn't grant role/tenant
+  await t.test('SEC-32: GoTrue/application correlation: authentication alone does not grant invitation role/tenant', async () => {
+    const syncContent = fs.readFileSync(path.join(ROOT_DIR, 'src/lib/auth/callback-sync.ts'), 'utf8');
+    assert.ok(
+      syncContent.includes('GoTrue') || syncContent.includes('GoTrue/application'),
+      'callback-sync.ts must document the GoTrue/application invitation correlation'
+    );
+    assert.ok(
+      syncContent.includes('user_metadata') && syncContent.includes('never'),
+      'callback-sync.ts must explicitly state that user_metadata is never authoritative'
+    );
+
+    // Behavioral: authenticated user with valid GoTrue session but NO pending invitation
+    const mock = createMockAdminForSync([], []);
+    const authenticatedUser = {
+      id: 'authenticated-but-uninvited',
+      email: 'uninvited@school.org',
+      user_metadata: { full_name: 'Legitimate GoTrue User' },
+    };
+    const result = await validateAndSyncInvitedProfile(authenticatedUser, () => mock.client);
+    assert.equal(result.synced, false, 'Authenticated user without invitation must not be synced');
+    assert.equal(result.trusted, false, 'Authentication alone must not grant trust');
+    assert.equal(result.reason, 'no_authoritative_invitation');
+    assert.equal(result.role, undefined, 'No role must be assigned without authoritative invitation');
+    assert.equal(result.tenantId, undefined, 'No tenant must be assigned without authoritative invitation');
+    assert.equal(mock.profiles.length, 0, 'No profile must be created for uninvited authenticated user');
+  });
+
+  // SEC-33: Metadata manipulation cannot alter authoritative role, tenant, email
+  await t.test('SEC-33: user_metadata manipulation cannot alter authoritative role, tenant, email, or full_name', async () => {
+    const invitation: MockInvitation = {
+      id: 'inv-meta-override',
+      email: 'legitimate@school.org',
+      role: 'student',
+      tenant_id: 'correct-tenant-uuid',
+      full_name: 'Authorized Student',
+      status: 'pending',
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    };
+    const mock = createMockAdminForSync([], [invitation]);
+    const attacker = {
+      id: 'meta-attacker-id',
+      email: 'legitimate@school.org',
+      user_metadata: {
+        role: 'super_admin', tenant_id: 'stolen-tenant', full_name: 'Hacked Name',
+        email: 'hacker@evil.com', id: 'fake-user-id',
+        accepted_by: 'meta-attacker-id', status: 'accepted',
+      },
+    };
+    const result = await validateAndSyncInvitedProfile(attacker, () => mock.client);
+    assert.equal(result.synced, true, 'Legitimate invited user must succeed');
+    assert.equal(result.trusted, true);
+    assert.equal(result.role, 'student', 'Role must come from invitation, not metadata');
+    assert.equal(result.tenantId, 'correct-tenant-uuid', 'Tenant must come from invitation, not metadata');
+    const profile = mock.profiles.find((p) => p.id === 'meta-attacker-id');
+    assert.ok(profile, 'Profile must be created');
+    assert.equal(profile.role, 'student', 'Profile role must be student from invitation');
+    assert.equal(profile.tenant_id, 'correct-tenant-uuid', 'Profile tenant must be from invitation');
+    assert.equal(profile.email, 'legitimate@school.org', 'Profile email must be the invitation email, not metadata');
+    assert.notEqual(profile.email, 'hacker@evil.com', 'Metadata email must not override invitation email');
+    const inv = mock.invitations.find((i) => i.id === 'inv-meta-override');
+    assert.ok(inv);
+    assert.equal(inv.status, 'accepted');
+    assert.equal(inv.accepted_by, 'meta-attacker-id');
+  });
+
+  // SEC-34: Replay after successful acceptance
+  await t.test('SEC-34: Replay after successful acceptance: the same invitation cannot be reused', async () => {
+    const invitation: MockInvitation = {
+      id: 'inv-replay-after-accept',
+      email: 'onetime@school.org',
+      role: 'teacher',
+      tenant_id: 'school-replay-uuid',
+      status: 'pending',
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    };
+    const mock = createMockAdminForSync([], [invitation]);
+    const legitUser = { id: 'legit-user-id', email: 'onetime@school.org', user_metadata: {} };
+    const result1 = await validateAndSyncInvitedProfile(legitUser, () => mock.client);
+    assert.equal(result1.synced, true, 'First acceptance must succeed');
+
+    const replayUser = { id: 'replay-attacker-id', email: 'onetime@school.org', user_metadata: {} };
+    const result2 = await validateAndSyncInvitedProfile(replayUser, () => mock.client);
+    assert.equal(result2.synced, false, 'Replay of accepted invitation must fail');
+    assert.equal(result2.trusted, false);
+    assert.equal(result2.reason, 'no_authoritative_invitation', 'Accepted invitation not returned by pending-only query');
+    assert.equal(mock.profiles.length, 1, 'Only one profile must exist after replay attempt');
+    assert.equal(mock.profiles[0].id, 'legit-user-id', 'Profile must belong to legitimate user only');
+  });
+
+  // SEC-35: Expired invitation cannot bind accounts
+  await t.test('SEC-35: Expired invitation cannot bind accounts', async () => {
+    const expiredInvitation: MockInvitation = {
+      id: 'inv-sec35-expired',
+      email: 'expired35@school.org',
+      role: 'teacher',
+      tenant_id: 'school-uuid-1',
+      status: 'pending',
+      expires_at: new Date(Date.now() - 7200000).toISOString(),
+    };
+    const mock = createMockAdminForSync([], [expiredInvitation]);
+    const user = { id: 'sec35-user-id', email: 'expired35@school.org', user_metadata: {} };
+    const result = await validateAndSyncInvitedProfile(user, () => mock.client);
+    assert.equal(result.synced, false, 'Expired invitation must not allow binding');
+    assert.equal(result.trusted, false);
+    assert.equal(result.reason, 'invitation_expired');
+    assert.equal(mock.profiles.length, 0, 'No profile must be created for expired invitation');
+    const inv = mock.invitations.find((i) => i.id === 'inv-sec35-expired');
+    assert.ok(inv);
+    assert.equal(inv.status, 'expired', 'Expired invitation must be marked expired');
+  });
+
+  // SEC-36: Revoked invitation cannot bind accounts
+  await t.test('SEC-36: Revoked invitation cannot bind accounts', async () => {
+    const revokedInvitation: MockInvitation = {
+      id: 'inv-sec36-revoked',
+      email: 'revoked36@school.org',
+      role: 'teacher',
+      tenant_id: 'school-uuid-1',
+      status: 'revoked',
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    };
+    const mock = createMockAdminForSync([], [revokedInvitation]);
+    const user = { id: 'sec36-user-id', email: 'revoked36@school.org', user_metadata: {} };
+    const result = await validateAndSyncInvitedProfile(user, () => mock.client);
+    assert.equal(result.synced, false, 'Revoked invitation must not allow binding');
+    assert.equal(result.trusted, false);
+    assert.equal(result.reason, 'no_authoritative_invitation', 'Revoked invitation not found via pending-only query');
+    assert.equal(mock.profiles.length, 0, 'No profile must be created for revoked invitation');
+  });
+
+  // SEC-37: Cross-tenant invitation abuse
+  await t.test('SEC-37: Cross-tenant invitation abuse: user cannot use another tenant invitation', async () => {
+    const tenantAInvitation: MockInvitation = {
+      id: 'inv-sec37-tenant-a',
+      email: 'staffA@tenant-a.org',
+      role: 'teacher',
+      tenant_id: 'tenant-a-uuid',
+      status: 'pending',
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    };
+    const mock = createMockAdminForSync([], [tenantAInvitation]);
+    const attackerFromTenantB = {
+      id: 'tenant-b-attacker-uuid',
+      email: 'staffB@tenant-b.org',
+      user_metadata: { tenant_id: 'tenant-a-uuid' },
+    };
+    const result = await validateAndSyncInvitedProfile(attackerFromTenantB, () => mock.client);
+    assert.equal(result.synced, false, 'Cross-tenant invitation abuse must fail');
+    assert.equal(result.trusted, false);
+    assert.equal(result.reason, 'no_authoritative_invitation', 'No invitation exists for attacker email');
+    assert.equal(result.tenantId, undefined, 'Attacker must not receive Tenant A membership');
+    assert.equal(mock.profiles.length, 0, 'No profile created for cross-tenant attack');
+    const inv = mock.invitations.find((i) => i.id === 'inv-sec37-tenant-a');
+    assert.ok(inv);
+    assert.equal(inv.status, 'pending', 'Tenant A invitation must remain pending');
+  });
+
+  // SEC-38: Existing identity conflict via invitation abuse
+  await t.test('SEC-38: Existing identity conflict: existing account cannot be rebound through invitation', async () => {
+    const establishedProfile = {
+      id: 'established-user-uuid',
+      email: 'established@school.org',
+      role: 'student',
+      tenant_id: 'tenant-alpha',
+      full_name: 'Established Student',
+    };
+    const upgradeInvitation: MockInvitation = {
+      id: 'inv-sec38-upgrade',
+      email: 'established@school.org',
+      role: 'super_admin',
+      tenant_id: 'tenant-beta',
+      status: 'pending',
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+    };
+    const mock = createMockAdminForSync([establishedProfile], [upgradeInvitation]);
+    const user = {
+      id: 'established-user-uuid',
+      email: 'established@school.org',
+      user_metadata: {},
+    };
+    const result = await validateAndSyncInvitedProfile(user, () => mock.client);
+    assert.equal(result.synced, false, 'Conflicting invitation against established profile must fail');
+    assert.equal(result.trusted, false);
+    assert.equal(result.reason, 'conflicting_identity_binding', 'Must report conflicting_identity_binding');
+    const existingProfile = mock.profiles.find((p) => p.id === 'established-user-uuid');
+    assert.ok(existingProfile, 'Established profile must still exist');
+    assert.equal(existingProfile.role, 'student', 'Role must remain student, not super_admin');
+    assert.equal(existingProfile.tenant_id, 'tenant-alpha', 'Tenant must remain tenant-alpha, not tenant-beta');
+  });
+});

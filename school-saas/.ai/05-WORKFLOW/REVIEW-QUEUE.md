@@ -138,42 +138,54 @@ Supervisory corrections applied. Resubmitted for ChatGPT review and Human Projec
 ## REVIEW-TASK-0002 — Credential Exposure Containment Review
 **Task:** TASK-0002  
 **Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor) & Human Project Owner  
-**Status:** OPEN (SUBMITTED FOR SUPERVISORY REVIEW)  
+**Status:** OPEN (CORRECTION-03 SUBMITTED FOR SUPERVISORY REVIEW)  
 **Priority:** P1 (Critical Security Containment)  
 **Branch:** `ai-eos/task-0002-credential-exposure-containment` (Unmerged)  
 **Specification:** `.ai/05-WORKFLOW/TASK-0002.md`  
 **Implementation Report:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`  
-**Submission Message:** `.ai/05-WORKFLOW/messages/MSG-0010.md`
+**Submission Message:** `.ai/05-WORKFLOW/messages/MSG-0011.md`
 
 ### Scope
-Verify containment of credential exposure risks across the repository:
-1. Deletion of 14 unvetted scripts containing hardcoded Supabase pooler credentials and root debug scripts.
-2. Complete untracking of `scratch/` directory and `.gitignore` update.
-3. Remediation of `pg-fallback.ts` with `server-only`, secure TLS (`rejectUnauthorized: true`), and complete removal of `createAuthUserAndProfileDirectly`.
-4. Elimination of dangerous `UPDATE auth.users SET encrypted_password` mutation in `src/app/[tenant]/login/actions.ts` without introducing new direct database fallbacks.
-5. Transition of user provisioning in `src/app/[tenant]/login/provision-auth.ts`, `src/app/actions/tenant.ts`, and `src/app/api/public/register-tenant/route.ts` to Supabase Auth Admin APIs.
-6. Introduction of dedicated `public.user_invitations` table (`supabase/migrations/044_user_invitations.sql`) and server-only invitation service `src/lib/auth/invitations.ts` enforcing administrative role hierarchies.
-7. Hardening of `src/app/api/auth/callback/route.ts` and `src/lib/auth/callback-sync.ts`: never trusting client-supplied `user_metadata.role` or `user_metadata.tenant_id`, rejecting arbitrary email matches, validating strictly against server-authoritative `user_invitations`, enforcing replay/expiration/rebinding defense, and executing atomic profile creation without destructive `delete + insert` patterns.
-8. Replacement of ad-hoc service-role client initializations with server-only `createAdminClient()`.
-9. Enforcing secure TLS across all maintenance scripts and sourcing passwords from environment variables.
-10. Execution of automated security regression test suite `tests/security/credential-containment.test.ts` (29 subtests SEC-01 through SEC-28).
-11. Regression verification of TASK-0004 and TASK-0005 security suites (66 tests total passing).
-12. Verification of typecheck, linter, and production build.
+Verify containment of credential exposure risks across the repository, including all CORRECTION-03 requirements:
+1. Deletion of 14 unvetted scripts containing hardcoded credentials.
+2. Complete untracking of `scratch/` and `.gitignore` update.
+3. Remediation of `pg-fallback.ts` with `server-only`, secure TLS, removal of `createAuthUserAndProfileDirectly`.
+4. Elimination of dangerous `UPDATE auth.users SET encrypted_password` mutation.
+5. Transition to Supabase Auth Admin APIs for user provisioning.
+6. Dedicated `public.user_invitations` table (migration 044) with server-only invitation service enforcing role hierarchies.
+7. Hardening of `callback-sync.ts` — never trusting `user_metadata`, requiring authoritative invitation.
+8. **[CORRECTION-03]** `supabase/migrations/045_bind_invitation_rpc.sql`: `bind_invitation_to_user(invitation_id, user_id)` SECURITY DEFINER stored procedure — SELECT FOR UPDATE, atomic profile insert + invitation consumption, revoke PUBLIC/anon/authenticated EXECUTE, grant service_role only.
+9. **[CORRECTION-03]** `callback-sync.ts` updated to call RPC — application-level compensating delete removed.
+10. **[CORRECTION-03]** GoTrue/application correlation documented in `callback-sync.ts`.
+11. **[CORRECTION-03]** Token column status documented; no bearer credential generated/stored/returned.
+12. **[CORRECTION-03]** SEC-29 through SEC-38 added (10 new tests). Total: 39 credential-containment, 76 repository-wide.
+13. Regression verification of TASK-0004 and TASK-0005 security suites.
+14. Verification of typecheck, linter, and production build.
 
-### Evidence Summary
-- 14 files deleted from git tracking (`run_migration_*.js`, `dump_applicants.js`, `test-create-session.ts`, `src/scripts/*`).
-- `scratch/` purged from tracking and `.gitignore` updated.
-- Zero occurrences of known production pooler credentials, passwords, or service-role keys in working tree.
-- Zero occurrences of `rejectUnauthorized: false` across `src/` and `scripts/`.
-- Zero direct SQL mutations to `auth.users` in application source.
-- Callback route profile sync hardened against privilege escalation (`SEC-15`), cross-tenant spoofing (`SEC-16`), uninvited profile claims (`SEC-19`), expired tokens (`SEC-20`), replay attacks (`SEC-21`), identity rebinding (`SEC-22`), role spoofing (`SEC-23`), tenant spoofing (`SEC-24`), non-atomic deletion (`SEC-25`), database errors (`SEC-26`), identity conflicts (`SEC-27`), and metadata tampering (`SEC-28`).
-- 66/66 automated tests passed (15 in `api-guard.test.ts`, 22 in `privileged-api-containment.test.ts`, 29 in `credential-containment.test.ts`).
-- `npx tsc --noEmit` passed with 0 errors.
-- `npx eslint src/lib/auth/callback-sync.ts src/lib/auth/invitations.ts src/app/api/auth/callback/route.ts src/app/actions/tenant.ts tests/security/credential-containment.test.ts` passed with 0 errors and 0 warnings.
-- `npm run build` completed successfully with 0 errors (all 40 routes generated).
+### Evidence Summary — CORRECTION-03
+- `supabase/migrations/045_bind_invitation_rpc.sql` created: `bind_invitation_to_user(p_invitation_id UUID, p_user_id UUID)` — SECURITY DEFINER, `SET search_path = public, pg_catalog`, `SELECT FOR UPDATE`, atomic INSERT + UPDATE, REVOKE PUBLIC/anon/authenticated, GRANT service_role.
+- `src/lib/auth/callback-sync.ts` updated: `rpc('bind_invitation_to_user', { p_invitation_id, p_user_id })` replaces the previous INSERT+UPDATE+DELETE pattern. GoTrue/application correlation documented. Token column unused status documented.
+- `tests/security/credential-containment.test.ts` updated: mock now includes `.ilike()` and `.rpc()` handlers. SEC-29–SEC-38 added.
+- **76/76 automated tests passed** (15 api-guard + 22 privileged-api-containment + 39 credential-containment). Exit code 0.
+- **`npx tsc --noEmit`**: 0 errors. Exit code 0.
+- **`npx eslint src/lib/auth/callback-sync.ts tests/security/credential-containment.test.ts`**: 0 errors, 0 warnings. Exit code 0.
+- **`npm run build`**: Compiled successfully (2.4 min). TypeScript type-check running at time of governance update — no errors expected (tsc --noEmit already confirmed 0 errors separately).
+
+### Concurrency Limitation (Disclosed per AC-029)
+SEC-30 verifies the concurrent acceptance logical invariant sequentially via the mock. True database-level race safety is provided by `SELECT FOR UPDATE` in `045_bind_invitation_rpc.sql`. A live concurrent integration test requires two simultaneous Supabase client connections against a live PostgreSQL instance — this is **PENDING human action** against the live Supabase project.
+
+### SECURITY DEFINER Privilege Verification (Static)
+The migration includes:
+```sql
+REVOKE EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) FROM authenticated;
+GRANT  EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) TO service_role;
+```
+Runtime verification requires applying the migration to the live Supabase project and confirming grants via `\df+ bind_invitation_to_user` in psql — **PENDING human action**.
 
 ### Supervisor Assessment & Decision
-Amendment 2 corrections applied. Resubmitted for ChatGPT supervisory review prior to human project owner merge decision. Do not merge.
+CORRECTION-03 implemented. Resubmitted for ChatGPT supervisory review prior to human project owner merge decision. **Do not merge.**
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.

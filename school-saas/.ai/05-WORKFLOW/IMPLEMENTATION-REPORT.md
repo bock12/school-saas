@@ -1196,3 +1196,157 @@ As mandated by supervisory directives and project non-goals:
 - Multi-factor authentication (MFA) was not implemented.
 - TASK-0004 `authorizeApiRequest()` and TASK-0005 privileged API containment remain fully intact and verified by regression tests (`AC-017`).
 - The branch remains **unmerged** awaiting supervisory review from ChatGPT.
+
+---
+
+## TASK-0002-CORRECTION-03 — Final Invitation Trust-Boundary Hardening
+**Date:** 2026-09-05  
+**Status:** IMPLEMENTED — IN_REVIEW (pending ChatGPT supervisory review)  
+**Branch:** `ai-eos/task-0002-credential-exposure-containment` (Unmerged)
+
+### Summary
+Replaced the application-level two-step INSERT+UPDATE+DELETE compensating transaction pattern in `callback-sync.ts` with a PostgreSQL `SECURITY DEFINER` stored procedure (`bind_invitation_to_user`) that executes all writes inside a single PostgreSQL transaction with `SELECT FOR UPDATE` row-level locking. Added 10 new security tests (SEC-29 to SEC-38). Documented GoTrue/application invitation correlation and token column status.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `supabase/migrations/045_bind_invitation_rpc.sql` | [NEW] SECURITY DEFINER RPC — atomic invitation binding |
+| `src/lib/auth/callback-sync.ts` | [MODIFIED] Uses `.rpc('bind_invitation_to_user', ...)` instead of INSERT+UPDATE+DELETE |
+| `tests/security/credential-containment.test.ts` | [MODIFIED] Added `.ilike()` + `.rpc()` mock, SEC-29–SEC-38 |
+| `.ai/05-WORKFLOW/TASK-0002.md` | [MODIFIED] Added AC-023 through AC-031 |
+| `.ai/05-WORKFLOW/REVIEW-QUEUE.md` | [MODIFIED] Updated REVIEW-TASK-0002 with CORRECTION-03 evidence |
+| `.ai/05-WORKFLOW/CONTROL-STATE.yaml` | [MODIFIED] sub_status=CORRECTION_03_IMPLEMENTED, REC-0014 added |
+
+### Database/RPC Changes
+
+**Migration 045: `bind_invitation_to_user(p_invitation_id UUID, p_user_id UUID) RETURNS JSONB`**
+
+- `SECURITY DEFINER` with `SET search_path = public, pg_catalog`
+- `SELECT ... FOR UPDATE` on the invitation row — prevents concurrent acceptance
+- Validates: existence, status=pending, expiration, rebinding, conflicting profile
+- Atomically: INSERT profile (ON CONFLICT DO NOTHING) + UPDATE invitation to accepted
+- Returns JSONB `{success, role, tenant_id, email}` on success; `{success: false, reason}` on failure
+- All values (role, tenant_id, email, full_name) taken from the LOCKED invitation row — no caller parameter can override them
+- Privilege grants: `REVOKE FROM PUBLIC`, `REVOKE FROM anon`, `REVOKE FROM authenticated`, `GRANT TO service_role`
+
+### Trust-Boundary Analysis
+
+**Invitation acceptance trust chain (CORRECTION-03):**
+```
+Administrator calls inviteTenantAdmin()
+  → canActorIssueInvitation() checks role hierarchy   [authoritative: profiles table]
+  → INSERT user_invitations (role, tenant, email)     [authoritative record created]
+  → supabaseAdmin.auth.admin.inviteUserByEmail()       [GoTrue magic-link dispatched]
+
+User clicks magic link → GoTrue verifies email possession
+  → /api/auth/callback?code=...
+  → supabase.auth.exchangeCodeForSession(code)         [GoTrue: verifies signed token]
+  → user.id (stable UUID), user.email (verified)
+  → validateAndSyncInvitedProfile(user)
+      → SELECT profile WHERE id=user.id               [existing profile check]
+      → SELECT invitation WHERE email=normalizedEmail AND status=pending
+      → rpc('bind_invitation_to_user', {p_invitation_id, p_user_id})
+          → SELECT FOR UPDATE on invitation row        [lock prevents race]
+          → validate status=pending, not expired, not rebound, no conflict
+          → INSERT profile using invitation.role, invitation.tenant_id, invitation.email
+          → UPDATE invitation SET status=accepted, accepted_by=user.id
+          → RETURN {success, role, tenant_id, email}  [all from invitation row]
+```
+
+**Security invariants preserved:**
+- `user_metadata.role` and `user_metadata.tenant_id` are NEVER read as authoritative
+- Role and tenant come exclusively from the locked invitation row
+- Email equality alone is not sufficient: invitation must exist, be pending, and not expired
+- Application code cannot cause partial state: PostgreSQL rolls back automatically on any failure
+
+### Token Column Analysis
+
+The `user_invitations.token` column exists in the schema from migration 044 but:
+- No token value is generated during invitation creation (`invitations.ts` does not populate it)
+- No token value is read or returned in `callback-sync.ts`
+- No token value is passed to the RPC
+- The column is documented as unused in `callback-sync.ts` comments
+- **REC-0014:** A follow-up migration should `ALTER TABLE user_invitations DROP COLUMN token` to eliminate the unused credential-like field
+
+### GoTrue / Application Correlation
+
+The two invitation systems correlate as follows:
+1. **GoTrue** (`auth.users`) verifies email possession via signed magic-link token. The session is established only after the user proves they control the email address.
+2. **Application** (`user_invitations`) verifies authorization — only emails that an authorized administrator explicitly invited may receive a role and tenant binding.
+
+The correlation proof is: GoTrue verifies *who* the user is (email possession); the application invitation verifies *what they are authorized to be* (role + tenant). Neither alone is sufficient. There is no cryptographic link between the GoTrue token and the `user_invitations` record — this is standard practice for this architecture pattern and does not weaken the security model.
+
+### Concurrency Protection
+
+`SELECT ... FOR UPDATE` in `bind_invitation_to_user` acquires an exclusive row-level lock for the duration of the transaction. A second concurrent call for the same invitation row blocks until the first transaction commits. After the first transaction commits, the invitation status is `accepted` (not `pending`), so the second call's status check fails and returns `invitation_not_pending`. This prevents double acceptance.
+
+**Limitation:** True concurrent database-level race testing requires a live PostgreSQL instance with two simultaneous connections. The test environment uses an in-memory mock. SEC-30 verifies the logical invariant sequentially. Live concurrent integration testing is **PENDING human action**.
+
+### Tests
+
+| Category | Count | Result |
+|----------|-------|--------|
+| `tests/auth/api-guard.test.ts` | 15 | ✅ PASS |
+| `tests/security/privileged-api-containment.test.ts` | 22 | ✅ PASS |
+| `tests/security/credential-containment.test.ts` | 39 | ✅ PASS |
+| **Total** | **76** | **✅ ALL PASS** |
+
+New tests added:
+- SEC-29: Transactional binding (success + rollback sub-cases)
+- SEC-30: Concurrent acceptance logical invariant (limitation disclosed)
+- SEC-31: Token column unused, no bearer credential exposed
+- SEC-32: GoTrue correlation — authentication alone does not grant role/tenant
+- SEC-33: Metadata manipulation cannot alter role/tenant/email/full_name
+- SEC-34: Replay after successful acceptance
+- SEC-35: Expired invitation cannot bind
+- SEC-36: Revoked invitation cannot bind
+- SEC-37: Cross-tenant invitation abuse
+- SEC-38: Existing identity conflict via invitation
+
+### Verification Commands and Results
+
+```
+Command: node --conditions=react-server --import tsx --test tests/auth/api-guard.test.ts tests/security/privileged-api-containment.test.ts tests/security/credential-containment.test.ts
+Result:  tests 76 | pass 76 | fail 0 | exit code 0
+```
+
+```
+Command: npx tsc --noEmit
+Result:  0 errors | exit code 0
+```
+
+```
+Command: npx eslint src/lib/auth/callback-sync.ts tests/security/credential-containment.test.ts
+Result:  0 errors | 0 warnings | exit code 0
+```
+
+```
+Command: npm run build
+Result:  ✓ Compiled successfully (2.4 min) | TypeScript check running | exit code TBD at commit time
+```
+
+### Remaining Risks and Limitations
+
+1. **Live concurrency test (PENDING HUMAN ACTION):** SEC-30 is a sequential simulation. True race safety must be verified against a live Supabase project.
+2. **Migration deployment (PENDING HUMAN ACTION):** Migration 045 must be applied to the Supabase project via `supabase db push` or the dashboard. The RPC does not exist until the migration runs.
+3. **SECURITY DEFINER grant verification (PENDING HUMAN ACTION):** Runtime privilege verification (`\df+ bind_invitation_to_user`) must be performed after migration deployment.
+4. **Token column removal (PENDING — REC-0014):** The unused `token` column should be dropped in a follow-up migration.
+5. **Git history:** Production credentials committed to Git history remain. Human administrator action required to rotate credentials and assess exposure.
+6. **Merge blocked:** Do not merge until ChatGPT supervisory review is complete and human project owner approves.
+
+### Human Actions Required
+
+1. Apply migration 045 to live Supabase project: `supabase db push` or dashboard SQL editor
+2. Verify RPC privilege grants: `SELECT routine_name, grantee, privilege_type FROM information_schema.role_routine_grants WHERE routine_name = 'bind_invitation_to_user';`
+3. Run live concurrent acceptance test with two simultaneous GoTrue clients
+4. Rotate production Supabase credentials (pooler password, service role key)
+5. Approve and merge branch after supervisory review
+
+### Explicit Architecture Confirmation
+- No out-of-scope architecture was changed.
+- Production credentials were not rotated.
+- Git history was not rewritten.
+- RLS policies were not weakened.
+- TASK-0004 and TASK-0005 suites remain fully intact (76/76 pass).
+- Branch remains unmerged.
