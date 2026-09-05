@@ -127,7 +127,7 @@ BEGIN
     p_user_id,
     lower(v_invitation.email),
     COALESCE(v_invitation.full_name, 'Staff Member'),
-    v_invitation.role,
+    v_invitation.role::public.user_role,
     v_invitation.tenant_id
   )
   ON CONFLICT (id) DO NOTHING;
