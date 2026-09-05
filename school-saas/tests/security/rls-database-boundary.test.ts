@@ -48,17 +48,45 @@ interface RlsErrorCapture {
   resource: string;
 }
 
+/**
+ * Resolves SSL configuration for the RLS test harness in a fail-closed manner:
+ * - When DATABASE_SSL_STRICT is absent/undefined, strict TLS (rejectUnauthorized: true) is enabled by default.
+ * - When DATABASE_SSL_STRICT='true', strict TLS is enabled.
+ * - When DATABASE_SSL_STRICT='false', verification is disabled only as an explicit test-only opt-out.
+ * - When DATABASE_SSL_CA is supplied (or found in supabase/certs/prod-ca-2021.crt), strict TLS verifies against that CA.
+ * - JavaScript Boolean() is avoided to prevent string "false" from being treated as truthy.
+ */
+export function resolveTestSslConfig(env: Partial<NodeJS.ProcessEnv> | Record<string, string | undefined> = process.env): pg.ConnectionConfig['ssl'] {
+  let customCa = env.DATABASE_SSL_CA;
+  if (customCa && fs.existsSync(customCa)) {
+    customCa = fs.readFileSync(customCa, 'utf8');
+  }
+
+  const strictTls =
+    env.DATABASE_SSL_STRICT === undefined ||
+    env.DATABASE_SSL_STRICT === 'true';
+
+  return customCa
+    ? {
+        rejectUnauthorized: true,
+        ca: customCa,
+      }
+    : {
+        rejectUnauthorized: strictTls,
+      };
+}
+
 test('TASK-0006: Real PostgreSQL RLS & Tenant Isolation Test Harness', async (t) => {
   // Test Environment TLS Configuration:
   // Supabase remote cloud poolers utilize intermediate certificates issued by the Supabase Root CA.
-  // If a local custom CA certificate is provided via DATABASE_SSL_CA, it is loaded into the TLS context.
-  // Otherwise, in non-production test environments, SSL connection is established via sslmode=require.
-  // Production application connections strictly enforce rejectUnauthorized: true via pg-fallback.ts.
-  const customCa = process.env.DATABASE_SSL_CA;
-  const enforceStrictTls = Boolean(process.env.DATABASE_SSL_STRICT ?? false);
-  const sslConfig: pg.ConnectionConfig['ssl'] = customCa
-    ? { rejectUnauthorized: true, ca: customCa }
-    : { rejectUnauthorized: enforceStrictTls };
+  // Load repository CA certificate for Supabase Cloud pooler verification if not already explicitly configured.
+  const defaultCaPath = path.join(process.cwd(), 'supabase', 'certs', 'prod-ca-2021.crt');
+  if (!process.env.DATABASE_SSL_CA && fs.existsSync(defaultCaPath)) {
+    process.env.DATABASE_SSL_CA = defaultCaPath;
+  }
+
+  // Resolves fail-closed SSL configuration: strict TLS enabled by default
+  const sslConfig = resolveTestSslConfig(process.env);
 
   const client = new Client({
     connectionString: dbUrl,
@@ -972,3 +1000,30 @@ test('TASK-0006: Real PostgreSQL RLS & Tenant Isolation Test Harness', async (t)
   await client.query('ROLLBACK');
   await client.end();
 });
+
+test('TASK-0006-CORRECTION: Test Harness TLS Configuration & Fail-Closed Behavior', async (t) => {
+  await t.test('TLS-01: Default configuration is fail-closed (rejectUnauthorized: true when DATABASE_SSL_STRICT is absent)', () => {
+    const config = resolveTestSslConfig({ DATABASE_SSL_STRICT: undefined, DATABASE_SSL_CA: undefined });
+    assert.ok(typeof config === 'object' && config !== null);
+    assert.strictEqual((config as any).rejectUnauthorized, true, 'Default configuration must fail-closed with rejectUnauthorized: true');
+  });
+
+  await t.test('TLS-02: Explicit DATABASE_SSL_STRICT="true" enforces strict TLS (rejectUnauthorized: true)', () => {
+    const config = resolveTestSslConfig({ DATABASE_SSL_STRICT: 'true', DATABASE_SSL_CA: undefined });
+    assert.strictEqual((config as any).rejectUnauthorized, true);
+  });
+
+  await t.test('TLS-03: Explicit DATABASE_SSL_STRICT="false" allows test-only opt-out without JavaScript truthiness bug', () => {
+    const config = resolveTestSslConfig({ DATABASE_SSL_STRICT: 'false', DATABASE_SSL_CA: undefined });
+    assert.strictEqual((config as any).rejectUnauthorized, false);
+    assert.notStrictEqual((config as any).rejectUnauthorized, true, '"false" string must not evaluate to boolean true');
+  });
+
+  await t.test('TLS-04: DATABASE_SSL_CA supplies custom CA certificate with strict verification (rejectUnauthorized: true)', () => {
+    const caCert = '-----BEGIN CERTIFICATE-----\nTEST_MOCK_CA\n-----END CERTIFICATE-----';
+    const config = resolveTestSslConfig({ DATABASE_SSL_CA: caCert, DATABASE_SSL_STRICT: 'false' });
+    assert.strictEqual((config as any).rejectUnauthorized, true, 'Supplied CA must always enforce rejectUnauthorized: true');
+    assert.strictEqual((config as any).ca, caCert);
+  });
+});
+

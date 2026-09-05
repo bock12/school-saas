@@ -1693,34 +1693,53 @@ In `supabase/migrations/046_fix_rls_boundaries_and_exam_security.sql`, modified 
   - `PROFILE-08`: Tested anonymous web caller (`role = 'anon'`). Denied at RLS (0 rows affected) and denied by trigger defense-in-depth with SQLSTATE `42501` (`Unauthorized: only super_admin or service_role can modify profile role`).
   - `PROFILE-09`: Tested authenticated web caller with empty `sub`. Denied at RLS (0 rows affected) and denied by trigger defense-in-depth with SQLSTATE `42501`.
   - `PROFILE-10`: Tested direct database superuser console (`postgres` without web claim headers). Allowed (`rowCount = 1`) to ensure schema migrations and CLI operations succeed.
-- **Residual Risk:** None. Web requests cannot impersonate `service_role` because PostgREST derives `request.jwt.claim.role` strictly from verified JWT signatures.
+- **Residual Risk:** No residual exploitable path identified under the tested execution contexts. Web requests cannot impersonate `service_role` because PostgREST derives `request.jwt.claim.role` strictly from verified JWT signatures.
 
 ### 11. TLS/Test Harness Changes
-- **Change:** Removed blanket `rejectUnauthorized: false` default in `tests/security/rls-database-boundary.test.ts`.
-- **Implementation:** Added conditional TLS handling:
+- **Change:** Made the test harness TLS configuration strictly fail-closed (`rejectUnauthorized: true` by default) and eliminated JavaScript `Boolean()` environment string parsing.
+- **Implementation:** Added `resolveTestSslConfig` in `tests/security/rls-database-boundary.test.ts`:
   ```ts
-  const customCa = process.env.DATABASE_SSL_CA;
-  const enforceStrictTls = Boolean(process.env.DATABASE_SSL_STRICT ?? false);
-  const sslConfig: pg.ConnectionConfig['ssl'] = customCa
-    ? { rejectUnauthorized: true, ca: customCa }
-    : { rejectUnauthorized: enforceStrictTls };
+  export function resolveTestSslConfig(env: Partial<NodeJS.ProcessEnv> | Record<string, string | undefined> = process.env): pg.ConnectionConfig['ssl'] {
+    let customCa = env.DATABASE_SSL_CA;
+    if (customCa && fs.existsSync(customCa)) {
+      customCa = fs.readFileSync(customCa, 'utf8');
+    }
+
+    const strictTls =
+      env.DATABASE_SSL_STRICT === undefined ||
+      env.DATABASE_SSL_STRICT === 'true';
+
+    return customCa
+      ? {
+          rejectUnauthorized: true,
+          ca: customCa,
+        }
+      : {
+          rejectUnauthorized: strictTls,
+        };
+  }
   ```
-- **Verification:** Verified that production connection code (`src/lib/db/pg-fallback.ts`) strictly maintains `rejectUnauthorized: true`. Verified that `credential-containment.test.ts` test `SEC-08` passes repository-wide with zero insecure TLS configurations.
+- **Verification & Regression Tests:** Added explicit regression subtests `TLS-01` through `TLS-04` in `tests/security/rls-database-boundary.test.ts`:
+  - `TLS-01`: Default configuration is fail-closed (`rejectUnauthorized: true` when `DATABASE_SSL_STRICT` is absent/undefined).
+  - `TLS-02`: Explicit `DATABASE_SSL_STRICT="true"` enforces strict TLS (`rejectUnauthorized: true`).
+  - `TLS-03`: Explicit `DATABASE_SSL_STRICT="false"` permits test-only opt-out without JavaScript truthiness bug (`"false"` does not evaluate to boolean `true`).
+  - `TLS-04`: `DATABASE_SSL_CA` supplies custom CA certificate with strict verification (`rejectUnauthorized: true`).
+- **Production Isolation:** Verified that production connection code (`src/lib/db/pg-fallback.ts`) strictly maintains `rejectUnauthorized: true`. Verified that `credential-containment.test.ts` test `SEC-08` passes repository-wide with zero insecure TLS configurations.
 
 ### 12. Regression Test Results
 - **Full Test Suite Execution (`npm test`):**
   - **Suites:** 5 suites (`api-rls-integration`, `credential-containment`, `privileged-api-containment`, `rls-database-boundary`, plus unit tests)
-  - **Total Tests:** 127
-  - **Passed:** 127
+  - **Total Tests:** 132
+  - **Passed:** 132
   - **Failed:** 0
   - **Cancelled:** 0
   - **Skipped:** 0
-  - **Duration:** 57.7s
+  - **Duration:** 70.4s
 - **RLS Boundary Test Suite (`tests/security/rls-database-boundary.test.ts`):**
-  - **Tests:** 45 (1 runner + 44 subtests)
-  - **Passed:** 45
+  - **Tests:** 50 (2 runners + 44 matrix/profile subtests + 4 TLS regression subtests)
+  - **Passed:** 50
   - **Failed:** 0
-  - **Duration:** 48.6s
+  - **Duration:** 62.3s
 
 ### 13. Typecheck Result
 - **Command:** `npx tsc --noEmit`

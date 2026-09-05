@@ -129,6 +129,6 @@
 - **Expected behavior**: Administrative bypass must be strictly limited to: (1) explicit `service_role` execution, (2) active `super_admin`, or (3) direct database console superusers (`postgres`, `supabase_admin`) in non-web contexts (`request.jwt.claim.role IS NULL`). Web requests with `role = 'anon'` or `'authenticated'` must never bypass.
 - **Evidence**: Trigger re-written in migration 046 with 3-tier qualification. Verified by PROFILE-08 and PROFILE-09 where web contexts attempting role manipulation are blocked with SQLSTATE 42501.
 - **Remediation**: Corrected trigger definition in migration 046 and deployed to live Supabase database.
-- **Residual risk**: None.
+- **Residual risk**: No residual exploitable path identified under the tested execution contexts.
 - **Follow-up task**: None. Verified by tests PROFILE-08, PROFILE-09, and PROFILE-10.
 
