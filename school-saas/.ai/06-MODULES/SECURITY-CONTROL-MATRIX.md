@@ -51,9 +51,9 @@
 - **Current behavior**: RLS disabled, permissive wildcard policy.
 - **Expected behavior**: RLS enabled. Table-specific authorization separating public/student visibility from privileged examination workflows.
 - **Evidence**: `pg_tables.rowsecurity = false` on all 5 tables; `pg_policies` had `USING (true)`.
-- **Remediation**: Enabled RLS on all 5 tables in migration 046. Dropped wildcard policies. Created table-specific role and ownership policies. Restricted `exam_results_approval` and `exam_malpractices` to privileged exam roles (`school_admin`, `exam_officer`, `super_admin`). Enforced student ownership on `exam_appeals`.
+- **Remediation**: Enabled RLS on all 5 tables in migration 046. Dropped wildcard policies. Created table-specific role and ownership policies. Restricted `exam_results_approval` and `exam_malpractices` strictly to administrative roles (`school_admin`, `org_admin`, `super_admin`), denying ordinary `teacher` and `student` roles. Enforced student ownership on `exam_appeals`.
 - **Residual risk**: None.
-- **Follow-up task**: None. Verified by tests T-001, T-003, T-010.
+- **Follow-up task**: None. Verified by tests T-001, T-003, and T-010A through T-010P.
 
 ### Finding RLS-003
 - **Severity**: HIGH
@@ -109,3 +109,26 @@
 - **Remediation**: Added `WITH CHECK (tenant_id = public.get_user_tenant_id())` in migration 046.
 - **Residual risk**: None.
 - **Follow-up task**: None. Verified by tests T-008 and T-014.
+
+### Finding RLS-008 (TASK-0006-CORRECTION)
+- **Severity**: HIGH
+- **Affected component**: Sensitive Examination Tables (`exam_results_approval`, `exam_malpractices`)
+- **Security impact**: Prior draft policies granted active same-tenant teachers SELECT and INSERT on results approval and malpractice records. Least privilege and canonical application routes establish that teachers must have NO access to results approval workflows or malpractice records.
+- **Current behavior**: Migration 046 initially allowed `public.is_teacher()`.
+- **Expected behavior**: SELECT, INSERT, UPDATE, and DELETE on `exam_results_approval` and `exam_malpractices` must be strictly restricted to administrative roles (`school_admin`, `org_admin`, `super_admin`). Ordinary teachers and students are strictly denied across all operations (same-tenant and cross-tenant).
+- **Evidence**: Audited routes `/api/exam-office/dashboard`, `/api/admin/exams`, `/[tenant]/exam-office`. Verified PostgreSQL RLS denial via SQLSTATE 42501 on INSERT and 0 rows on SELECT/UPDATE.
+- **Remediation**: Corrected migration 046 policies to restrict to administrative roles (`is_school_admin() OR is_org_admin() OR is_super_admin()`). Applied to live Supabase database.
+- **Residual risk**: None.
+- **Follow-up task**: None. Verified by tests T-010A through T-010P with post-denial database-state absence assertions.
+
+### Finding RLS-009 (TASK-0006-CORRECTION)
+- **Severity**: HIGH
+- **Affected component**: Profile Mutation Trigger Guard (`public.protect_profile_fields`)
+- **Security impact**: `auth.uid() IS NULL` was previously used as a blanket administrative bypass. An anonymous web request (where PostgREST sets `auth.uid() IS NULL` and `request.jwt.claim.role = 'anon'`) or an unauthenticated request with missing `sub` could theoretically bypass profile field immutability if RLS table filtering was decoupled.
+- **Current behavior**: Unchecked `auth.uid() IS NULL` bypass.
+- **Expected behavior**: Administrative bypass must be strictly limited to: (1) explicit `service_role` execution, (2) active `super_admin`, or (3) direct database console superusers (`postgres`, `supabase_admin`) in non-web contexts (`request.jwt.claim.role IS NULL`). Web requests with `role = 'anon'` or `'authenticated'` must never bypass.
+- **Evidence**: Trigger re-written in migration 046 with 3-tier qualification. Verified by PROFILE-08 and PROFILE-09 where web contexts attempting role manipulation are blocked with SQLSTATE 42501.
+- **Remediation**: Corrected trigger definition in migration 046 and deployed to live Supabase database.
+- **Residual risk**: None.
+- **Follow-up task**: None. Verified by tests PROFILE-08, PROFILE-09, and PROFILE-10.
+

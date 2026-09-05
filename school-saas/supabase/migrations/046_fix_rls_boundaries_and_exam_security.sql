@@ -101,31 +101,56 @@ DROP POLICY IF EXISTS "Prototype allow all" ON public.tenants;
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.protect_profile_fields()
 RETURNS TRIGGER
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET row_security = off
 AS $$
+DECLARE
+    v_jwt_role TEXT;
 BEGIN
-    -- Allow service_role, direct database administration (auth.uid() IS NULL), or super_admin
-    IF auth.role() = 'service_role' OR auth.uid() IS NULL OR public.is_super_admin() THEN
+    -- 1. Service role (server-authoritative provisioning, e.g. bind_invitation_to_user RPC)
+    IF auth.role() = 'service_role' THEN
         RETURN NEW;
     END IF;
 
-    -- Ordinary authenticated users cannot modify role, tenant_id, or is_active
+    -- 2. Platform super admin (active super_admin managing accounts)
+    IF public.is_super_admin() THEN
+        RETURN NEW;
+    END IF;
+
+    -- 3. Direct database administrator console / local migration scripts:
+    -- Allowed ONLY when running directly as superuser (postgres / supabase_admin)
+    -- AND NOT executing within an HTTP request session (jwt role must be NULL or empty).
+    -- If request.jwt.claim.role is 'anon' or 'authenticated', this bypass NEVER applies.
+    v_jwt_role := NULLIF(current_setting('request.jwt.claim.role', true), '');
+    IF auth.uid() IS NULL 
+       AND v_jwt_role IS NULL 
+       AND (current_user = 'postgres' OR current_user = 'supabase_admin')
+    THEN
+        RETURN NEW;
+    END IF;
+
+    -- For all other contexts (authenticated users, anonymous users, or any HTTP request):
+    -- Prohibit modifying role, tenant_id, or is_active
     IF NEW.role IS DISTINCT FROM OLD.role THEN
-        RAISE EXCEPTION 'Unauthorized: cannot change user role' USING ERRCODE = '42501';
+        RAISE EXCEPTION 'Unauthorized: only super_admin or service_role can modify profile role (attempted % -> %)', OLD.role, NEW.role
+            USING ERRCODE = '42501';
     END IF;
 
     IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id THEN
-        RAISE EXCEPTION 'Unauthorized: cannot change tenant_id' USING ERRCODE = '42501';
+        RAISE EXCEPTION 'Unauthorized: only super_admin or service_role can modify profile tenant_id (attempted % -> %)', OLD.tenant_id, NEW.tenant_id
+            USING ERRCODE = '42501';
     END IF;
 
     IF NEW.is_active IS DISTINCT FROM OLD.is_active THEN
-        RAISE EXCEPTION 'Unauthorized: cannot change is_active status' USING ERRCODE = '42501';
+        RAISE EXCEPTION 'Unauthorized: only super_admin or service_role can modify profile is_active (attempted % -> %)', OLD.is_active, NEW.is_active
+            USING ERRCODE = '42501';
     END IF;
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS trg_protect_profile_mutations ON public.profiles;
 CREATE TRIGGER trg_protect_profile_mutations
@@ -213,20 +238,24 @@ CREATE POLICY "Admins manage exam_schedules" ON public.exam_schedules
     );
 
 -- EXAM RESULTS APPROVAL (Privileged examination workflow data)
+-- Restricted strictly to school/org/super administrators.
+-- Ordinary teachers and students are denied access.
 DROP POLICY IF EXISTS "Staff view exam_results_approval" ON public.exam_results_approval;
-CREATE POLICY "Staff view exam_results_approval" ON public.exam_results_approval
+DROP POLICY IF EXISTS "Privileged roles view exam_results_approval" ON public.exam_results_approval;
+CREATE POLICY "Privileged roles view exam_results_approval" ON public.exam_results_approval
     FOR SELECT TO authenticated
     USING (
         tenant_id = public.get_user_tenant_id()
-        AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin() OR public.is_teacher())
+        AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin())
     );
 
 DROP POLICY IF EXISTS "Teachers and admins insert exam_results_approval" ON public.exam_results_approval;
-CREATE POLICY "Teachers and admins insert exam_results_approval" ON public.exam_results_approval
+DROP POLICY IF EXISTS "Privileged roles insert exam_results_approval" ON public.exam_results_approval;
+CREATE POLICY "Privileged roles insert exam_results_approval" ON public.exam_results_approval
     FOR INSERT TO authenticated
     WITH CHECK (
         tenant_id = public.get_user_tenant_id()
-        AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin() OR public.is_teacher())
+        AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin())
     );
 
 DROP POLICY IF EXISTS "Admins update exam_results_approval" ON public.exam_results_approval;
@@ -250,20 +279,24 @@ CREATE POLICY "Admins delete exam_results_approval" ON public.exam_results_appro
     );
 
 -- EXAM MALPRACTICES (Sensitive disciplinary data)
+-- Restricted strictly to school/org/super administrators.
+-- Ordinary teachers and students are denied access.
 DROP POLICY IF EXISTS "Staff view exam_malpractices" ON public.exam_malpractices;
-CREATE POLICY "Staff view exam_malpractices" ON public.exam_malpractices
+DROP POLICY IF EXISTS "Privileged roles view exam_malpractices" ON public.exam_malpractices;
+CREATE POLICY "Privileged roles view exam_malpractices" ON public.exam_malpractices
     FOR SELECT TO authenticated
     USING (
         tenant_id = public.get_user_tenant_id()
-        AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin() OR public.is_teacher())
+        AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin())
     );
 
 DROP POLICY IF EXISTS "Staff insert exam_malpractices" ON public.exam_malpractices;
-CREATE POLICY "Staff insert exam_malpractices" ON public.exam_malpractices
+DROP POLICY IF EXISTS "Privileged roles insert exam_malpractices" ON public.exam_malpractices;
+CREATE POLICY "Privileged roles insert exam_malpractices" ON public.exam_malpractices
     FOR INSERT TO authenticated
     WITH CHECK (
         tenant_id = public.get_user_tenant_id()
-        AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin() OR public.is_teacher())
+        AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin())
     );
 
 DROP POLICY IF EXISTS "Admins manage exam_malpractices" ON public.exam_malpractices;

@@ -197,34 +197,36 @@ GRANT  EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) TO service
 Pending ChatGPT final approval and Human Project Owner merge decision. **Do not merge.**
 
 ## REVIEW-TASK-0006 — RLS, Authorization & Privileged-Boundary Verification
-**Task:** TASK-0006  
+**Task:** TASK-0006 / TASK-0006-CORRECTION  
 **Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
-**Status:** OPEN (Submitted for Supervisory Review)  
+**Status:** CHANGES_REQUESTED (Parent Task) / PENDING_SUPERVISORY_REVIEW (Correction Resubmission)  
 **Priority:** P1 (High Security)  
 
 ### Scope
-Verify database-level Row Level Security (RLS) enforcement, tenant isolation, RBAC boundaries, recipient ownership on notifications, profile mutation protection, and fail-closed security for inactive/deactivated users.
+Verify database-level Row Level Security (RLS) enforcement, tenant isolation, RBAC boundaries, recipient ownership on notifications, profile mutation protection, fail-closed security for inactive/deactivated users, and resolve all supervisory review findings from TASK-0006-CORRECTION.
 
 ### Implementation Summary
 - **Migration 046:** `supabase/migrations/046_fix_rls_boundaries_and_exam_security.sql` applied cleanly to development Supabase PostgreSQL.
-- **Insecurities Remediated:**
-  - Removed `Prototype allow all` from `public.tenants`.
-  - Enabled RLS on all 5 exam core tables and created table-specific policies.
-  - Converted 6 exam analytics tables from permissive `ALL` to read-only for tenant users; mutations reserved for `super_admin`.
-  - Added recipient ownership to `notifications` and `notification_recipients` via non-recursive `get_user_recipient_notification_ids()`.
-  - Created `trg_protect_profile_mutations` trigger preventing alteration of `role`, `tenant_id`, and `is_active` by non-super_admin / non-service_role users.
-  - Added `is_active = true` check to all database helper functions.
-  - Added `WITH CHECK` to `applicants` UPDATE policy.
+- **Supervisory Corrections Implemented:**
+  1. **Teacher Authorization Contradiction Resolved:** Audited canonical repo evidence (`/api/exam-office/dashboard`, `/api/admin/exams`, `/[tenant]/exam-office`). Restricted `exam_results_approval` and `exam_malpractices` strictly to administrative roles (`school_admin`, `org_admin`, `super_admin`). Ordinary `teacher` and `student` roles are strictly DENIED across SELECT, INSERT, UPDATE, and DELETE.
+  2. **Granular Tests Added:** Implemented `T-010A` through `T-010P` covering same-tenant and cross-tenant teacher, student, and admin assertions.
+  3. **Real RLS Denials Proven:** Write denials assert PostgreSQL SQLSTATE `42501` and policy violation error message via `expectRlsError`. SELECT denials assert 0 rows returned.
+  4. **Database-State Verified:** Independent privileged verification query (`verifyDatabaseState`) confirms unauthorized records are absent from database state post-denial.
+  5. **`auth.uid() IS NULL` Profile Bypass Hardened:** Replaced blanket bypass in `protect_profile_fields()` with a 3-tier qualification: explicit `service_role`, `is_super_admin()`, or direct DB superuser (`postgres`/`supabase_admin`) in non-web context (`request.jwt.claim.role IS NULL`). Web requests with `role = 'anon'` or `'authenticated'` cannot bypass. Tested via `PROFILE-08`, `PROFILE-09`, `PROFILE-10`.
+  6. **TLS Configuration Hardened:** Removed blanket `rejectUnauthorized: false` default in test harness; supports CA injection via `DATABASE_SSL_CA` or `DATABASE_SSL_STRICT`.
+  7. **20 Supervisory Amendments Reconciled:** Fully enumerated 1 through 20 individually in implementation report.
 - **Verification Evidence:**
-  - Full test suite: `npm test` -> 109 tests passed, 0 failed.
-  - PostgreSQL RLS suite: `tests/security/rls-database-boundary.test.ts` -> 26 subtests passed using authentic non-service-role principals (`authenticated` / `anon`).
-  - API + RLS integration suite: `tests/security/api-rls-integration.test.ts` -> 5 subtests passed.
+  - Full test suite: `npm test` -> 127 tests passed, 0 failed.
+  - PostgreSQL RLS suite: `tests/security/rls-database-boundary.test.ts` -> 45 tests passed using authentic non-service-role principals (`authenticated` / `anon`).
+  - API + RLS integration suite: `tests/security/api-rls-integration.test.ts` -> 6 tests passed.
+  - Privileged API containment: `tests/security/privileged-api-containment.test.ts` -> 22 tests passed.
+  - Credential containment: `tests/security/credential-containment.test.ts` -> 39 tests passed.
   - TypeScript: `npx tsc --noEmit` -> 0 errors.
-  - Production build: `npm run build` -> Clean exit code 0.
-- **Branch:** `ai-eos/task-0006-rls-authorization-verification` (UNMERGED).
+  - Production build: `npm run build` -> Clean exit code 0 (40 routes optimized).
+- **Branch:** `ai-eos/task-0006-correction` (UNMERGED).
 
 ### Required Supervisory Decision
-Supervisory review and verification by ChatGPT.
+Supervisory review and verification by ChatGPT. Final approval and merge authority rests with Human Project Owner only.
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.
