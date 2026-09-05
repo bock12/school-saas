@@ -27,10 +27,10 @@ Create the centralized request-safe `authorizeApiRequest` boundary for Next.js R
 
 Harden high-risk privileged API routes identified during TASK-0003 (/api/admissions, /api/cass-export, /api/exam-office/dashboard) by applying the unified authorizeApiRequest() security boundary. Eliminate module-level admin clients, enforce method-specific role authorization, prevent IDOR/BOLA, and ensure strict tenant containment. Regression-check TASK-0004 routes. Specification: `.ai/05-WORKFLOW/TASK-0005.md`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Review: `REVIEW-TASK-0005`. Response: `.ai/05-WORKFLOW/messages/MSG-0009.md`.
 
-## TASK-0006 — Authorization regression test foundation
-**Status:** BACKLOG · **Priority:** High · **Owner:** Gemini/Antigravity after approval
+## TASK-0006 — Authorization regression test foundation & RLS Verification
+**Status:** IN_REVIEW (Implemented & Verified · Pending Supervisory Review) · **Priority:** High · **Owner:** ChatGPT Supervision · **Target:** Gemini/Antigravity
 
-Implement cross-tenant, RBAC, API/action, RLS and privileged-boundary tests using non-service-role principals for RLS proof.
+Implement and verify database-level Row Level Security (RLS) policies, cross-tenant isolation, RBAC boundaries, and recipient ownership. Remediated `public.tenants` prototype allow-all policy, enabled RLS and table-specific policies on exam core and analytics tables, added recipient ownership to notifications, protected profile mutations against privilege escalation/tenant rebinding via trigger, updated database helpers with `is_active = true`, and established 26 real PostgreSQL non-service-role RLS tests and 5 API+RLS integration tests. Specification: TASK-0006 Supervisory Amendments. Migration: `046_fix_rls_boundaries_and_exam_security.sql`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Response: `.ai/05-WORKFLOW/messages/MSG-0013.md`.
 
 ## TASK-0007 — Canonical RBAC model
 **Status:** BACKLOG · **Priority:** High · **Owner:** ChatGPT design; Gemini/Antigravity after approval

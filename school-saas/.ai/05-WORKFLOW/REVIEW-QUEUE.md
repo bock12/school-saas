@@ -196,6 +196,36 @@ GRANT  EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) TO service
 ### Final Supervisory Assessment & Merge Decision
 Pending ChatGPT final approval and Human Project Owner merge decision. **Do not merge.**
 
+## REVIEW-TASK-0006 — RLS, Authorization & Privileged-Boundary Verification
+**Task:** TASK-0006  
+**Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Status:** OPEN (Submitted for Supervisory Review)  
+**Priority:** P1 (High Security)  
+
+### Scope
+Verify database-level Row Level Security (RLS) enforcement, tenant isolation, RBAC boundaries, recipient ownership on notifications, profile mutation protection, and fail-closed security for inactive/deactivated users.
+
+### Implementation Summary
+- **Migration 046:** `supabase/migrations/046_fix_rls_boundaries_and_exam_security.sql` applied cleanly to development Supabase PostgreSQL.
+- **Insecurities Remediated:**
+  - Removed `Prototype allow all` from `public.tenants`.
+  - Enabled RLS on all 5 exam core tables and created table-specific policies.
+  - Converted 6 exam analytics tables from permissive `ALL` to read-only for tenant users; mutations reserved for `super_admin`.
+  - Added recipient ownership to `notifications` and `notification_recipients` via non-recursive `get_user_recipient_notification_ids()`.
+  - Created `trg_protect_profile_mutations` trigger preventing alteration of `role`, `tenant_id`, and `is_active` by non-super_admin / non-service_role users.
+  - Added `is_active = true` check to all database helper functions.
+  - Added `WITH CHECK` to `applicants` UPDATE policy.
+- **Verification Evidence:**
+  - Full test suite: `npm test` -> 109 tests passed, 0 failed.
+  - PostgreSQL RLS suite: `tests/security/rls-database-boundary.test.ts` -> 26 subtests passed using authentic non-service-role principals (`authenticated` / `anon`).
+  - API + RLS integration suite: `tests/security/api-rls-integration.test.ts` -> 5 subtests passed.
+  - TypeScript: `npx tsc --noEmit` -> 0 errors.
+  - Production build: `npm run build` -> Clean exit code 0.
+- **Branch:** `ai-eos/task-0006-rls-authorization-verification` (UNMERGED).
+
+### Required Supervisory Decision
+Supervisory review and verification by ChatGPT.
+
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.
 

@@ -7,32 +7,32 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-0002
+  id: TASK-0006
   status: IN_REVIEW
-  sub_status: LIVE_VERIFICATION_PASSED
+  sub_status: IMPLEMENTED_AND_VERIFIED
   authority: chatgpt
   target: gemini
-  authorized_at: "2026-09-04"
+  authorized_at: "2026-09-05"
 last_completed_task:
-  id: TASK-0004
+  id: TASK-0002
   status: COMPLETED
   merged_to: main
-  merged_at: "2026-09-03"
+  merged_at: "2026-09-05"
 last_instruction:
-  id: TASK-0002-CORRECTION-03
+  id: TASK-0006
   from: chatgpt
   to: gemini
   type: AUTHORIZED_TASK
-  task_id: TASK-0002
+  task_id: TASK-0006
   status: IMPLEMENTED
 last_response:
-  id: MSG-0012
+  id: MSG-0013
   from: gemini
   to: chatgpt
-  type: VERIFICATION_REPORT
-  task_id: TASK-0002
+  type: IMPLEMENTATION_REPORT
+  task_id: TASK-0006
   status: IN_REVIEW
-  in_response_to: TASK-0002-CORRECTION-03
+  in_response_to: TASK-0006
 pending:
   recommendations:
     - REC-0001
@@ -52,7 +52,7 @@ pending:
   reviews:
     - REVIEW-TASK-TEST-001
     - REVIEW-TASK-0005
-    - REVIEW-TASK-0002
+    - REVIEW-TASK-0006
   escalations: []
 protocol:
   authoritative_instruction_requires:
