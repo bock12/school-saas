@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { notFound } from 'next/navigation';
 import { ApplyClient } from './apply-client';
 
@@ -6,11 +7,7 @@ export default async function PublicApplyPage({ params }: { params: Promise<{ te
   const supabase = await createClient();
   const { tenant: tenantSlug } = await params;
   
-  const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
-  const supabaseAdmin = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabaseAdmin = createAdminClient();
 
   const { data: tenantData } = await supabaseAdmin
     .from('tenants')

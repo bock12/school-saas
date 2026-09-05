@@ -1,16 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
-
-let pgPool: Pool | null = null;
-function getPgPool() {
-  if (!pgPool && process.env.DATABASE_URL) {
-    pgPool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    });
-  }
-  return pgPool;
-}
+import { getPgPool } from '@/lib/db/pg-fallback';
 
 // Public API — returns all active/publicly visible tenants for the landing page directory
 export async function GET() {

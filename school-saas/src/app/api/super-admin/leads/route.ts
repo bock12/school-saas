@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
 import { authorizeApiRequest, apiError } from '@/lib/auth/api-guard';
-
-let pgPool: Pool | null = null;
-function getPgPool() {
-  if (!pgPool && process.env.DATABASE_URL) {
-    pgPool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    });
-  }
-  return pgPool;
-}
+import { getPgPool } from '@/lib/db/pg-fallback';
 
 export async function GET(req: NextRequest) {
   try {

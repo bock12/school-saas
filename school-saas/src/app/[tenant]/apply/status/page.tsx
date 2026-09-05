@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { StatusClient } from './status-client';
@@ -11,11 +12,7 @@ export default async function PublicApplicationStatusPage({
   const { tenant: tenantSlug } = await params;
 
   // Fetch tenant details using Service Role
-  const { createClient } = await import('@supabase/supabase-js');
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabaseAdmin = createAdminClient();
 
   const { data: tenant } = await supabaseAdmin
     .from('tenants')

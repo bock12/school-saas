@@ -1,17 +1,6 @@
 import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
-import crypto from 'crypto';
-
-let pgPool: Pool | null = null;
-function getPgPool() {
-  if (!pgPool && process.env.DATABASE_URL) {
-    pgPool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    });
-  }
-  return pgPool;
-}
+import { getPgPool } from '@/lib/db/pg-fallback';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 const RESERVED_SLUGS = new Set([
   'admin',
@@ -113,7 +102,7 @@ export async function POST(req: Request) {
     }
 
     const emailCheck = await dbPool.query(
-      'SELECT id FROM auth.users WHERE LOWER(email) = $1 LIMIT 1',
+      'SELECT id FROM profiles WHERE LOWER(email) = $1 LIMIT 1',
       [cleanEmail]
     );
     if (emailCheck.rows.length > 0) {
@@ -204,26 +193,32 @@ export async function POST(req: Request) {
         }
       }
 
-      // 4c. Create Administrator User in auth.users
-      const userId = crypto.randomUUID();
+      // 4c. Create Administrator User via Supabase Auth Admin API
       const adminRole = isStandalone ? 'school_admin' : 'org_admin';
+      const supabaseAdmin = createAdminClient();
 
-      await client.query(
-        `INSERT INTO auth.users (
-          id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
-          confirmation_token, recovery_token, email_change_token_new, email_change,
-          email_change_token_current, reauthentication_token, phone_change, phone_change_token,
-          raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-        ) VALUES (
-          $1, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', $2,
-          crypt($3, gen_salt('bf')), NOW(),
-          '', '', '', '', '', '', '', '',
-          '{"provider":"email","providers":["email"]}'::jsonb,
-          jsonb_build_object('full_name', $4::text, 'role', $5::text, 'tenant_id', $6::text, 'requires_password_change', false),
-          NOW(), NOW()
-        )`,
-        [userId, cleanEmail, password, adminName.trim(), adminRole, primaryTenantId]
-      );
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: adminName.trim(),
+          role: adminRole,
+          tenant_id: primaryTenantId,
+          requires_password_change: false,
+        },
+      });
+
+      if (authErr || !authData?.user) {
+        await client.query('ROLLBACK');
+        console.error('[register-tenant] Failed to create auth user:', authErr?.message);
+        return NextResponse.json(
+          { error: authErr?.message || 'Failed to create administrative user account.' },
+          { status: 500 }
+        );
+      }
+
+      const userId = authData.user.id;
 
       // 4d. Create / Update Profile in profiles table
       await client.query(

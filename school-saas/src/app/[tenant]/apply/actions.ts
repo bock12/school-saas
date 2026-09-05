@@ -1,16 +1,11 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 
-// We must use the Service Role Key here because this action is called by unauthenticated users (parents)
-// and we need to bypass the strict RLS policies that prevent anonymous inserts/queries.
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function submitPublicApplication(formData: FormData) {
+  const supabaseAdmin = createAdminClient();
   const tenantSlug = formData.get('tenantSlug') as string;
 
   // 1. Resolve tenant_id from slug
@@ -90,6 +85,7 @@ export async function submitPublicApplication(formData: FormData) {
 }
 
 export async function lookupApplicationStatus(tenantSlug: string, query: string) {
+  const supabaseAdmin = createAdminClient();
   if (!query || !query.trim()) {
     return { success: false, error: 'Please enter a reference code, phone number, or email.' };
   }
@@ -254,6 +250,7 @@ export async function resubmitApplication(
   updatedDocuments: Array<{ type: string; name: string; url: string }>,
   parentNotes: string
 ) {
+  const supabaseAdmin = createAdminClient();
   const { data: applicant, error: fetchErr } = await supabaseAdmin
     .from('applicants')
     .select('id, tenant_id, stage, documents')
@@ -310,6 +307,7 @@ export async function acceptAdmissionOffer(
   parentSignature: string,
   policyAgreements?: { codeOfConduct: boolean; medicalConsent: boolean; mediaRelease: boolean }
 ) {
+  const supabaseAdmin = createAdminClient();
   const { data: applicant, error: fetchErr } = await supabaseAdmin
     .from('applicants')
     .select('id, tenant_id, parent_name')
@@ -357,6 +355,7 @@ export async function uploadPaymentReceipt(
   paymentPhone?: string,
   transactionId?: string
 ) {
+  const supabaseAdmin = createAdminClient();
   const { data: applicant, error: fetchErr } = await supabaseAdmin
     .from('applicants')
     .select('id, tenant_id, parent_name')

@@ -97,7 +97,7 @@ async function main() {
 
   const { data: signInData, error: signInErr } = await anonClient.auth.signInWithPassword({
     email: ADMIN_EMAIL,
-    password: 'Admin1234!',
+    password: process.env.ADMIN_PASSWORD || process.env.TEST_PASSWORD || '',
   });
 
   if (signInErr) {

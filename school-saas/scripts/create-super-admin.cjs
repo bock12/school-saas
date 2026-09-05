@@ -15,14 +15,19 @@
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 
-const ADMIN_EMAIL   = 'superadmin@schoolsaas.com';
-const ADMIN_PASSWORD = 'SuperAdmin1234!';
+const ADMIN_EMAIL   = process.env.ADMIN_EMAIL || 'superadmin@schoolsaas.com';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.SUPERADMIN_PASSWORD;
 const ADMIN_NAME    = 'Super Admin';
 const ADMIN_ROLE    = 'super_admin';
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!ADMIN_PASSWORD) {
+    console.error('❌  Missing ADMIN_PASSWORD or SUPERADMIN_PASSWORD in environment variables');
+    process.exit(1);
+  }
 
   if (!url || !serviceKey) {
     console.error('❌  Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment variables');
@@ -67,7 +72,7 @@ async function main() {
   console.log('\n✅  Done!');
   console.log('─'.repeat(40));
   console.log(`  Email:    ${ADMIN_EMAIL}`);
-  console.log(`  Password: ${ADMIN_PASSWORD}`);
+  console.log(`  Password: [CONFIGURED VIA ENV]`);
   console.log('─'.repeat(40));
 }
 
