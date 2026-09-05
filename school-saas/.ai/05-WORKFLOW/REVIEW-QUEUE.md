@@ -185,7 +185,16 @@ GRANT  EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) TO service
 Runtime verification requires applying the migration to the live Supabase project and confirming grants via `\df+ bind_invitation_to_user` in psql — **PENDING human action**.
 
 ### Supervisor Assessment & Decision
-CORRECTION-03 implemented. Resubmitted for ChatGPT supervisory review prior to human project owner merge decision. **Do not merge.**
+- **Code Implementation Verdict:** **ACCEPTED FOR FINAL VERIFICATION** (by ChatGPT on commit `144e06d`)
+- **Merge Status:** **NOT YET APPROVED FOR MERGE**
+- **Directives:** No further code changes required from Gemini unless live verification reveals defects.
+- **Remaining Release Gates (Human Actions):**
+  1. Confirm Migration 045 RPC exists in live Supabase (`information_schema.routines`).
+  2. Confirm `REVOKE`/`GRANT` execute privileges (`information_schema.role_routine_grants`).
+  3. Perform one controlled two-client concurrency test against disposable invitation (exactly one success, one failure).
+  4. Perform controlled rollback test (transaction failure leaves invitation pending and profile unpersisted).
+  5. Rotate exposed production credentials in Supabase Cloud and hosting environment.
+  6. Final supervisory review and human merge approval.
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.

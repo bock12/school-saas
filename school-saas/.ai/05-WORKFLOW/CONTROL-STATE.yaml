@@ -9,7 +9,7 @@ engineering_memory: .ai/
 active_task:
   id: TASK-0002
   status: IN_REVIEW
-  sub_status: CORRECTION_03_IMPLEMENTED
+  sub_status: CODE_ACCEPTED_PENDING_LIVE_VERIFICATION
   authority: chatgpt
   target: gemini
   authorized_at: "2026-09-04"
