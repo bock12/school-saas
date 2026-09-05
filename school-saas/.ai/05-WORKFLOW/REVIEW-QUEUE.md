@@ -182,19 +182,19 @@ REVOKE EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) FROM anon;
 REVOKE EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) FROM authenticated;
 GRANT  EXECUTE ON FUNCTION public.bind_invitation_to_user(UUID, UUID) TO service_role;
 ```
-Runtime verification requires applying the migration to the live Supabase project and confirming grants via `\df+ bind_invitation_to_user` in psql — **PENDING human action**.
+### Live Database Verification Status (Completed 2026-09-05)
+- **Environment:** Supabase Cloud (`aws-0-eu-west-1.pooler.supabase.com:5432`)
+- **Code Commit:** `6b54786` (includes `v_invitation.role::public.user_role` enum cast fix)
+- **Live Gates:**
+  1. `bind_invitation_to_user` RPC verified in `information_schema.routines` (`SECURITY DEFINER`): **PASSED**
+  2. Execute grants verified in `information_schema.role_routine_grants` (`service_role` + `postgres` only): **PASSED**
+  3. `user_invitations` schema (12 columns) verified in `information_schema.columns`: **PASSED**
+  4. Live two-client concurrency race test (166ms duration, exactly 1 success, 1 failure): **PASSED**
+  5. Live transaction failure rollback test (profile unpersisted, invitation pending): **PASSED**
+- **Sole Remaining Release Gate:** Human administrative rotation of exposed historical production credentials in Supabase Cloud dashboard and hosting environment.
 
-### Supervisor Assessment & Decision
-- **Code Implementation Verdict:** **ACCEPTED FOR FINAL VERIFICATION** (by ChatGPT on commit `144e06d`)
-- **Merge Status:** **NOT YET APPROVED FOR MERGE**
-- **Directives:** No further code changes required from Gemini unless live verification reveals defects.
-- **Remaining Release Gates (Human Actions):**
-  1. Confirm Migration 045 RPC exists in live Supabase (`information_schema.routines`).
-  2. Confirm `REVOKE`/`GRANT` execute privileges (`information_schema.role_routine_grants`).
-  3. Perform one controlled two-client concurrency test against disposable invitation (exactly one success, one failure).
-  4. Perform controlled rollback test (transaction failure leaves invitation pending and profile unpersisted).
-  5. Rotate exposed production credentials in Supabase Cloud and hosting environment.
-  6. Final supervisory review and human merge approval.
+### Final Supervisory Assessment & Merge Decision
+Pending ChatGPT final approval and Human Project Owner merge decision. **Do not merge.**
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.

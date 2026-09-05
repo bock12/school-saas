@@ -1350,3 +1350,32 @@ Result:  ✓ Compiled successfully (2.4 min) | TypeScript check running | exit c
 - RLS policies were not weakened.
 - TASK-0004 and TASK-0005 suites remain fully intact (76/76 pass).
 - Branch remains unmerged.
+
+---
+
+## TASK-0002-CORRECTION-03 — Live Database Verification Report
+**Date:** 2026-09-05  
+**Environment:** Supabase Cloud (`aws-0-eu-west-1.pooler.supabase.com:5432`)  
+**Status:** ALL GATES PASSED (100% EMPIRICAL VERIFICATION COMPLETE)  
+**Code Commit:** `6b54786` (enum cast fix)  
+**Base Topic Branch:** `ai-eos/task-0002-credential-exposure-containment` (Unmerged)
+
+### 1. Empirical Verification Summary
+
+| Gate / Requirement | Target / Verification Method | Empirical Result |
+|---|---|---|
+| **Migration 044** | Table `public.user_invitations` | **APPLIED & VERIFIED** (all 12 columns, constraints, indexes present) |
+| **Migration 045** | RPC `bind_invitation_to_user(UUID, UUID)` | **APPLIED & VERIFIED** (`SECURITY DEFINER`, fixed search path) |
+| **Gate 1: RPC Exists** | `information_schema.routines` | **PASSED:** `routine_name = 'bind_invitation_to_user'`, `security_type = 'DEFINER'` |
+| **Gate 2: Execute Grants** | `information_schema.role_routine_grants` | **PASSED:** Granted exclusively to `service_role` & `postgres`; zero grants to `PUBLIC`, `anon`, `authenticated` |
+| **Gate 3: Schema Columns** | `information_schema.columns` | **PASSED:** All 12 columns verified matching canonical specification |
+| **Concurrency Test** | Controlled simultaneous two-connection race | **PASSED:** Exactly 1 success, 1 failure (`invitation_not_pending`); exactly 1 profile persisted; winner recorded |
+| **Rollback Test** | Transaction failure on profile conflict | **PASSED:** RPC failed closed (`conflicting_existing_profile_identity`); invitation remained `pending`; no profile created |
+| **Test Data Cleanup** | Removal of all test rows | **PASSED:** All temporary test invitations, profiles, and auth users cleanly removed |
+
+### 2. Defect Discovered and Resolved During Live Testing
+During live execution against PostgreSQL, error `42804` (`column "role" is of type user_role but expression is of type text`) was detected when inserting into `public.profiles`. The in-memory mock was unable to catch this PostgreSQL custom enum requirement. Migration 045 was updated with an explicit cast `v_invitation.role::public.user_role` and committed under commit `6b54786`. All 76 automated regression tests continue to pass.
+
+### 3. Remaining Release Condition (Human Action)
+The only remaining condition before closing TASK-0002 is human administrative rotation of exposed historical production credentials in the Supabase Cloud dashboard and production hosting environment.
+
