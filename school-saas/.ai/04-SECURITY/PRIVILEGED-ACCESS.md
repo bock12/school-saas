@@ -1,6 +1,6 @@
 # Privileged Access Policy & Super Admin Model
 
-**Document Status:** ACTIVE (TASK-0007 CANONICAL GOVERNANCE)  
+**Document Status:** PROPOSED — PENDING SUPERVISORY APPROVAL (TASK-0007 PHASE 1 CORRECTION)  
 **Parent Program:** AI-EOS Security & Architecture Hardening  
 **Authority:** ChatGPT (Chief Software Architect) / Human Project Owner  
 

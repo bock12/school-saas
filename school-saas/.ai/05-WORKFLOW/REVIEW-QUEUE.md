@@ -206,30 +206,40 @@ Pending ChatGPT final approval and Human Project Owner merge decision. **Do not 
 TASK-0006 and TASK-0006-CORRECTION have been independently verified, approved by ChatGPT, and merged into `main` at commit `0068962` by the Human Project Owner. All database-level Row Level Security policies on `public.tenants`, exam core/analytics tables, user profiles, and notifications are active and passing.
 
 ## REVIEW-TASK-0007-PHASE-1 — Canonical RBAC & Permission Architecture Assessment Review
-**Task:** TASK-0007 (Phase 1)  
+**Task:** TASK-0007 (Phase 1 Correction)  
 **Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
 **Status:** PENDING_SUPERVISORY_REVIEW  
 **Priority:** P1 (High Security & Architecture)  
 
 ### Scope
-Evaluate the Phase 1 Architecture Assessment, discover repository authorization inconsistencies, examine empirical findings RBAC-001 through RBAC-008, review the proposed Contextual Functional Assignment Architecture (ADR-0003), Canonical RBAC Model (`.ai/04-SECURITY/RBAC-MODEL.md`), Privileged Access Policy (`.ai/04-SECURITY/PRIVILEGED-ACCESS.md`), and assess readiness for Phase 2 implementation.
+Evaluate the Phase 1 Architecture Assessment & Supervisory Corrections, resolving findings RBAC-009 through RBAC-023:
+1. Classification of Principal & Vice Principal (RBAC-009).
+2. Canonical Permission Registry architecture & hybrid storage (RBAC-010).
+3. Base role permission resolution & additive formula (RBAC-011).
+4. Functional assignment lifecycle state machine (RBAC-012).
+5. Academic-year scoping & historical consistency (RBAC-013).
+6. Scope inheritance & formal containment matrix (RBAC-014).
+7. Organization / School hierarchy recursive traversal (RBAC-015).
+8. Multi-role Separation of Duties at transaction level (RBAC-016).
+9. Approval authority & delegation invariants (RBAC-017).
+10. Assistant Teacher scope & permissions (RBAC-018).
+11. Formal definition of `manage` as atomic expansion (RBAC-019).
+12. Strict `<module>.<resource>.<action>` normalized taxonomy (RBAC-020).
+13. Empirical verification of `public.profiles.job_title` display-only status (RBAC-021).
+14. Correction of governance statuses to PROPOSED (RBAC-022).
+15. Strict taxonomic separation of Current State, Proposed, Approved, and Phase 2 (RBAC-023).
 
 ### Implementation Summary
 - **Branch:** `ai-eos/task-0007-rbac-architecture` (branched from updated `main` at `0068962`).
 - **Read-Only Discovery:** Strictly adhered to Phase 1 constraint; zero role enums, permission tables, RLS policies, or application authorization layers were modified.
-- **Key Discoveries:**
-  1. `exam_officer` disconnect between TypeScript interfaces and PostgreSQL enum.
-  2. Complete absence of canonical permission tables in database.
-  3. Ghost dependency in `040_academic_calendar_events.sql` on non-existent `public.user_roles`/`roles`.
-  4. Separation-of-duties bypass in `013_approval_requests.sql` and `resolveApprovalRequest`.
-  5. Unchecked direct Postgres pool queries in curriculum server actions.
-  6. Functional assignments (`HOD`, `Form Master`, `Subject Teacher`) already established in schema relations.
-- **Proposed Architecture:** Contextual Functional Assignment Architecture avoiding role explosion.
+- **Specification:** Revised `.ai/04-SECURITY/RBAC-MODEL.md` containing all 30 mandatory sections.
+- **ADR:** `.ai/02-ARCHITECTURE/DECISIONS.md` (ADR-0003 status: PROPOSED — Supervisory approval required before Phase 2 implementation).
+- **Security Matrix:** `.ai/06-MODULES/SECURITY-CONTROL-MATRIX.md` (RBAC-001 through RBAC-023).
 - **Phase 1 Report:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`.
-- **Response Message:** `.ai/05-WORKFLOW/messages/MSG-0015.md`.
+- **Response Message:** `.ai/05-WORKFLOW/messages/MSG-0016.md`.
 
 ### Required Supervisory Decision
-Supervisory review of Phase 1 Architecture Assessment by ChatGPT. Approval required before any Phase 2 schema, RLS, or code changes may proceed.
+Final supervisory review of TASK-0007 Phase 1 Architecture Assessment & Corrections by ChatGPT and Human Project Owner. Approval required before Phase 2 implementation may be authorized.
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.

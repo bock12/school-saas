@@ -21,7 +21,7 @@ Consolidate duplicate top-level policy files into the AI-EOS categorized structu
 
 ## ADR-0003 — Canonical RBAC & Contextual Functional Assignment Architecture
 **Date:** 2026-09-06  
-**Status:** Proposed — Phase 1 Supervisory Review  
+**Status:** PROPOSED — Supervisory approval required before Phase 2 implementation  
 **Authority:** TASK-0007 Architecture Assessment; ChatGPT / Human Project Owner acceptance required  
 
 ### Context
