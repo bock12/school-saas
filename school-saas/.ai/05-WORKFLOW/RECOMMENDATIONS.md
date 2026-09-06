@@ -365,7 +365,8 @@ Under TASK-0007 Phase 2, replace this dead policy with standard profile role che
 TypeScript recognizes `exam_officer` as an `AppRole`, but `public.user_role` enum does not contain it. Updating a profile's role to `exam_officer` crashes PostgreSQL.
 
 #### Recommendation
-Reconcile this disconnect without modifying the base `user_role` enum by creating `public.school_exam_officers (id, tenant_id, teacher_id, academic_year_id, status, is_active)` and helper `public.is_exam_officer(tenant_id)`.
+Reconcile this disconnect without modifying the base `user_role` enum by storing Exam Officer appointments in `public.school_staff_assignments` (`assignment_type = 'exam_officer'`) and providing helper `public.is_exam_officer(tenant_id)`.
+
 
 ---
 

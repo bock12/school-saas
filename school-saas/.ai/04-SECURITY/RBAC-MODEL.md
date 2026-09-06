@@ -250,22 +250,69 @@ Every functional assignment follows an explicit 5-state lifecycle state machine:
 
 ### Authoritative Persistence Model (Phase-2 DDL Requirement — `BLOCKER 3`)
 Vice Principals, Exam Officers, and academic appointments cannot be represented solely by `profiles.job_title` because `job_title` is unconstrained display text lacking tenant binding, lifecycle states, temporal validity, and auditability.
-In Phase 2, appointments will be persisted in dedicated relational tables:
-- `public.school_staff_assignments` (or specific relational tables `school_exam_officers`, `school_vp_assignments`) containing:
-  - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
-  - `tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE`
-  - `teacher_id UUID NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE`
-  - `academic_year_id UUID NOT NULL REFERENCES public.academic_years(id) ON DELETE CASCADE`
-  - `assignment_type TEXT NOT NULL CHECK (assignment_type IN ('vice_principal', 'exam_officer', 'hod', 'form_master'))`
-  - `status public.assignment_status NOT NULL DEFAULT 'active'`
-  - `appointed_at TIMESTAMPTZ NOT NULL DEFAULT now()`
-  - `appointed_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL`
-  - `effective_from DATE NOT NULL DEFAULT CURRENT_DATE`
-  - `effective_until DATE`
-  - `revoked_at TIMESTAMPTZ`
-  - `revoked_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL`
-  - `revocation_reason TEXT`
-  - `is_active BOOLEAN GENERATED ALWAYS AS (status = 'active' AND (effective_until IS NULL OR effective_until >= CURRENT_DATE)) STORED`
+
+In Phase 2, all institutional staff appointments will be persisted in a **single authoritative relational table: `public.school_staff_assignments`**. Alternative fragmented tables (`school_exam_officers`, `school_vp_assignments`) are explicitly rejected in favor of this unified model.
+
+```sql
+CREATE TABLE public.school_staff_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    teacher_id UUID NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE,
+    academic_year_id UUID NOT NULL REFERENCES public.academic_years(id) ON DELETE CASCADE,
+    assignment_type TEXT NOT NULL CHECK (assignment_type IN ('vice_principal', 'exam_officer', 'hod', 'form_master')),
+    department_id UUID REFERENCES public.departments(id) ON DELETE CASCADE,
+    section_id UUID REFERENCES public.sections(id) ON DELETE CASCADE,
+    status public.assignment_status NOT NULL DEFAULT 'active',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    appointed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    appointed_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    effective_from DATE NOT NULL DEFAULT CURRENT_DATE,
+    effective_until DATE,
+    revoked_at TIMESTAMPTZ,
+    revoked_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    revocation_reason TEXT,
+    CONSTRAINT check_hod_dept CHECK (assignment_type != 'hod' OR department_id IS NOT NULL),
+    CONSTRAINT check_form_master_section CHECK (assignment_type != 'form_master' OR section_id IS NOT NULL)
+);
+```
+
+#### Removal of Generated Column & Active Status Evaluation
+In PostgreSQL, `STORED` generated columns must evaluate an expression that is strictly `IMMUTABLE`. Because `CURRENT_DATE` is `STABLE` rather than `IMMUTABLE`, attempting to define `is_active` as a generated column referencing `CURRENT_DATE` produces `ERROR: generation expression is not immutable`.
+Active status is therefore stored as a standard boolean `is_active BOOLEAN NOT NULL DEFAULT true` (updated via assignment lifecycle transitions) and evaluated dynamically at query/RLS time via a `STABLE` SQL helper function:
+
+```sql
+CREATE OR REPLACE FUNCTION public.is_staff_assignment_active(p_assignment_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.school_staff_assignments
+        WHERE id = p_assignment_id
+          AND status = 'active'
+          AND is_active = true
+          AND effective_from <= CURRENT_DATE
+          AND (effective_until IS NULL OR effective_until >= CURRENT_DATE)
+    );
+$$;
+```
+
+#### Migration Relationship with Existing Assignment Fields
+The repository currently contains partial, unversioned foreign keys across legacy migrations. The authoritative migration mapping to `public.school_staff_assignments` is as follows:
+
+1. **`departments.head_teacher_id` (`002_school_modules.sql`):**
+   - *Current State:* Foreign key referencing `teachers(id)`. Lacks lifecycle state machine, temporal validity ranges, and revocation audit history.
+   - *Phase-2 Migration:* Migration 047 seeds `school_staff_assignments` with `assignment_type = 'hod'`, `department_id = departments.id`, and `teacher_id = departments.head_teacher_id`. In Phase 2, `departments.head_teacher_id` is retained as a denormalized cache / backward-compatible column maintained automatically by database trigger on `school_staff_assignments`.
+2. **`sections.class_teacher_id` (`002_school_modules.sql`):**
+   - *Current State:* Foreign key referencing `teachers(id)`. Lacks temporal bounds and lifecycle states.
+   - *Phase-2 Migration:* Migration 047 seeds `school_staff_assignments` with `assignment_type = 'form_master'`, `section_id = sections.id`, and `teacher_id = sections.class_teacher_id`. Retained as a denormalized cache synchronized via trigger for backward compatibility.
+3. **`subject_offerings.teacher_id` & `assistant_teacher_id` (`041_subjects_curriculum_engine.sql`):**
+   - *Current State:* Direct foreign keys on `subject_offerings` defining the primary subject instructor and assistant instructor for a specific class section.
+   - *Phase-2 Relationship:* These fields remain directly anchored on `subject_offerings` as the authoritative relational links for timetable scheduling and raw mark entry (`exams.results.enter`), because they are tightly coupled to the curriculum delivery engine. `school_staff_assignments` governs institutional, departmental, and whole-school appointments (`vice_principal`, `exam_officer`, `hod`, `form_master`), while subject offerings maintain their granular offering-level foreign keys.
+4. **`public.teacher_assignments` (`002_school_modules.sql`):**
+   - *Current State:* Legacy junction table linking `teacher_id`, `section_id`, `subject_id`, and `academic_year_id`.
+   - *Phase-2 Relationship:* Superseded by `subject_offerings`. Retained as a legacy view without security authority.
+5. **Vice Principal & Exam Officer Appointments:**
+   - *Current State:* Zero database tables exist. `exam_officer` exists only in TypeScript types, and VP exists only as UI text.
+   - *Phase-2 Migration:* `school_staff_assignments` provides their authoritative first-class relational persistence (`assignment_type = 'vice_principal'`, `assignment_type = 'exam_officer'`), completely eliminating the missing-schema defect.
+
 
 ---
 
@@ -411,14 +458,24 @@ The canonical permission count is derived from the registry inventory and valida
 
 Extend `authorizeApiRequest()` in `src/lib/auth/api-guard.ts`:
 ```ts
+export type CanonicalScope = 
+  | 'platform'
+  | 'org'
+  | 'school'
+  | 'department'
+  | 'class'
+  | 'offering'
+  | 'self';
+
 export interface AuthorizeOptions {
   roles?: AppRole[];
   permission?: CanonicalPermission;
-  scope?: 'platform' | 'org' | 'school' | 'own';
+  scope?: CanonicalScope;
   scopeId?: string;
 }
 ```
-- Validates caller identity against the requested canonical permission at the requested scope before allowing route handler execution.
+- Validates caller identity against the requested canonical permission at the evaluated canonical scope before allowing route handler execution.
+
 
 ---
 

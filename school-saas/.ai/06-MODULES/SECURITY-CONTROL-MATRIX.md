@@ -197,7 +197,7 @@
 - **Affected component**: Application TypeScript Roles vs PostgreSQL `user_role` Enum
 - **Security impact**: Architectural disconnect. TypeScript types `AppRole` and `TenantRole` recognize `exam_officer`, but `public.user_role` enum has only `('super_admin', 'org_admin', 'school_admin', 'teacher', 'student', 'parent')`. Calling `updateUserRole(userId, 'exam_officer')` fails at database level with an enum casting error.
 - **Current behavior**: Exam Officer cannot be stored in the database as a role.
-- **Expected behavior**: Reconciled via Contextual Functional Assignment `public.school_exam_officers`, retaining `teacher` as base role.
+- **Expected behavior**: Reconciled via Contextual Functional Assignment in `public.school_staff_assignments` (`assignment_type = 'exam_officer'`), retaining `teacher` as base role.
 - **Evidence**: `src/lib/auth/guards.ts` line 7; `src/app/actions/users.ts` line 7, 214; `001_foundation.sql` line 11.
 - **Remediation**: Documented in ADR-0003; scheduled for TASK-0007 Phase 2 functional assignment schema.
 - **Residual risk**: Causes application errors if admin attempts to assign `exam_officer` in user management UI.
@@ -247,7 +247,7 @@
 - **Affected component**: Functional Assignment Lifecycle State Machine
 - **Security impact**: Missing lifecycle fields (`is_active`, `effective_from`, `effective_until`) would allow revoked or expired staff (e.g. former HODs or former Exam Officers) to retain sensitive moderation capabilities indefinitely.
 - **Current behavior**: Relational links (`departments.head_teacher_id`, `sections.class_teacher_id`) lack lifecycle states, temporal ranges, and revocation metadata.
-- **Expected behavior**: Explicit state machine (`appointed`, `active`, `suspended`, `expired`, `revoked`) with generated `is_active` boolean.
+- **Expected behavior**: Explicit state machine (`appointed`, `active`, `suspended`, `expired`, `revoked`) with dynamically evaluated active status via `STABLE` helper function.
 - **Evidence**: `002_school_modules.sql` lines 65-75.
 - **Remediation**: Defined in `RBAC-MODEL.md` Section 12; scheduled for Phase 2 DDL.
 - **Residual risk**: Medium until Phase 2 lifecycle schema is applied.

@@ -2079,8 +2079,9 @@ Full canonical matrix documented in `.ai/04-SECURITY/RBAC-MODEL.md` Section 6, m
   export interface AuthorizeOptions {
     roles?: AppRole[];
     permission?: CanonicalPermission;
-    scope?: 'platform' | 'org' | 'school' | 'own';
+    scope?: 'platform' | 'org' | 'school' | 'department' | 'class' | 'offering' | 'self';
   }
+
   ```
 - Protect unhardened routes (`/api/academics/ai/lesson-plan`, `/api/exam-office/communication-rules`, `/api/exam-office/communication-templates`).
 
@@ -2380,11 +2381,18 @@ This final correction resolves supervisory findings **BLOCKER 1 through BLOCKER 
   - Bursars and registrars are removed from the implied population of `school_admin`; if needed, they will receive dedicated functional assignments in a future task.
   - **Core Invariant:** `job_title` NEVER grants security authority.
 
-#### BLOCKER 3 — Authoritative Vice Principal Persistence Model
-- **Problem:** VP was defined as a functional assignment without an authoritative relational anchor, and `profiles.job_title` cannot be used for security authorization.
+#### BLOCKER 3 — Authoritative Functional-Assignment Persistence Model & Migration Relationship
+- **Problem:** VP was defined as a functional assignment without an authoritative relational anchor, `profiles.job_title` cannot be used for security authorization, and multiple fragmented table options were proposed. Additionally, the preliminary DDL drafted `is_active` using a `STORED` generated column referencing `CURRENT_DATE`, which is invalid PostgreSQL because `CURRENT_DATE` is not immutable.
 - **Architectural Decision:**
-  - Vice Principals cannot be represented by `profiles.job_title` because `job_title` is unconstrained display text lacking tenant binding, lifecycle states, temporal bounds, and auditability.
-  - Specified Phase-2 DDL requirement: dedicated relational table `public.school_staff_assignments` with user/teacher identity (`teacher_id`), `tenant_id`, `academic_year_id`, `assignment_type`, `status`, `effective_from`, `effective_until`, `appointed_at`, `appointed_by`, `revoked_at`, `revoked_by`, `revocation_reason`, and audit triggers.
+  - **Single Authoritative Table Selected:** `public.school_staff_assignments` is selected as the sole authoritative model for institutional staff appointments (`vice_principal`, `exam_officer`, `hod`, `form_master`). Alternative fragmented tables (`school_exam_officers`, `school_vp_assignments`) are explicitly rejected.
+  - **Removal of Invalid Generated Column:** In PostgreSQL, stored generated expressions must be `IMMUTABLE`; `CURRENT_DATE` is `STABLE`. Therefore, `is_active` is stored as a standard boolean column `is_active BOOLEAN NOT NULL DEFAULT true` and evaluated dynamically via a `STABLE` SQL helper function (`public.is_staff_assignment_active()`).
+  - **Migration Relationship with Existing Schema Fields:**
+    - `departments.head_teacher_id`: Seeded into `school_staff_assignments` (`assignment_type = 'hod'`). Retained in Phase 2 as a synchronized backward-compatible denormalized cache via database trigger.
+    - `sections.class_teacher_id`: Seeded into `school_staff_assignments` (`assignment_type = 'form_master'`). Retained in Phase 2 as a synchronized backward-compatible column via trigger.
+    - `subject_offerings.teacher_id` & `assistant_teacher_id`: Retained directly on `subject_offerings` as the authoritative offering-level instructional links for class scheduling and mark entry (`exams.results.enter`), while `school_staff_assignments` governs institutional/departmental appointments.
+    - `teacher_assignments`: Retained as a legacy view without security authority.
+    - `vice_principal` & `exam_officer`: Created as first-class rows in `school_staff_assignments`, completely remediating the schema absence.
+
 
 #### BLOCKER 4 — Canonical Permission Count Reconciliation
 - **Problem:** Prior documentation claimed 32 permissions but failed to mechanically reconcile across lists.
