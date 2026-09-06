@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --conditions=react-server --import tsx --test tests/auth/api-guard.test.ts tests/security/privileged-api-containment.test.ts tests/security/credential-containment.test.ts"
+    "test": "node --conditions=react-server --import tsx --test tests/auth/api-guard.test.ts tests/security/privileged-api-containment.test.ts tests/security/credential-containment.test.ts tests/security/rls-database-boundary.test.ts tests/security/api-rls-integration.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
