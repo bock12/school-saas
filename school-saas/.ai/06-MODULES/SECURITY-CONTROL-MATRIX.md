@@ -132,3 +132,84 @@
 - **Residual risk**: No residual exploitable path identified under the tested execution contexts.
 - **Follow-up task**: None. Verified by tests PROFILE-08, PROFILE-09, and PROFILE-10.
 
+### Finding RBAC-001 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: `public.academic_calendar_events` RLS Policy
+- **Security impact**: Dead policy. Policy `"School admins manage calendar events"` references `public.user_roles ur JOIN public.roles r`, tables which do not exist in the database.
+- **Current behavior**: Query evaluation against this policy either errors or denies legitimate school administrators from managing calendar events via client connections.
+- **Expected behavior**: Policy should check `tenant_id = public.get_user_tenant_id() AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin())`.
+- **Evidence**: `supabase/migrations/040_academic_calendar_events.sql` lines 42-46.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 schema remediation.
+- **Residual risk**: Controlled; currently fails closed.
+
+### Finding RBAC-002 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: `/api/academics/ai/lesson-plan` Route Handler
+- **Security impact**: Direct PostgreSQL pool connection queries subject offerings and curriculum versions by ID with zero caller tenant-id or role authorization checks. Any authenticated user (including students or cross-tenant actors) can generate lesson plans for arbitrary subject offerings across any tenant.
+- **Current behavior**: Only checks `if (!user) return 401`. Executes direct pool query using untrusted client input `offering_id`.
+- **Expected behavior**: Must enforce `authorizeApiRequest()` requiring active teacher or school_admin role, verify that target offering belongs to caller's tenant, and verify teacher assignment scope.
+- **Evidence**: `src/app/api/academics/ai/lesson-plan/route.ts` lines 18-49.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 API guard migration.
+- **Residual risk**: Medium; read-only generation but leaks cross-tenant curriculum and teacher names.
+
+### Finding RBAC-003 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: `/api/exam-office/communication-rules` and `/api/exam-office/communication-templates`
+- **Security impact**: Endpoints invoke `createAdminClient()`, which bypasses RLS, and rely on client-supplied `user.user_metadata?.tenant_id` without verifying role or database tenant membership. Any authenticated user can read and insert notification rules and templates.
+- **Current behavior**: Bypasses `authorizeApiRequest()`; relies on untrusted `user_metadata.tenant_id`.
+- **Expected behavior**: Must enforce `authorizeApiRequest()` with `roles: ['school_admin', 'exam_officer']` (or privileged admin client instantiated only post-authorization) and use authoritative `profile.tenant_id`.
+- **Evidence**: `src/app/api/exam-office/communication-rules/route.ts` lines 12-19, 41-47.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 API guard migration.
+- **Residual risk**: High; allows cross-tenant rule poisoning and unauthorized template insertion.
+
+### Finding RBAC-004 (TASK-0007)
+- **Severity**: CRITICAL
+- **Affected component**: `public.approval_requests` Table Policy and `resolveApprovalRequest` Server Action
+- **Security impact**: Complete separation-of-duties collapse. In `013_approval_requests.sql`, the policy `"school_members_see_own_requests"` defines `FOR ALL USING (tenant_id = (SELECT tenant_id FROM public.profiles WHERE id = auth.uid()))`. In `src/app/actions/approvals.ts`, `resolveApprovalRequest` does not check caller role. Any authenticated user in a school (even students) can approve or delete arbitrary grade changes, fee waivers, admissions, and leave requests.
+- **Current behavior**: `FOR ALL` RLS policy grants mutation authority to all tenant members without role check; server action does not check role.
+- **Expected behavior**: RLS `FOR UPDATE` and `FOR DELETE` must strictly require `is_school_admin() OR is_org_admin() OR is_super_admin()`. `resolveApprovalRequest` server action must verify administrative authority.
+- **Evidence**: `013_approval_requests.sql` line 43; `src/app/actions/approvals.ts` lines 62-82.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 RLS and action remediation.
+- **Residual risk**: Critical until remediated in Phase 2.
+
+### Finding RBAC-005 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: Curriculum Server Actions (`approveCurriculum`, `publishCurriculum`)
+- **Security impact**: Server actions in `src/app/actions/curriculum.ts` execute direct PostgreSQL pool updates without checking caller role or tenant membership. Any authenticated user can transition a curriculum version to `approved` or `published`.
+- **Current behavior**: Direct pool `UPDATE curriculum_versions SET status = 'approved' ...` without checking if `userId` is a principal, HOD, or school admin.
+- **Expected behavior**: Must verify caller is authorized for academic approvals within the tenant before executing mutation.
+- **Evidence**: `src/app/actions/curriculum.ts` lines 333-363, 369-400.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 server-action guard migration.
+- **Residual risk**: High; permits unauthorized publishing of unvetted curricula.
+
+### Finding RBAC-006 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: Academic Management RLS Policies on `classes`, `sections`, `subjects`, `departments`
+- **Security impact**: Org admins managing multi-school networks receive RLS denials when trying to manage classes in child schools. Policies created in `007_academics_rls_refactor.sql` require `tenant_id = get_user_tenant_id() AND is_school_admin()`. An `org_admin` has `tenant_id = org.id`, so `tenant_id` does not match the child school's `id`.
+- **Current behavior**: RLS denies `org_admin` from updating or creating classes in child schools.
+- **Expected behavior**: Policies should support organizational hierarchy: `tenant_id = get_user_tenant_id() OR tenant_id IN (SELECT id FROM tenants WHERE parent_id = get_user_tenant_id())` when caller `is_org_admin()`.
+- **Evidence**: `007_academics_rls_refactor.sql` lines 61, 67, 73, 79.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 RLS hierarchy alignment.
+- **Residual risk**: Low security risk (fails closed), but breaks intended org-admin operations.
+
+### Finding RBAC-007 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: Application TypeScript Roles vs PostgreSQL `user_role` Enum
+- **Security impact**: Architectural disconnect. TypeScript types `AppRole` and `TenantRole` recognize `exam_officer`, but `public.user_role` enum has only `('super_admin', 'org_admin', 'school_admin', 'teacher', 'student', 'parent')`. Calling `updateUserRole(userId, 'exam_officer')` fails at database level with an enum casting error.
+- **Current behavior**: Exam Officer cannot be stored in the database as a role.
+- **Expected behavior**: Reconciled via Contextual Functional Assignment `public.school_exam_officers`, retaining `teacher` as base role.
+- **Evidence**: `src/lib/auth/guards.ts` line 7; `src/app/actions/users.ts` line 7, 214; `001_foundation.sql` line 11.
+- **Remediation**: Documented in ADR-0003; scheduled for TASK-0007 Phase 2 functional assignment schema.
+- **Residual risk**: Causes application errors if admin attempts to assign `exam_officer` in user management UI.
+
+### Finding RBAC-008 (TASK-0007)
+- **Severity**: LOW
+- **Affected component**: User Management UI (`users-roles-client.tsx`)
+- **Security impact**: Misleading UI presentation. Permission counts (`99 perms`, `60 perms`, `48 perms`, `14 perms`, `5 perms`, `4 perms`) are completely hardcoded numbers. No underlying permission catalog exists.
+- **Current behavior**: Hardcoded numbers rendered in badges.
+- **Expected behavior**: Permission counts should reflect actual canonical permissions defined in the RBAC registry.
+- **Evidence**: `src/app/[tenant]/admin/users-roles/_components/users-roles-client.tsx` lines 28-35.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 UI alignment.
+- **Residual risk**: Zero direct security vulnerability (presentation only).
+
+

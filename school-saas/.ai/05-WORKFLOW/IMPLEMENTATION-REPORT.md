@@ -1778,5 +1778,429 @@ In `supabase/migrations/046_fix_rls_boundaries_and_exam_security.sql`, modified 
 ### 20. Supervisory Status
 **PENDING SUPERVISORY REVIEW**
 
+---
+
+## TASK-0007 — Canonical RBAC & Permission Architecture (Phase 1: Discovery & Architecture Assessment)
+
+**Date:** 2026-09-06  
+**Status:** PHASE 1 ASSESSMENT COMPLETE · PENDING SUPERVISORY REVIEW  
+**Implementer:** Gemini / Antigravity (Implementation Engineer & Technical Contributor)  
+**Supervisor / Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Final Authority:** Human Project Owner  
+**Repository:** `bock12/school-saas`  
+**Base Branch:** `main` (at commit `006896282dea608f5dcb783d9be5e94dc8d7c320` containing merged TASK-0006)  
+**Implementation Branch:** `ai-eos/task-0007-rbac-architecture` (Unmerged)  
+**Specification:** TASK-0007 — CANONICAL RBAC & PERMISSION ARCHITECTURE  
+**Review Queue Entry:** `REVIEW-TASK-0007-PHASE-1` in `.ai/05-WORKFLOW/REVIEW-QUEUE.md`  
+**Response Message:** `.ai/05-WORKFLOW/messages/MSG-0015.md`  
+
+---
+
+### 1. Executive Summary
+
+TASK-0007 establishes a single, canonical Role-Based Access Control (RBAC) and permission architecture for the SchoolSaaS multi-tenant educational platform.
+
+In accordance with the supervisory directive and Phase 1 gate invariants:
+- **Phase 1 Execution Boundary:** Strictly read-only discovery, repository audit, empirical schema analysis, and canonical architectural design.
+- **Strict Invariants Preserved:**
+  - Zero modifications to the PostgreSQL `public.user_role` enum.
+  - Zero database tables, permissions tables, or migrations created or modified.
+  - Zero RLS policies rewritten or weakened.
+  - Zero API route handler authorization rewrites or frontend behavior changes.
+  - All TASK-0006 RLS protections, fail-closed triggers, and tests remain 100% active and passing.
+- **Core Architectural Proposal:** Rejection of both coarse single-role limitations and combinatorial "role explosion" (`teacher_hod_form_master`). Adoption of the **Contextual Functional Assignment Architecture** (`User -> Tenant Membership -> Base Role + Functional Assignments -> Effective Permissions -> Resource Scope`).
+- **Critical Empirical Discoveries:**
+  - `RBAC-001`: Dead policy query in migration 040 referencing non-existent `public.user_roles` and `roles`.
+  - `RBAC-002`: Unchecked AI lesson plan route (`/api/academics/ai/lesson-plan`) executing direct pool queries without tenant or role checks.
+  - `RBAC-003`: Sensitive notification endpoints relying on client-supplied `user_metadata.tenant_id` and bypassing RLS with `createAdminClient()`.
+  - `RBAC-004`: Complete separation-of-duties breakdown on `public.approval_requests` (`FOR ALL` policy permitting any tenant user, including students, to approve grade changes/waivers).
+  - `RBAC-005`: Curriculum approval/publishing server actions executing direct pool updates without verifying user role.
+  - `RBAC-006`: Multi-school `org_admin` denied from managing child school academics due to strict `tenant_id = get_user_tenant_id()` policy.
+  - `RBAC-007`: The "Exam Officer" disconnect — `exam_officer` exists in application TypeScript types but does not exist in the database `user_role` enum.
+  - `RBAC-008`: User management UI displays hardcoded mock permission counts with zero backing permission engine.
+
+---
+
+### 2. Authorization Architecture Discovery
+
+A comprehensive audit of the entire repository was conducted, encompassing all 49 SQL migration files, application route handlers, Next.js server actions, client sidebars, and governance documents:
+1. **Schema & Migration Audit (`supabase/migrations/`):**
+   - 49 migration files analyzed from `001_foundation.sql` through `046_fix_rls_boundaries_and_exam_security.sql`.
+   - Discovered that the database role enum `public.user_role` was defined in `001_foundation.sql` line 11 and has never been altered.
+   - Identified that `040_academic_calendar_events.sql` lines 42-46 attempts to join `public.user_roles ur JOIN public.roles r ON ur.role_id = r.id`. Neither table exists in the database.
+2. **API Route Handler Audit (`src/app/api/`):**
+   - Standardized endpoints (`/api/admissions`, `/api/cass-export`, `/api/exam-office/dashboard`, `/api/admin/exams`) use `authorizeApiRequest()` from TASK-0004/0005.
+   - Non-standardized endpoints (`/api/academics/ai/lesson-plan`, `/api/exam-office/communication-rules`, `/api/exam-office/communication-templates`) remain unhardened or bypass RLS via `createAdminClient()`.
+3. **Server Actions Audit (`src/app/actions/`):**
+   - `src/app/actions/users.ts`: Accepts `AppRole` (which includes `'exam_officer'`). If an admin attempts to update a user's role to `'exam_officer'`, the PostgreSQL query `UPDATE profiles SET role = $1::user_role` crashes with an invalid enum value error.
+   - `src/app/actions/approvals.ts`: `resolveApprovalRequest` lacks caller role checks.
+   - `src/app/actions/curriculum.ts`: `approveCurriculum` and `publishCurriculum` lack caller role checks and use direct pool connections.
+4. **Navigation & UI Audit:**
+   - Client navigation sidebars (`src/components/layout/sidebar.tsx`, `src/lib/navigation.ts`) conditionally display links based on `profile.role`.
+   - `src/app/[tenant]/teachers/portal/page.tsx`: Implements a client-side simulated role-switching toggle between "Teacher", "HOD", and "Form Master" that simply switches mock views without interacting with the backend.
+   - `src/app/[tenant]/admin/users-roles/_components/users-roles-client.tsx`: Renders badges claiming hardcoded permission totals (`99 perms`, `60 perms`, `48 perms`, `14 perms`, `5 perms`, `4 perms`).
+
+---
+
+### 3. Current Database Roles & Schema
+
+#### A. Database Role Enum (`public.user_role`)
+The authoritative database enum is defined as:
+```sql
+CREATE TYPE public.user_role AS ENUM (
+    'super_admin',
+    'org_admin',
+    'school_admin',
+    'teacher',
+    'student',
+    'parent'
+);
+```
+- Total roles in database: **6**.
+- Column storage: `public.profiles.role` (NOT NULL DEFAULT `'student'::user_role`).
+
+#### B. Absence of Permissions Schema
+- **Tables checked:** `permissions`, `role_permissions`, `user_permissions`, `user_roles`, `roles`.
+- **Finding:** **ZERO** permission tables exist in PostgreSQL. There is no dynamic role-to-permission mapping table in the database.
+- **Ghost Schema Query:** In `040_academic_calendar_events.sql`:
+  ```sql
+  CREATE POLICY "School admins manage calendar events"
+  ON academic_calendar_events FOR ALL
+  USING (
+      EXISTS (
+          SELECT 1 FROM public.user_roles ur
+          JOIN public.roles r ON ur.role_id = r.id
+          WHERE ur.user_id = auth.uid()
+          AND r.name IN ('school_admin', 'super_admin')
+          AND (ur.tenant_id = academic_calendar_events.tenant_id OR r.name = 'super_admin')
+      )
+  );
+  ```
+  Because `public.user_roles` does not exist, this policy fails closed (returns false or errors), blocking non-superuser execution.
+
+---
+
+### 4. Current Application Roles
+
+Application code defines multiple competing role type definitions:
+
+1. **`src/types/index.ts`:**
+   ```ts
+   export type UserRole = 'super_admin' | 'org_admin' | 'school_admin' | 'teacher' | 'student' | 'parent';
+   ```
+2. **`src/lib/auth/guards.ts` & `src/app/actions/users.ts`:**
+   ```ts
+   export type AppRole = 'super_admin' | 'org_admin' | 'school_admin' | 'teacher' | 'student' | 'parent' | 'exam_officer';
+   export type TenantRole = 'school_admin' | 'teacher' | 'student' | 'parent' | 'exam_officer';
+   ```
+3. **`src/types/database.ts` (Supabase Generated Types):**
+   ```ts
+   role: 'super_admin' | 'org_admin' | 'school_admin' | 'teacher' | 'student' | 'parent'
+   ```
+
+**The Conflict:** Application code treats `exam_officer` as a top-level role, but the database rejects it.
+
+---
+
+### 5. Current Permission Model
+
+- **Database Layer:** Permissions are hardcoded directly inside RLS policy expressions using boolean helper functions:
+  - `public.is_super_admin()` (`profiles.role = 'super_admin' AND is_active = true`)
+  - `public.is_school_admin()` (`profiles.role = 'school_admin' AND is_active = true`)
+  - `public.is_org_admin()` (`profiles.role = 'org_admin' AND is_active = true`)
+  - `public.is_teacher()` (`profiles.role = 'teacher' AND is_active = true`)
+- **API Guard Layer (`authorizeApiRequest`):** Permissions are checked via role allowlists:
+  ```ts
+  roles?: AppRole[];
+  ```
+- **UI Layer:** Pure role checks (`role === 'school_admin'`) and hardcoded static badges. No unified `can(permission)` helper exists.
+
+---
+
+### 6. Current Tenant/Scope Model
+
+- **Multi-Tenant Foundation:**
+  - Every tenant has `public.tenants(id, type, parent_id, name, slug, status)`.
+  - Types: `'multi_school'` (organization) and `'single_school'` (school).
+  - Child schools link to their parent organization via `parent_id`.
+- **User Membership:**
+  - `public.profiles.tenant_id` binds a user to exactly one home tenant.
+  - Helper `public.get_user_tenant_id()` extracts `tenant_id` from the caller's profile.
+- **Hierarchy Limitation (Finding RBAC-006):**
+  - Most RLS policies enforce `tenant_id = public.get_user_tenant_id()`.
+  - When an `org_admin` attempts to manage child school resources (e.g. `classes`, `sections`), the query fails because the child school's `tenant_id` matches the child, not the parent org.
+
+---
+
+### 7. Authorization Sources
+
+The audit identified five competing sources of authorization information:
+
+| Source | Components Relying on It | Authoritative Status | Risk / Finding |
+|---|---|---|---|
+| `public.profiles.role` | PostgreSQL RLS, `authorizeApiRequest()` | **Authoritative Ground Truth** | Clean, indexed, protected by DB triggers. |
+| `auth.user_metadata` | Historical routes (`register-tenant`, `communication-rules`) | **UNTRUSTED** | Client-tamperable; banned by TASK-0002/0004. |
+| Relational Assignments (`departments.head_teacher_id`, `sections.class_teacher_id`, `teacher_assignments`) | Academic timetable, subject teachers | **Authoritative Operational State** | Functional assignments already exist in schema! |
+| Application TypeScript `AppRole` | `users.ts`, `guards.ts` | **Desynchronized** | Contains `exam_officer`, which crashes in PostgreSQL. |
+| Frontend UI Mock State | `teachers/portal/page.tsx`, `users-roles-client.tsx` | **Non-Authoritative** | Hardcoded badges and simulated toggles. |
+
+---
+
+### 8. Authorization Conflicts
+
+1. **Database vs TypeScript Role Definition:** `exam_officer` is accepted by application forms but rejected by PostgreSQL enum casting.
+2. **Ghost RBAC Tables:** `040_academic_calendar_events.sql` references tables that were never migrated.
+3. **Multi-School Org Admin Scope:** `org_admin` has broad authority in business rules, but RLS policies enforce single-tenant equality without evaluating `parent_id`.
+4. **Approval Requests Separation of Duties:** RLS allows any school member to perform `ALL` operations on `approval_requests`.
+
+---
+
+### 9. Security Findings (RBAC-001 through RBAC-008)
+
+- **`RBAC-001` (Medium): Dead Policy in Migration 040** — `040_academic_calendar_events.sql` references non-existent `public.user_roles` and `roles`.
+- **`RBAC-002` (High): Unchecked AI Lesson-Plan Route** — `src/app/api/academics/ai/lesson-plan/route.ts` lacks tenant verification and role checks.
+- **`RBAC-003` (High): Insecure Admin Client in Notification Config** — `/api/exam-office/communication-rules` and `communication-templates` use `createAdminClient()`, trust `user_metadata.tenant_id`, and have zero role checks.
+- **`RBAC-004` (Critical): Separation-of-Duties Collapse on Approvals** — `013_approval_requests.sql` has `FOR ALL` policy for all tenant users; `resolveApprovalRequest` action has zero role checks.
+- **`RBAC-005` (High): Direct Pool Bypass in Curriculum Server Actions** — `src/app/actions/curriculum.ts` (`approveCurriculum`, `publishCurriculum`) executes direct pool updates without role verification.
+- **`RBAC-006` (Medium): Org Admin RLS Denial on Child School Academics** — `007_academics_rls_refactor.sql` denies org admins from managing child school classes.
+- **`RBAC-007` (High): The "Exam Officer" Database Disconnect** — `exam_officer` cannot be saved to `profiles.role` in PostgreSQL.
+- **`RBAC-008` (Low): Hardcoded Mock Permissions in UI** — `users-roles-client.tsx` displays hardcoded numbers with no backing engine.
+
+All findings have been logged in `.ai/06-MODULES/SECURITY-CONTROL-MATRIX.md`.
+
+---
+
+### 10. Proposed Canonical RBAC Model: Contextual Functional Assignment Architecture
+
+Rather than forcing complex combinatorial roles into the base database enum, SchoolSaaS adopts the **Contextual Functional Assignment Architecture**:
+
+```text
+User Identity (auth.users)
+      ↓
+Tenant Membership (public.profiles.tenant_id + active status)
+      ↓
+Base System Role (public.profiles.role: super_admin, org_admin, school_admin, teacher, student, parent)
+      +
+Functional Assignment(s) (HOD, Form Master, Subject Teacher, Exam Officer)
+      ↓
+Effective Permissions (<module>.<resource>.<action>)
+      ↓
+Resource Scope (platform | org | school | department | class | offering | self)
+      ↓
+Deterministic Authorization Decision (ALLOW / DENY)
+```
+
+---
+
+### 11. Proposed Role Taxonomy
+
+The database enum `public.user_role` remains stable with **6 canonical base roles**:
+1. `super_admin`: Platform governance (DreamDay Technology operations).
+2. `org_admin`: Multi-school network executive (diocesan board, trust directors).
+3. `school_admin`: Single school executive (principal, headmaster, bursar).
+4. `teacher`: Academic instructional staff.
+5. `student`: Enrolled learner.
+6. `parent`: Guardian / financial sponsor.
+
+---
+
+### 12. Proposed Permission Taxonomy
+
+Permissions follow the standard pattern: `<module>.<resource>.<action>`.
+
+- **Standard Actions:** `view`, `create`, `update`, `delete`, `enter`, `moderate`, `approve`, `publish`, `export`, `manage`.
+- **Standard Scope Dimensions:** `platform`, `org`, `school`, `department`, `class`, `offering`, `self`.
+
+---
+
+### 13. Proposed Scope Model
+
+- **Platform Scope:** Unrestricted across all tenants.
+- **Org Scope:** Constrained to `tenant_id = caller_tenant OR tenant_id IN (SELECT id FROM tenants WHERE parent_id = caller_tenant)`.
+- **School Scope:** Constrained to `tenant_id = caller_tenant`.
+- **Department Scope:** Constrained to `department_id = assigned_dept`.
+- **Class Scope:** Constrained to `section_id = assigned_section`.
+- **Offering Scope:** Constrained to `teacher_assignments (teacher_id, section_id, subject_id)`.
+- **Self Scope:** Constrained to `user_id = auth.uid()` or linked parent-student relationship.
+
+---
+
+### 14. Composite Role Strategy
+
+Staff with multiple responsibilities receive **Functional Assignments**:
+- **Head of Department (HOD):** Anchored to `departments.head_teacher_id`.
+- **Form Master / Class Teacher:** Anchored to `sections.class_teacher_id`.
+- **Subject Teacher:** Anchored to `teacher_assignments`.
+- **Examination Officer:** Anchored to new relational appointment table `public.school_exam_officers (tenant_id, teacher_id, is_active)`.
+
+Effective permissions are additive:
+$$\text{Effective Permissions} = \text{Base Role Permissions} \cup \sum \text{Functional Assignment Permissions}$$
+
+---
+
+### 15. Separation-of-Duties Model
+
+1. **Examination Marks:**
+   - Subject Teacher: Enters marks (`exams.results.enter`).
+   - HOD: Moderates department marks (`exams.results.moderate`).
+   - Exam Officer: Moderates school marks & malpractice (`exams.results.moderate`, `exams.malpractice.manage`).
+   - School Admin / Principal: Formally approves and publishes (`exams.results.approve`, `exams.results.publish`).
+   - *Invariant:* Neither teacher nor exam officer can approve or publish results.
+2. **Curriculum:**
+   - Teacher drafts (`curriculum.version.create`).
+   - HOD reviews (`curriculum.version.review`).
+   - Principal/Admin approves and publishes (`curriculum.version.approve`, `curriculum.version.publish`).
+3. **Approvals Ledger:**
+   - Applicants submit requests.
+   - Only `school_admin`, `org_admin`, or `super_admin` can resolve/approve (`approval_requests.resolve`).
+
+---
+
+### 16. Examination Authorization Model
+
+Preserves all TASK-0006 verified controls and adds functional exam officer delegation:
+- `exam_sessions` & `exam_schedules`: Managed by `school_admin` and delegated `exam_officer`.
+- `exam_malpractices`: Investigated and recorded by `school_admin` and `exam_officer`. Read-only or hidden from ordinary teachers. Denied to students.
+- `exam_results_approval`: Insert/Update strictly restricted to `school_admin` and `org_admin`. Exam officers submit draft batches; principals approve.
+- `exam_student_spotlights`: Analytics derived table; writes restricted to system/service_role.
+
+---
+
+### 17. Role/Permission Matrix
+
+Full canonical matrix documented in `.ai/04-SECURITY/RBAC-MODEL.md` Section 6, mapping 32 granular permissions across all 6 base roles and 4 functional assignments.
+
+---
+
+### 18. API Authorization Mapping
+
+- Upgrade `authorizeApiRequest()` in `src/lib/auth/api-guard.ts` to support permissions:
+  ```ts
+  export interface AuthorizeOptions {
+    roles?: AppRole[];
+    permission?: CanonicalPermission;
+    scope?: 'platform' | 'org' | 'school' | 'own';
+  }
+  ```
+- Protect unhardened routes (`/api/academics/ai/lesson-plan`, `/api/exam-office/communication-rules`, `/api/exam-office/communication-templates`).
+
+---
+
+### 19. RLS Authorization Mapping
+
+- Create lightweight PostgreSQL helper functions:
+  - `public.is_exam_officer(p_tenant_id uuid)`
+  - `public.is_hod(p_dept_id uuid)`
+  - `public.is_form_master(p_section_id uuid)`
+- Fix dead policy in `040_academic_calendar_events.sql`.
+- Fix multi-school hierarchy for `org_admin` on academic tables.
+- Fix `public.approval_requests` policy to restrict UPDATE/DELETE to admins.
+
+---
+
+### 20. Frontend Authorization Mapping
+
+- Replace simulated toggle in `teachers/portal/page.tsx` with server-rendered functional assignments loaded from database.
+- Create unified client permission hook: `usePermission('curriculum.version.review')`.
+- Replace hardcoded permission count badges in `users-roles-client.tsx` with dynamic permissions from the canonical registry.
+
+---
+
+### 21. Migration Strategy (Phase 2 Roadmap)
+
+1. **Migration Step 1 (DDL):** Create `public.school_exam_officers` table and indexes.
+2. **Migration Step 2 (Functions):** Create `is_exam_officer()`, `is_hod()`, `is_form_master()` helper functions.
+3. **Migration Step 3 (RLS Fixes):** Replace dead policy in `040_academic_calendar_events.sql` and fix `approval_requests`.
+4. **Migration Step 4 (Backend Services):** Implement permission resolver service in TypeScript (`src/lib/auth/permissions.ts`).
+5. **Migration Step 5 (Guards):** Upgrade `authorizeApiRequest` and server-action guards.
+6. **Migration Step 6 (UI):** Align navigation and portals.
+
+---
+
+### 22. Rollback Strategy
+
+- All proposed Phase 2 schema additions are additive (new table `school_exam_officers`, helper functions).
+- Zero modifications to the `user_role` enum means zero enum rollbacks or data rewrites.
+- Rollback migration drops `school_exam_officers` and restores previous RLS policy definitions.
+
+---
+
+### 23. Test Strategy
+
+1. **Unit Tests:** Matrix evaluation of `hasPermission(actor, permission, scope)`.
+2. **Integration Tests:** `authorizeApiRequest` asserting permission requirements.
+3. **PostgreSQL RLS Tests:** Real database tests asserting `is_exam_officer` permissions and `org_admin` hierarchy.
+4. **Regression Tests:** Execution of all 132 existing tests across 5 suites.
+
+---
+
+### 24. Risks & Mitigation
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Enum modification | High database lock risk | **Avoided completely.** Enum is untouched. |
+| Complex RLS performance | Query slowdown on joins | Helper functions use `SECURITY DEFINER`, `STABLE`, and indexed foreign keys. |
+| Breaking existing teacher workflows | Disruption | Base teacher permissions remain intact. Functional assignments add permissions. |
+
+---
+
+### 25. Recommendations Recorded
+
+- `REC-0015`: Drop dead calendar policy and replace with standard profile role check.
+- `REC-0016`: Introduce `public.school_exam_officers` relational table.
+- `REC-0017`: Remediate `approval_requests` separation of duties.
+- `REC-0018`: Standardize server action authorization with `authorizeAction()`.
+
+---
+
+### 26. Files Changed in Phase 1
+
+| File | Status | Nature of Change |
+|---|---|---|
+| `.ai/04-SECURITY/RBAC-MODEL.md` | **NEW** | Canonical RBAC specification, Contextual Functional Assignment model, permission taxonomy, and matrix. |
+| `.ai/04-SECURITY/PRIVILEGED-ACCESS.md` | **MODIFIED** | Updated 3-tier privileged access model, service-role containment invariants, and audit requirements. |
+| `.ai/02-ARCHITECTURE/DECISIONS.md` | **MODIFIED** | Added `ADR-0003: Canonical RBAC & Contextual Functional Assignment Architecture`. |
+| `.ai/06-MODULES/SECURITY-CONTROL-MATRIX.md` | **MODIFIED** | Appended security audit findings `RBAC-001` through `RBAC-008`. |
+| `.ai/05-WORKFLOW/TASK-QUEUE.md` | **MODIFIED** | Marked TASK-0006 as `COMPLETED` (merged) and TASK-0007 as `IN_REVIEW`. |
+| `.ai/05-WORKFLOW/CONTROL-STATE.yaml` | **MODIFIED** | Set active task to `TASK-0007-PHASE-1`, sub-status to `PHASE_1_ASSESSMENT_COMPLETE`. |
+| `.ai/05-WORKFLOW/REVIEW-QUEUE.md` | **MODIFIED** | Added entry `REVIEW-TASK-0007-PHASE-1`. |
+| `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` | **MODIFIED** | Appended complete 30-item Phase 1 Architecture Assessment report. |
+
+---
+
+### 27. Tests Performed (Read-Only & Regression Verification)
+
+- **TypeScript Typecheck:** `npx tsc --noEmit` — PASSED (0 errors, exit code 0).
+- **Automated Regression Test Suite:** `npm test` — PASSED (132 tests, 5 suites, 0 failures, exit code 0).
+
+---
+
+### 28. Confirmation TASK-0006 Controls Remain Intact
+
+- Confirmed that all 50 PostgreSQL RLS test assertions in `tests/security/rls-database-boundary.test.ts` passed.
+- Confirmed that table-level RLS on all 18 tables, fail-closed TLS defaults, and trigger protections remain unmodified.
+
+---
+
+### 29. Confirmation No Phase-2 Changes Were Performed
+
+- Confirmed **zero changes** to `public.user_role` enum.
+- Confirmed **zero new database migrations** written.
+- Confirmed **zero changes** to application route handlers or frontend authorization behavior.
+
+---
+
+### 30. Supervisory Decision Requested
+
+Supervisory review by ChatGPT and approval from Human Project Owner of:
+1. The **Contextual Functional Assignment Architecture** (ADR-0003).
+2. The **Permission Taxonomy & Hierarchy** (`.ai/04-SECURITY/RBAC-MODEL.md`).
+3. Authorization to proceed to **TASK-0007 Phase 2 (Implementation)** upon approval.
+
+---
+
+**Final Status:** **PENDING SUPERVISORY REVIEW**
+
+
 
 

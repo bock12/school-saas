@@ -199,36 +199,40 @@ Pending ChatGPT final approval and Human Project Owner merge decision. **Do not 
 ## REVIEW-TASK-0006 — RLS, Authorization & Privileged-Boundary Verification
 **Task:** TASK-0006 / TASK-0006-CORRECTION  
 **Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
-**Status:** CHANGES_REQUESTED (Parent Task) / PENDING_SUPERVISORY_REVIEW (Correction Resubmission)  
+**Status:** APPROVED & MERGED (Merged into main via PR #16 by Human Project Owner)  
 **Priority:** P1 (High Security)  
 
+### Supervisor Assessment & Final Disposition
+TASK-0006 and TASK-0006-CORRECTION have been independently verified, approved by ChatGPT, and merged into `main` at commit `0068962` by the Human Project Owner. All database-level Row Level Security policies on `public.tenants`, exam core/analytics tables, user profiles, and notifications are active and passing.
+
+## REVIEW-TASK-0007-PHASE-1 — Canonical RBAC & Permission Architecture Assessment Review
+**Task:** TASK-0007 (Phase 1)  
+**Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Status:** PENDING_SUPERVISORY_REVIEW  
+**Priority:** P1 (High Security & Architecture)  
+
 ### Scope
-Verify database-level Row Level Security (RLS) enforcement, tenant isolation, RBAC boundaries, recipient ownership on notifications, profile mutation protection, fail-closed security for inactive/deactivated users, and resolve all supervisory review findings from TASK-0006-CORRECTION.
+Evaluate the Phase 1 Architecture Assessment, discover repository authorization inconsistencies, examine empirical findings RBAC-001 through RBAC-008, review the proposed Contextual Functional Assignment Architecture (ADR-0003), Canonical RBAC Model (`.ai/04-SECURITY/RBAC-MODEL.md`), Privileged Access Policy (`.ai/04-SECURITY/PRIVILEGED-ACCESS.md`), and assess readiness for Phase 2 implementation.
 
 ### Implementation Summary
-- **Migration 046:** `supabase/migrations/046_fix_rls_boundaries_and_exam_security.sql` applied cleanly to development Supabase PostgreSQL.
-- **Supervisory Corrections Implemented:**
-  1. **Teacher Authorization Contradiction Resolved:** Audited canonical repo evidence (`/api/exam-office/dashboard`, `/api/admin/exams`, `/[tenant]/exam-office`). Restricted `exam_results_approval` and `exam_malpractices` strictly to administrative roles (`school_admin`, `org_admin`, `super_admin`). Ordinary `teacher` and `student` roles are strictly DENIED across SELECT, INSERT, UPDATE, and DELETE.
-  2. **Granular Tests Added:** Implemented `T-010A` through `T-010P` covering same-tenant and cross-tenant teacher, student, and admin assertions.
-  3. **Real RLS Denials Proven:** Write denials assert PostgreSQL SQLSTATE `42501` and policy violation error message via `expectRlsError`. SELECT denials assert 0 rows returned.
-  4. **Database-State Verified:** Independent privileged verification query (`verifyDatabaseState`) confirms unauthorized records are absent from database state post-denial.
-  5. **`auth.uid() IS NULL` Profile Bypass Hardened:** Replaced blanket bypass in `protect_profile_fields()` with a 3-tier qualification: explicit `service_role`, `is_super_admin()`, or direct DB superuser (`postgres`/`supabase_admin`) in non-web context (`request.jwt.claim.role IS NULL`). Web requests with `role = 'anon'` or `'authenticated'` cannot bypass. Tested via `PROFILE-08`, `PROFILE-09`, `PROFILE-10`.
-  6. **TLS Configuration Hardened:** Removed blanket `rejectUnauthorized: false` default in test harness; supports CA injection via `DATABASE_SSL_CA` or `DATABASE_SSL_STRICT`.
-  7. **20 Supervisory Amendments Reconciled:** Fully enumerated 1 through 20 individually in implementation report.
-- **Verification Evidence:**
-  - Full test suite: `npm test` -> 127 tests passed, 0 failed.
-  - PostgreSQL RLS suite: `tests/security/rls-database-boundary.test.ts` -> 45 tests passed using authentic non-service-role principals (`authenticated` / `anon`).
-  - API + RLS integration suite: `tests/security/api-rls-integration.test.ts` -> 6 tests passed.
-  - Privileged API containment: `tests/security/privileged-api-containment.test.ts` -> 22 tests passed.
-  - Credential containment: `tests/security/credential-containment.test.ts` -> 39 tests passed.
-  - TypeScript: `npx tsc --noEmit` -> 0 errors.
-  - Production build: `npm run build` -> Clean exit code 0 (40 routes optimized).
-- **Branch:** `ai-eos/task-0006-correction` (UNMERGED).
+- **Branch:** `ai-eos/task-0007-rbac-architecture` (branched from updated `main` at `0068962`).
+- **Read-Only Discovery:** Strictly adhered to Phase 1 constraint; zero role enums, permission tables, RLS policies, or application authorization layers were modified.
+- **Key Discoveries:**
+  1. `exam_officer` disconnect between TypeScript interfaces and PostgreSQL enum.
+  2. Complete absence of canonical permission tables in database.
+  3. Ghost dependency in `040_academic_calendar_events.sql` on non-existent `public.user_roles`/`roles`.
+  4. Separation-of-duties bypass in `013_approval_requests.sql` and `resolveApprovalRequest`.
+  5. Unchecked direct Postgres pool queries in curriculum server actions.
+  6. Functional assignments (`HOD`, `Form Master`, `Subject Teacher`) already established in schema relations.
+- **Proposed Architecture:** Contextual Functional Assignment Architecture avoiding role explosion.
+- **Phase 1 Report:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`.
+- **Response Message:** `.ai/05-WORKFLOW/messages/MSG-0015.md`.
 
 ### Required Supervisory Decision
-Supervisory review and verification by ChatGPT. Final approval and merge authority rests with Human Project Owner only.
+Supervisory review of Phase 1 Architecture Assessment by ChatGPT. Approval required before any Phase 2 schema, RLS, or code changes may proceed.
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.
+
 
 
