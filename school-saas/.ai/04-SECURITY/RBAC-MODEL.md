@@ -1,14 +1,15 @@
 # Canonical Role-Based Access Control (RBAC) & Permission Architecture
 ## Comprehensive Architecture Specification
 
-- **Document Status:** PROPOSED — PENDING FINAL SUPERVISORY REVIEW (TASK-0007 PHASE 1 FINAL CORRECTION)
+- **Document Status:** PHASE 2 DATABASE FOUNDATION IMPLEMENTED (TASK-0007)
 - **Parent Program:** AI-EOS Security & Architecture Hardening
-- **Phase:** Phase 1 — Architecture & Discovery (Final Correction)
-- **Phase 2 Implementation:** STRICTLY NOT AUTHORIZED
+- **Phase 1 Status:** COMPLETE — Architecture & Discovery (All corrections resolved)
+- **Phase 2 Status:** DATABASE FOUNDATION IMPLEMENTED — Migration 047 applied
 - **Supervisory Authority:** ChatGPT (Chief Software Architect) / Human Project Owner
 - **Implementation Engineer:** Gemini / Antigravity
-- **Date:** 2026-09-06
+- **Last Updated:** 2026-09-07
 - **Target Repository:** `bock12/school-saas`
+- **Branch:** `ai-eos/task-0007-rbac-phase-2-foundation`
 
 ---
 
@@ -515,13 +516,30 @@ The following security events MUST emit immutable audit records to `public.audit
 
 ---
 
-## 25. Phase-2 Migration Strategy (PHASE 2 ROADMAP — NOT YET IMPLEMENTED)
+## 25. Phase-2 Migration Strategy
 
-1. **Migration 047 DDL:** Create `public.school_staff_assignments`, `assignment_status` enum, and `permissions_catalog`.
-2. **Migration 048 Functions:** Create `is_exam_officer()`, `is_hod()`, `is_form_master()`, `get_subtenant_ids()`, `has_permission()`.
-3. **Migration 049 Policies:** Remediate `040` dead calendar policy, `013` approval requests policy, and `007` org-admin hierarchy.
-4. **Backend Services:** Implement `permissions-registry.ts` and `authorizeAction()`.
-5. **UI & Portals:** Connect teacher portal and navigation to authoritative functional assignments.
+### IMPLEMENTED — Migration 047 (TASK-0007 Phase 2 Database Foundation)
+
+`supabase/migrations/047_rbac_database_foundation.sql` — **IMPLEMENTED**
+
+1. **4 New Enums:** `assignment_status`, `staff_assignment_type`, `canonical_scope`, `permission_status`.
+2. **`permissions_catalog` table:** 33 canonical atomic permissions seeded. RLS enabled.
+3. **`school_staff_assignments` table:** Single source of truth for all 6 functional appointment types.
+   - **Schema Note:** No `school_id` column. All school-level scoping uses `tenant_id` — consistent with `academic_years`, `teachers`, `departments`, and `sections` (verified from `001_foundation.sql` and `002_school_modules.sql`).
+4. **6 check constraints + 5 partial unique indexes** enforcing lifecycle consistency, assignment type integrity, and concurrency.
+5. **6 SECURITY DEFINER authorization helper functions** — all academic-year-aware via `academic_years WHERE is_current = true` (administrative truth, not date arithmetic):
+   - `is_staff_assignment_active(id)` — row validity predicate
+   - `is_hod(dept_id)`, `is_form_master(section_id)`, `is_exam_officer(tenant_id)`, `is_vice_principal(tenant_id)` — caller authorization
+   - `get_org_subtenant_ids(org_tenant_id)` — depth-1 org hierarchy resolver
+6. **RLS policies** on `permissions_catalog` and `school_staff_assignments`.
+7. **Idempotent legacy backfill** from `departments.head_teacher_id` and `sections.class_teacher_id` using `ay.start_date` as `effective_from`.
+8. **4 bi-directional sync triggers** with `pg_trigger_depth() > 0` recursion guards.
+
+### PENDING — Future Migrations
+
+- **Migration 048 Policies:** Remediate `040` dead calendar policy, `013` approval requests policy.
+- **Backend Services:** Implement `permissions-registry.ts` and `authorizeAction()`.
+- **UI & Portals:** Connect teacher portal and navigation to authoritative functional assignments.
 
 ---
 
@@ -558,10 +576,12 @@ Because all schema changes in Phase 2 are **strictly additive** (new appointment
 
 ---
 
-## 30. Phase-2 Boundaries (MANDATORY INVARIANT)
+## 30. Phase-2 Implementation Status
 
-Phase 2 implementation remains **STRICTLY PROHIBITED** until explicit supervisory review and approval from ChatGPT and the Human Project Owner.
+Phase 2 Database Foundation: **IMPLEMENTED** — `047_rbac_database_foundation.sql` on branch `ai-eos/task-0007-rbac-phase-2-foundation`.
+
+Phase 2 API/RLS/Frontend layers: **NOT YET AUTHORIZED** — require separate supervisory approval.
 
 ---
 
-**Status:** PROPOSED — PENDING FINAL SUPERVISORY REVIEW
+**Status:** PHASE 2 DATABASE FOUNDATION IMPLEMENTED
