@@ -21,11 +21,12 @@ The platform recognizes three tiers of privileged execution:
 │   - Emergency incident containment                          │
 └──────────────────────────────┬──────────────────────────────┘
                                │
-┌──────────────────────────────┴──────────────────────────────┐
+┌─────────────────────────────────────────────────────────────┐
 │ Tier 2: Institutional Executive (`school_admin`, `org_admin`)│
-│   - Whole-school administration within verified tenant      │
+│   - Whole-school executive authority within verified tenant │
+│   - Represents Principal / Headmaster executive level       │
 │   - Staff role assignments, class & curriculum publishing   │
-│   - Examination result final sign-off                       │
+│   - Examination result final approval & publication         │
 └──────────────────────────────┬──────────────────────────────┘
                                │
 ┌──────────────────────────────┴──────────────────────────────┐
@@ -35,6 +36,18 @@ The platform recognizes three tiers of privileged execution:
 │   - Server-authoritative RPCs (e.g. bind_invitation_to_user)│
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Institutional Executive Model & Authority Boundaries (BLOCKER 1, BLOCKER 2)
+1. **`school_admin` Authority Definition:**
+   `school_admin` represents institutional executive authority (Principal / Headmaster level). It is an administrative security role, not a human job-title taxonomy.
+   Human titles such as "Principal", "Headmaster", "Bursar", and "Registrar" do NOT themselves grant security authority (`job_title` NEVER grants security authority).
+   Bursars, registrars, and clerical staff do NOT automatically receive `school_admin`.
+2. **Vice Principal & Exam Officer Distinction:**
+   Vice Principals and Exam Officers have base role `teacher` with specialized functional assignments.
+   Functional assignments are strictly additive and can NEVER remove permissions granted by a base role.
+   Therefore, Vice Principals and Exam Officers CANNOT be assigned `school_admin` base role (which intrinsically includes `exams.results.approve` and `exams.results.publish`).
+   Neither Vice Principals nor Exam Officers possess unilateral result publication or approval authority.
+
 
 ---
 

@@ -416,7 +416,7 @@ Implement `authorizeAction(permission, context)` in `src/lib/auth/action-guard.t
 Principal and Vice Principal have been treated informally as UI toggles or text strings in `profiles.job_title`.
 
 #### Recommendation
-Classify Principal as base system role `school_admin`, and Vice Principal as an organizational position / functional assignment on base role `teacher` (or `school_admin`) with school-wide academic review powers and no unilateral result publication rights.
+Classify Principal as base system role `school_admin` (representing institutional executive authority), and Vice Principal as a functional assignment `Vice Principal` strictly on base role `teacher` with school-wide academic review powers and zero result publication rights. Functional assignments are strictly additive and cannot remove base-role permissions; therefore, neither Vice Principal nor Exam Officer may have `school_admin` base role.
 
 ---
 

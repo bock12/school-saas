@@ -205,41 +205,40 @@ Pending ChatGPT final approval and Human Project Owner merge decision. **Do not 
 ### Supervisor Assessment & Final Disposition
 TASK-0006 and TASK-0006-CORRECTION have been independently verified, approved by ChatGPT, and merged into `main` at commit `0068962` by the Human Project Owner. All database-level Row Level Security policies on `public.tenants`, exam core/analytics tables, user profiles, and notifications are active and passing.
 
-## REVIEW-TASK-0007-PHASE-1 — Canonical RBAC & Permission Architecture Assessment Review
-**Task:** TASK-0007 (Phase 1 Correction)  
+## REVIEW-TASK-0007-PHASE-1 — Canonical RBAC & Permission Architecture Final Assessment Review
+**Task:** TASK-0007 (Phase 1 Final Correction)  
 **Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
-**Status:** PENDING_SUPERVISORY_REVIEW  
+**Status:** PENDING_FINAL_SUPERVISORY_REVIEW  
 **Priority:** P1 (High Security & Architecture)  
 
 ### Scope
-Evaluate the Phase 1 Architecture Assessment & Supervisory Corrections, resolving findings RBAC-009 through RBAC-023:
-1. Classification of Principal & Vice Principal (RBAC-009).
-2. Canonical Permission Registry architecture & hybrid storage (RBAC-010).
-3. Base role permission resolution & additive formula (RBAC-011).
-4. Functional assignment lifecycle state machine (RBAC-012).
-5. Academic-year scoping & historical consistency (RBAC-013).
-6. Scope inheritance & formal containment matrix (RBAC-014).
-7. Organization / School hierarchy recursive traversal (RBAC-015).
-8. Multi-role Separation of Duties at transaction level (RBAC-016).
-9. Approval authority & delegation invariants (RBAC-017).
-10. Assistant Teacher scope & permissions (RBAC-018).
-11. Formal definition of `manage` as atomic expansion (RBAC-019).
-12. Strict `<module>.<resource>.<action>` normalized taxonomy (RBAC-020).
-13. Empirical verification of `public.profiles.job_title` display-only status (RBAC-021).
-14. Correction of governance statuses to PROPOSED (RBAC-022).
-15. Strict taxonomic separation of Current State, Proposed, Approved, and Phase 2 (RBAC-023).
+Evaluate the Phase 1 Architecture Assessment & Final Supervisory Corrections, resolving BLOCKER 1 through BLOCKER 12:
+1. BLOCKER 1: Vice Principal / Exam Officer base-role contradiction (Principal = `school_admin`; VP = `teacher` + VP assignment; Exam Officer = `teacher` + Exam Officer assignment; strictly additive invariant).
+2. BLOCKER 2: Principal vs `school_admin` authority (`school_admin` = institutional executive authority; bursar/registrar removed; `job_title` never grants security authority).
+3. BLOCKER 3: VP persistence model (Phase-2 DDL `public.school_staff_assignments` with lifecycle state machine and temporal dates; why `job_title` cannot represent VP).
+4. BLOCKER 4: Reconciled canonical permission count (mechanically reconciled exact count of 33 atomic permissions).
+5. BLOCKER 5: Scope hierarchy model correction (`department` and `class` parallel branches under `school`, never `department > class`).
+6. BLOCKER 6: School-admin and campus hierarchy (current single-tenant vs proposed hierarchical resolution).
+7. BLOCKER 7: Tenant hierarchy claim correction (4-tier hierarchy is proposed supported business model, not currently enforced database invariant).
+8. BLOCKER 8: Formal conflict & precedence evaluation order (deterministic 8-step evaluation algorithm).
+9. BLOCKER 9: Dedicated authoritative 7-position matrix.
+10. BLOCKER 10: `school_admin` permission review (verified institutional executive capabilities).
+11. BLOCKER 11: Stale terminology removal (standardized on `<module>.<resource>.<action>`).
+12. BLOCKER 12: Schema verification (all claims verified against repository schema; `CURRENT STATE`, `PROPOSED`, `PHASE 2` taxonomy).
 
 ### Implementation Summary
 - **Branch:** `ai-eos/task-0007-rbac-architecture` (branched from updated `main` at `0068962`).
 - **Read-Only Discovery:** Strictly adhered to Phase 1 constraint; zero role enums, permission tables, RLS policies, or application authorization layers were modified.
 - **Specification:** Revised `.ai/04-SECURITY/RBAC-MODEL.md` containing all 30 mandatory sections.
+- **Privileged Access:** `.ai/04-SECURITY/PRIVILEGED-ACCESS.md` (Tier 2 institutional executive clarification).
 - **ADR:** `.ai/02-ARCHITECTURE/DECISIONS.md` (ADR-0003 status: PROPOSED — Supervisory approval required before Phase 2 implementation).
-- **Security Matrix:** `.ai/06-MODULES/SECURITY-CONTROL-MATRIX.md` (RBAC-001 through RBAC-023).
-- **Phase 1 Report:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`.
-- **Response Message:** `.ai/05-WORKFLOW/messages/MSG-0016.md`.
+- **Security Matrix:** `.ai/06-MODULES/SECURITY-CONTROL-MATRIX.md` (reconciled to 33 permissions and blocker decisions).
+- **Phase 1 Report:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` (appended Final Correction section).
+- **Response Message:** `.ai/05-WORKFLOW/messages/MSG-0017.md`.
 
 ### Required Supervisory Decision
-Final supervisory review of TASK-0007 Phase 1 Architecture Assessment & Corrections by ChatGPT and Human Project Owner. Approval required before Phase 2 implementation may be authorized.
+Final supervisory review of TASK-0007 Phase 1 Architecture Assessment & Final Corrections by ChatGPT and Human Project Owner. Approval required before Phase 2 implementation may be authorized.
+
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.

@@ -217,7 +217,7 @@
 - **Affected component**: Principal & Vice Principal Authorization Ambiguity
 - **Security impact**: Without clear classification, permissions risk being granted based on string job titles or ad-hoc role checks, creating privilege escalation or bypassing executive sign-off boundaries.
 - **Current behavior**: Principal and Vice Principal are treated as UI toggles in `teachers/portal/page.tsx` and job titles in `profiles.job_title` without formal security classification.
-- **Expected behavior**: Principal must be mapped to base system role `school_admin`; Vice Principal must be mapped to functional assignment on base role `teacher` (or `school_admin`), with explicit operational permissions and zero unilateral result publication rights.
+- **Expected behavior**: Principal must be mapped to base system role `school_admin` (representing institutional executive authority); Vice Principal must be mapped strictly to functional assignment `Vice Principal` on base role `teacher`, with school-wide academic review/moderation permissions and zero result publication rights. Functional assignments are strictly additive and cannot remove base-role permissions; therefore, neither Vice Principal nor Exam Officer may have `school_admin` base role.
 - **Evidence**: `src/app/[tenant]/admin/teachers/portal/page.tsx` lines 65, 91, 182-183; `038_sierra_leone_letters_and_cass_export.sql` line 15.
 - **Remediation**: Clarified in `RBAC-MODEL.md` Section 16; scheduled for Phase 2 functional assignment schema.
 - **Residual risk**: High if unmitigated; resolved by canonical architecture definition.
@@ -267,7 +267,7 @@
 - **Affected component**: Formal Scope Containment & Inheritance Matrix
 - **Security impact**: Informal scope assumptions could allow department-level managers to access peer departments or school-wide resources.
 - **Current behavior**: Ad-hoc scope checks scattered across route handlers.
-- **Expected behavior**: Formal scope containment hierarchy: `platform ⊃ org ⊃ school ⊃ department/class ⊃ offering ⊃ self`.
+- **Expected behavior**: Formal scope model where `department` and `class` are parallel branches under `school` (`platform ⊃ org ⊃ school ⊃ (department || class) ⊃ offering ⊃ self`), with universal invariant that `department` is NEVER a parent of `class`.
 - **Evidence**: `.ai/04-SECURITY/RBAC-MODEL.md` Section 9.
 - **Remediation**: Defined in `RBAC-MODEL.md` Section 9.
 - **Residual risk**: Zero once verified in Phase 2 tests.
@@ -297,7 +297,7 @@
 - **Affected component**: Examination Approval & Publication Authority
 - **Security impact**: Unclear boundaries between Principal and Vice Principal could allow unratified results to be published externally.
 - **Current behavior**: Undefined in database RLS.
-- **Expected behavior**: `exams.results.approve` and `exams.results.publish` reserved strictly for `school_admin` (Principal). Vice Principal has moderation rights only, with delegation requiring formal audited delegation tokens.
+- **Expected behavior**: `exams.results.approve` and `exams.results.publish` reserved strictly for `school_admin` (Principal) and `org_admin`. Vice Principal and Exam Officer have base role `teacher` with moderation rights only, with delegation requiring formal audited delegation tokens.
 - **Evidence**: `030_exam_core_system.sql` line 51; `.ai/04-SECURITY/RBAC-MODEL.md` Section 15.
 - **Remediation**: Clarified in `RBAC-MODEL.md` Section 15.
 - **Residual risk**: Low once Phase 2 guards are deployed.
@@ -327,7 +327,7 @@
 - **Affected component**: Permission Nomenclature Normalization
 - **Security impact**: Aliased or inconsistent permission strings (`attendance.mark` vs `attendance.sessions.mark`) cause authorization bypasses if route guards check mismatched strings.
 - **Current behavior**: Inconsistent patterns across legacy documents and client components.
-- **Expected behavior**: Strict grammar: `<module>.<resource>.<action>` across all 32 canonical permissions with zero unmapped aliases.
+- **Expected behavior**: Strict grammar: `<module>.<resource>.<action>` across all 33 canonical atomic permissions with zero unmapped aliases.
 - **Evidence**: `.ai/04-SECURITY/RBAC-MODEL.md` Section 19-20.
 - **Remediation**: Normalized in `RBAC-MODEL.md` Section 20.
 - **Residual risk**: Zero.

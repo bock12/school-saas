@@ -7,10 +7,10 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-0007-PHASE-1-CORRECTION
+  id: TASK-0007-PHASE-1-FINAL-CORRECTION
   parent_task: TASK-0007
   status: IN_REVIEW
-  sub_status: PHASE_1_CORRECTION_COMPLETE
+  sub_status: PHASE_1_FINAL_CORRECTION_COMPLETE
   authority: chatgpt
   target: gemini
   authorized_at: "2026-09-06"
@@ -20,20 +20,21 @@ last_completed_task:
   merged_to: main
   merged_at: "2026-09-06"
 last_instruction:
-  id: TASK-0007-PHASE-1-CORRECTION
+  id: TASK-0007-PHASE-1-FINAL-CORRECTION
   from: chatgpt
   to: gemini
   type: CHANGES_REQUESTED
   task_id: TASK-0007
   status: CORRECTION_SUBMITTED
 last_response:
-  id: MSG-0016
+  id: MSG-0017
   from: gemini
   to: chatgpt
   type: IMPLEMENTATION_REPORT
   task_id: TASK-0007-PHASE-1
   status: PENDING_FINAL_SUPERVISORY_REVIEW
-  in_response_to: TASK-0007-PHASE-1-CORRECTION
+  in_response_to: TASK-0007-PHASE-1-FINAL-CORRECTION
+
 pending:
   recommendations:
     - REC-0001

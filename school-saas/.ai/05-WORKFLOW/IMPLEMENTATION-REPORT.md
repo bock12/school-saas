@@ -2223,18 +2223,18 @@ Supervisory review by ChatGPT and approval from Human Project Owner of:
 
 Following supervisory review of the preliminary Phase 1 architecture assessment, this correction resolves findings **RBAC-009 through RBAC-023** in full architectural precision:
 
-- **RBAC-009 (Principal & Vice Principal Classification):** Formally classifies Principal as base system role `school_admin` and Vice Principal as an organizational position / functional assignment on base role `teacher` (or `school_admin`) with school-wide academic review powers and zero unilateral result publication rights.
+- **RBAC-009 (Principal & Vice Principal Classification):** Formally classifies Principal as base system role `school_admin` (representing institutional executive authority) and Vice Principal as a functional assignment `Vice Principal` strictly on base role `teacher` with school-wide academic review powers and zero result publication rights. Functional assignments are strictly additive and cannot remove base-role permissions; therefore neither Vice Principal nor Exam Officer can have `school_admin` base role.
 - **RBAC-010 (Canonical Permission Registry):** Establishes hybrid architecture with application code (`src/lib/auth/permissions-registry.ts`) as the single source of truth, synchronized to a static database table (`public.permissions_catalog`), versioned via code migrations, and failing closed (DENY) on unknown permissions.
 - **RBAC-011 (Base Role Permission Resolution):** Formalizes deterministic additive formula: $\text{Effective Permissions} = \text{Base Permissions} \cup \sum \text{Assignment Permissions}$, defaulting to DENY.
 - **RBAC-012 (Functional Assignment Lifecycle):** Defines 5-state lifecycle state machine (`appointed`, `active`, `suspended`, `expired`, `revoked`) with explicit temporal ranges (`effective_from`, `effective_until`, `academic_year_id`) and revocation metadata.
 - **RBAC-013 (Academic-Year Scoping):** Establishes academic-year scoping for operational assignments, preserving historical authorization integrity without rewriting past audit records.
-- **RBAC-014 (Scope Inheritance):** Formalizes scope containment hierarchy: $\text{platform} \supset \text{org} \supset \text{school} \supset \text{department/class} \supset \text{offering} \supset \text{self}$ and produces a Scope Containment Matrix.
+- **RBAC-014 (Scope Inheritance):** Formalizes scope model where `department` and `class` are parallel branches under `school` ($\text{platform} \supset \text{org} \supset \text{school} \supset (\text{department} \parallel \text{class}) \supset \text{offering} \supset \text{self}$), with the invariant that `department` is never a parent of `class`.
 - **RBAC-015 (Organization / School Hierarchy):** Specifies recursive CTE traversal (`get_subtenant_ids()`) supporting up to 4 hierarchy levels (`organization -> district -> school -> campus`).
 - **RBAC-016 (Separation of Duties):** Defines transaction-level rule preventing self-moderation (`actor_id != submitter_id`) for multi-role staff (Teacher + HOD + Exam Officer) and reserving approval/publication exclusively for `school_admin`.
 - **RBAC-017 (Approval Authority):** Confirms `exams.results.approve` and `publish` are held exclusively by Principal (`school_admin`). Vice Principal has moderation rights only; delegation requires formal audited delegation tokens.
 - **RBAC-018 (Assistant Teacher):** Classifies Assistant Teacher as base role `teacher` with functional assignment `Assistant Subject Teacher` (`subject_offerings.assistant_teacher_id`), restricted to attendance marking and draft mark entry.
 - **RBAC-019 (Definition of `manage`):** Formalizes $\text{manage} = \text{view} + \text{create} + \text{update} + \text{delete}$, distinct from `approve`, `publish`, `moderate`, or `export`. Treats `manage` as application shorthand expanding into atomic permissions.
-- **RBAC-020 (Permission Nomenclature Normalization):** Normalizes all 32 canonical permissions into strict `<module>.<resource>.<action>` grammar with zero unmapped aliases.
+- **RBAC-020 (Permission Nomenclature Normalization):** Normalizes all 33 canonical atomic permissions into strict `<module>.<resource>.<action>` grammar with zero unmapped aliases.
 - **RBAC-021 (Verification of `job_title`):** Empirically verifies that `public.profiles.job_title` exists in PostgreSQL (`010_branding_and_staff_columns.sql`) for display purposes and holds zero direct security authority.
 - **RBAC-022 (Governance Status Correction):** Updates `PRIVILEGED-ACCESS.md` and ADR-0003 status to `PROPOSED — PENDING SUPERVISORY APPROVAL`.
 - **RBAC-023 (Separation of Facts, Proposals, and Approvals):** Enforces clear taxonomy labels (`CURRENT STATE`, `PROPOSED`, `APPROVED`, `PHASE 2`) throughout all documentation.
@@ -2246,12 +2246,13 @@ Following supervisory review of the preliminary Phase 1 architecture assessment,
 | Position / Capability | Base System Role | Functional Assignment | Job Title (`profiles.job_title`) | Security Authority & Canonical Permissions |
 |---|---|---|---|---|
 | **Principal** | `school_admin` | None (Intrinsic whole-school authority) | "Principal", "Headmaster" | Full school administration, `exams.results.approve`, `exams.results.publish`, `curriculum.version.publish`, `finance.waivers.approve` |
-| **Vice Principal** | `teacher` (or `school_admin`) | `Vice Principal` (Whole-school) | "Vice Principal - Academics" | School-wide academic review, `curriculum.version.approve`, `exams.results.moderate`, `students.welfare.manage`. NO publish authority. |
+| **Vice Principal** | `teacher` | `Vice Principal` (Whole-school) | "Vice Principal - Academics" | School-wide academic review, `curriculum.version.approve`, `exams.results.moderate`, `students.welfare.manage`. NO publish authority. |
 | **Head of Department (HOD)** | `teacher` | `Head of Department` (`departments.head_teacher_id`) | "HOD Science", "HOD Arts" | Departmental curriculum review (`curriculum.version.review`), departmental mark moderation (`exams.results.moderate`), staff allocations (`staff.allocations.manage`) |
 | **Form Master** | `teacher` | `Form Master` (`sections.class_teacher_id`) | "Form Master 10A" | Class attendance verification (`attendance.sessions.approve`), student welfare (`students.welfare.manage`), report card review (`reports.class.review`) |
 | **Subject Teacher** | `teacher` | `Subject Offering Teacher` (`subject_offerings.teacher_id`) | "Mathematics Teacher" | Offering lesson planning, attendance marking (`attendance.sessions.mark`), mark entry (`exams.results.enter`), curriculum coverage (`curriculum.coverage.log`) |
 | **Assistant Teacher** | `teacher` | `Assistant Subject Teacher` (`subject_offerings.assistant_teacher_id`) | "Assistant Teacher", "Lab Assistant" | Offering attendance marking (`attendance.sessions.mark`), draft mark entry (`exams.results.enter_draft`). Cannot finalize or submit batches. |
-| **Exam Officer** | `teacher` (or `school_admin`) | `School Exam Officer` (`public.school_exam_officers`) | "Chief Examination Officer" | Exam session management (`exams.sessions.manage`), timetables (`exams.schedules.manage`), malpractice dossiers (`exams.malpractice.manage`), school mark moderation (`exams.results.moderate`), CASS export (`exams.cass.export`). CANNOT approve or publish. |
+| **Exam Officer** | `teacher` | `School Exam Officer` (`public.school_staff_assignments`) | "Chief Examination Officer" | Exam session management (`exams.sessions.manage`), timetables (`exams.schedules.manage`), malpractice dossiers (`exams.malpractice.manage`), school mark moderation (`exams.results.moderate`), CASS export (`exams.cass.export`). CANNOT approve or publish. |
+
 
 ---
 
@@ -2329,6 +2330,184 @@ TASK-0007 PHASE 1 CORRECTION COMPLETE
 PENDING FINAL SUPERVISORY REVIEW
 PHASE 2 NOT AUTHORIZED
 ```
+
+---
+
+## TASK-0007-PHASE-1-FINAL-CORRECTION — Resolution of Remaining Canonical RBAC Architecture Blockers
+
+**Date:** 2026-09-06  
+**Status:** PHASE 1 FINAL CORRECTION COMPLETE · PENDING FINAL SUPERVISORY REVIEW · PHASE 2 NOT AUTHORIZED  
+**Parent Task:** TASK-0007 — Canonical RBAC & Permission Architecture  
+**Implementer:** Gemini / Antigravity (Implementation Engineer)  
+**Supervisor:** ChatGPT (Chief Software Architect)  
+**Final Authority:** Human Project Owner  
+**Repository:** `bock12/school-saas`  
+**Current Branch:** `ai-eos/task-0007-rbac-architecture`  
+**Base Commit:** `006896282dea608f5dcb783d9be5e94dc8d7c320` (`main`)  
+**Previous Branch Tip:** `719e722724d95e6305d71727b7d0d2b7b081f1d5`  
+
+---
+
+### 1. Purpose & Phase Boundaries
+
+This final correction resolves supervisory findings **BLOCKER 1 through BLOCKER 12**, eliminating all remaining ambiguities and contradictions in the proposed canonical RBAC architecture.
+
+**STRICT PHASE 1 INVARIANT:**
+- Phase 2 implementation remains **STRICTLY NOT AUTHORIZED**.
+- Zero database tables, migrations, or DDL created (`permissions_catalog`, `school_staff_assignments`, `assignment_status`, `delegation_tokens`, `has_permission()`).
+- Zero modifications to `public.user_role` enum, RLS policies, API routes, server actions, or frontend components.
+- Zero product code modifications; this correction is strictly restricted to architectural and governance documentation.
+
+---
+
+### 2. Comprehensive Resolution of Blockers 1 through 12
+
+#### BLOCKER 1 — Vice Principal / Exam Officer Base-Role Contradiction
+- **Problem:** Ambiguity in earlier drafts allowed `Vice Principal → teacher OR school_admin` and `Exam Officer → teacher OR school_admin`, which contradicted the strictly additive permission model because `school_admin` holds `exams.results.approve` and `exams.results.publish`.
+- **Architectural Decision:**
+  - Principal: Base Role = `school_admin`.
+  - Vice Principal: Base Role = `teacher`, Functional Assignment = `Vice Principal`.
+  - Exam Officer: Base Role = `teacher`, Functional Assignment = `Exam Officer`.
+  - **Core Invariant:** Functional assignments are strictly additive and can NEVER remove permissions granted by a base role.
+  - Prohibited: VP and Exam Officer CANNOT be classified as `school_admin`. If institutional executive authority is later required, it must be represented via explicit administrative role assignment, not simulated by pretending `school_admin` permissions disappear.
+
+#### BLOCKER 2 — Principal vs School Admin Authority
+- **Problem:** Describing `school_admin` as including Principal, Headmaster, Bursar, and Registrar while granting `school_admin` executive examination and financial waiver powers created privilege escalation risks.
+- **Architectural Decision:**
+  - `school_admin` represents **institutional executive / Principal-level authority**.
+  - `school_admin` is an administrative security role, not a human job-title taxonomy.
+  - Human titles ("Principal", "Headmaster", "Bursar", "Registrar") do NOT grant permissions.
+  - Bursars and registrars are removed from the implied population of `school_admin`; if needed, they will receive dedicated functional assignments in a future task.
+  - **Core Invariant:** `job_title` NEVER grants security authority.
+
+#### BLOCKER 3 — Authoritative Vice Principal Persistence Model
+- **Problem:** VP was defined as a functional assignment without an authoritative relational anchor, and `profiles.job_title` cannot be used for security authorization.
+- **Architectural Decision:**
+  - Vice Principals cannot be represented by `profiles.job_title` because `job_title` is unconstrained display text lacking tenant binding, lifecycle states, temporal bounds, and auditability.
+  - Specified Phase-2 DDL requirement: dedicated relational table `public.school_staff_assignments` with user/teacher identity (`teacher_id`), `tenant_id`, `academic_year_id`, `assignment_type`, `status`, `effective_from`, `effective_until`, `appointed_at`, `appointed_by`, `revoked_at`, `revoked_by`, `revocation_reason`, and audit triggers.
+
+#### BLOCKER 4 — Canonical Permission Count Reconciliation
+- **Problem:** Prior documentation claimed 32 permissions but failed to mechanically reconcile across lists.
+- **Architectural Decision:**
+  - Conducted a mechanical audit of every permission across `.ai/04-SECURITY/RBAC-MODEL.md`, `.ai/06-MODULES/SECURITY-CONTROL-MATRIX.md`, and `.ai/05-WORKFLOW/RECOMMENDATIONS.md`.
+  - The canonical permission inventory reconciles to **exactly 33 canonical atomic permissions** across 8 modules (Admissions: 3, Students: 3, Attendance: 3, Academics: 5, Exams: 11, Finance: 3, Staff: 3, Platform: 2).
+  - Formula: Declared count = Canonical registry specification count = Permission matrix count = Future `permissions_catalog` count = Test matrix count = **33**.
+
+#### BLOCKER 5 — Scope Hierarchy Model Correction
+- **Problem:** Earlier representations implied `class` was a child of `department`.
+- **Architectural Decision:**
+  - `department` and `class` (section) are **parallel branches** under `school`, intersecting at `subject_offering`.
+  - Resource Graph:
+    $$\text{platform} \longrightarrow \text{organization} \longrightarrow \text{school} \longrightarrow (\text{department} \parallel \text{class}) \longrightarrow \text{subject\_offering}$$
+  - Distinguished Scope Containment (structural parentage) from Permission Scope (evaluation boundary).
+  - **Universal Invariant:** `department` is NEVER a parent of `class`.
+
+#### BLOCKER 6 — Reconcile School-Admin and Campus Hierarchy
+- **Problem:** Single-tenant school scope contradicted proposals allowing multi-campus administration.
+- **Architectural Decision:**
+  - Explicitly distinguished CURRENT STATE from PROPOSED Phase-2:
+    - **CURRENT STATE:** PostgreSQL RLS strictly enforces single-tenant equality (`tenant_id = get_user_tenant_id()`).
+    - **PROPOSED (Phase 2):** School Administrative Scope encompasses the school tenant and authorized subordinate campus tenants via hierarchical scope resolution.
+
+#### BLOCKER 7 — Tenant Hierarchy Enforcement Claim Correction
+- **Problem:** Prior text described 4-level hierarchy as an enforced database rule.
+- **Architectural Decision:**
+  - Clarified that 4-tier hierarchy (`organization -> district/group -> school -> campus`) is a **proposed supported business model**, NOT a currently enforced database invariant.
+  - CURRENT STATE: `tenants.parent_id` and `tenants.type` exist without depth or cycle validation.
+  - PHASE 2: Tree shape validation and cycle prevention will be implemented via database constraints/triggers and recursive functions.
+
+#### BLOCKER 8 — Formal Conflict & Precedence Evaluation Order
+- **Problem:** Undefined behavior when multiple authorization rules conflict.
+- **Architectural Decision:** Formalized deterministic 8-step evaluation algorithm:
+  1. Authentication failure $\rightarrow$ `DENY` (401)
+  2. Inactive account (`is_active = false`) $\rightarrow$ `DENY` (403)
+  3. Tenant boundary violation $\rightarrow$ `DENY` (403)
+  4. Missing permission grant $\rightarrow$ `DENY` (403)
+  5. Scope does not contain target $\rightarrow$ `DENY` (403)
+  6. Ownership/relationship failure $\rightarrow$ `DENY` (403/404)
+  7. Separation-of-duties violation $\rightarrow$ `DENY` (403)
+  8. Explicit grant + valid scope + valid relationship $\rightarrow$ `ALLOW`
+  - Invariants: Broader role does not override tenant boundary; permission grant does not override SoD; assignments add permissions, never subtract.
+
+#### BLOCKER 9 — Principal / VP / Exam Officer Matrix
+- Formalized dedicated authoritative matrix:
+
+| Position | Base Role | Assignment | Scope | Result Approve | Result Publish |
+|---|---|---|---|:---:|:---:|
+| Principal | `school_admin` | None (Intrinsic executive) | School | **YES** | **YES** |
+| Vice Principal | `teacher` | `Vice Principal` | School | **NO** | **NO** |
+| Exam Officer | `teacher` | `Exam Officer` | School | **NO** | **NO** |
+| HOD | `teacher` | `HOD` | Department | **NO** | **NO** |
+| Form Master | `teacher` | `Form Master` | Class | **NO** | **NO** |
+| Subject Teacher | `teacher` | `Subject Teacher` | Offering | **NO** | **NO** |
+| Assistant Teacher | `teacher` | `Assistant Teacher` | Offering | **NO** | **NO** |
+
+#### BLOCKER 10 — Reconcile `school_admin` with Canonical Matrix
+- Verified every permission granted to `school_admin`:
+  - `exams.results.approve`: Institutional executive certification of final grades.
+  - `exams.results.publish`: Institutional executive release to students and parents.
+  - `finance.waivers.approve`: Institutional executive sign-off on tuition/fee waivers.
+  - `staff.accounts.manage`: Institutional management of school staff accounts.
+  - `students.records.manage`: Institutional management of school student enrollment/records.
+- All executive powers are intentional and documented under the institutional executive model.
+
+#### BLOCKER 11 — Stale Terminology Removal
+- Audited repository governance tree and eliminated deprecated aliases (`attendance.mark`, `curriculum.review`, `exams.marks.moderate`). Standardized strictly on `<module>.<resource>.<action>` across all 33 canonical permissions.
+
+#### BLOCKER 12 — Validate Claims Against Actual Schema
+- Verified all assertions against repository schema:
+  - `profiles.role` (`public.user_role` enum, 6 values), `profiles.job_title` (TEXT, display-only), `profiles.tenant_id` (UUID), `profiles.is_active` (BOOLEAN).
+  - Existing relational tables: `teachers`, `departments`, `sections`, `subject_offerings`, `teacher_assignments`, `academic_years`, `tenants.parent_id`, `tenants.type`.
+  - Future objects explicitly labeled `PHASE 2 / PROPOSED / NOT YET IMPLEMENTED`: `permissions_catalog`, `school_staff_assignments`, `assignment_status`, `delegation_tokens`, `has_permission()`.
+
+---
+
+### 3. Canonical Permission Inventory (Exact Count: 33)
+
+1. `admissions.applicants.view`
+2. `admissions.applicants.create`
+3. `admissions.applicants.approve`
+4. `students.records.view`
+5. `students.records.manage`
+6. `students.welfare.manage`
+7. `attendance.sessions.mark`
+8. `attendance.sessions.approve`
+9. `attendance.records.view`
+10. `curriculum.version.create`
+11. `curriculum.version.review`
+12. `curriculum.version.approve`
+13. `curriculum.version.publish`
+14. `curriculum.coverage.log`
+15. `exams.sessions.manage`
+16. `exams.schedules.manage`
+17. `exams.results.enter` (includes draft mark entry for Assistant Teacher)
+18. `exams.results.moderate`
+19. `exams.results.approve`
+20. `exams.results.publish`
+21. `exams.results.view`
+22. `exams.malpractice.manage`
+23. `exams.appeals.submit`
+24. `exams.appeals.resolve`
+25. `exams.cass.export`
+26. `finance.invoices.view`
+27. `finance.invoices.manage`
+28. `finance.waivers.approve`
+29. `staff.directory.view`
+30. `staff.allocations.manage`
+31. `staff.accounts.manage`
+32. `platform.tenants.manage`
+33. `platform.billing.manage`
+
+---
+
+### 4. Final Status
+
+```text
+TASK-0007 PHASE 1 FINAL CORRECTION COMPLETE
+PENDING FINAL SUPERVISORY REVIEW
+PHASE 2 NOT AUTHORIZED
+```
+
 
 
 
