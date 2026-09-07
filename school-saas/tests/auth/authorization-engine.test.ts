@@ -635,53 +635,90 @@ describe('Canonical Authorization Engine — Core Unit Tests', () => {
       assert.equal(dec.code, 'SOD_SELF_APPROVAL_BLOCKED');
     });
 
-    test('exams.results.approve & publish: restricted to school_admin; denied to VP, Exam Officer, HOD, Teacher', () => {
+    test('exams.results.approve & publish: permitted for administrative executives (super_admin, org_admin, school_admin); strictly denied to teaching staff & functional assignments', () => {
+      // 1. super_admin: Platform-wide authority to approve and publish
+      const superCtx = createTestSecurityContext({
+        baseRole: 'super_admin',
+        isSuperAdmin: true,
+      });
+      assert.equal(can(superCtx, 'exams.results.approve', { tenantId: 'ten-school-1' }), true);
+      assert.equal(can(superCtx, 'exams.results.publish', { tenantId: 'ten-school-1' }), true);
+
+      // 2. org_admin: Organization-wide authority across owned child schools
+      const orgCtx = createTestSecurityContext({
+        baseRole: 'org_admin',
+        tenantId: 'ten-org-parent',
+        organizationSubtenantIds: ['ten-school-child-1', 'ten-school-child-2'],
+      });
+      // Permitted on child schools within organization subtree
+      assert.equal(can(orgCtx, 'exams.results.approve', { tenantId: 'ten-school-child-1' }), true);
+      assert.equal(can(orgCtx, 'exams.results.publish', { tenantId: 'ten-school-child-2' }), true);
+      // Denied on foreign school outside organization subtree
+      assert.equal(can(orgCtx, 'exams.results.approve', { tenantId: 'ten-school-foreign' }), false);
+      assert.equal(can(orgCtx, 'exams.results.publish', { tenantId: 'ten-school-foreign' }), false);
+
+      // 3. school_admin: Institutional authority within own school tenant
       const adminCtx = createTestSecurityContext({
         baseRole: 'school_admin',
         tenantId: 'ten-school-1',
       });
-      const target: ResourceTarget = { tenantId: 'ten-school-1' };
+      assert.equal(can(adminCtx, 'exams.results.approve', { tenantId: 'ten-school-1' }), true);
+      assert.equal(can(adminCtx, 'exams.results.publish', { tenantId: 'ten-school-1' }), true);
+      // Denied on foreign school tenant
+      assert.equal(can(adminCtx, 'exams.results.approve', { tenantId: 'ten-school-foreign' }), false);
+      assert.equal(can(adminCtx, 'exams.results.publish', { tenantId: 'ten-school-foreign' }), false);
 
-      assert.equal(can(adminCtx, 'exams.results.approve', target), true);
-      assert.equal(can(adminCtx, 'exams.results.publish', target), true);
+      // 4. Teaching staff & functional assignments: ALL strictly denied
+      const functionalAssignments: Array<
+        'vice_principal' | 'exam_officer' | 'hod' | 'form_master' | 'subject_teacher' | 'assistant_teacher'
+      > = [
+        'vice_principal',
+        'exam_officer',
+        'hod',
+        'form_master',
+        'subject_teacher',
+        'assistant_teacher',
+      ];
 
-      // Vice Principal cannot approve or publish exam results
-      const vpCtx = createTestSecurityContext({
-        baseRole: 'teacher',
-        tenantId: 'ten-school-1',
-        activeAssignments: [
-          {
-            id: 'asg-vp',
-            assignmentType: 'vice_principal',
-            tenantId: 'ten-school-1',
-            academicYearId: 'ay-1',
-            status: 'active',
-            isActive: true,
-            effectiveFrom: '2026-09-01',
-          },
-        ],
-      });
-      assert.equal(can(vpCtx, 'exams.results.approve', target), false);
-      assert.equal(can(vpCtx, 'exams.results.publish', target), false);
+      for (const fa of functionalAssignments) {
+        const staffCtx = createTestSecurityContext({
+          baseRole: 'teacher',
+          tenantId: 'ten-school-1',
+          activeAssignments: [
+            {
+              id: `asg-${fa}`,
+              assignmentType: fa,
+              tenantId: 'ten-school-1',
+              academicYearId: 'ay-1',
+              departmentId: 'dept-sci',
+              sectionId: 'sec-jss1',
+              subjectOfferingId: 'off-math',
+              status: 'active',
+              isActive: true,
+              effectiveFrom: '2026-09-01',
+            },
+          ],
+        });
+        assert.equal(
+          can(staffCtx, 'exams.results.approve', { tenantId: 'ten-school-1' }),
+          false,
+          `Functional assignment [${fa}] must NOT be permitted to approve results`
+        );
+        assert.equal(
+          can(staffCtx, 'exams.results.publish', { tenantId: 'ten-school-1' }),
+          false,
+          `Functional assignment [${fa}] must NOT be permitted to publish results`
+        );
+      }
 
-      // Exam Officer cannot approve or publish exam results
-      const eoCtx = createTestSecurityContext({
-        baseRole: 'teacher',
-        tenantId: 'ten-school-1',
-        activeAssignments: [
-          {
-            id: 'asg-eo',
-            assignmentType: 'exam_officer',
-            tenantId: 'ten-school-1',
-            academicYearId: 'ay-1',
-            status: 'active',
-            isActive: true,
-            effectiveFrom: '2026-09-01',
-          },
-        ],
-      });
-      assert.equal(can(eoCtx, 'exams.results.approve', target), false);
-      assert.equal(can(eoCtx, 'exams.results.publish', target), false);
+      // 5. Students and Parents: Strictly denied
+      const studentCtx = createTestSecurityContext({ baseRole: 'student', tenantId: 'ten-school-1' });
+      assert.equal(can(studentCtx, 'exams.results.approve', { tenantId: 'ten-school-1' }), false);
+      assert.equal(can(studentCtx, 'exams.results.publish', { tenantId: 'ten-school-1' }), false);
+
+      const parentCtx = createTestSecurityContext({ baseRole: 'parent', tenantId: 'ten-school-1' });
+      assert.equal(can(parentCtx, 'exams.results.approve', { tenantId: 'ten-school-1' }), false);
+      assert.equal(can(parentCtx, 'exams.results.publish', { tenantId: 'ten-school-1' }), false);
     });
 
     test('Assistant Teacher: mark entry permitted in draft stage, denied in non-draft stages', () => {
@@ -787,6 +824,117 @@ describe('Canonical Authorization Engine — Core Unit Tests', () => {
 
       // Teacher does NOT have capability to manage platform tenants
       assert.equal(hasCapability(teacherCtx, 'platform.tenants.manage'), false);
+    });
+
+    test('SECURITY CRITICAL: hasCapability() NEVER substitutes for can() or authorize() (Scope, Tenant, and SoD bypass prevention)', () => {
+      const hodActorId = 'usr-hod-math';
+      const hodCtx = createTestSecurityContext({
+        actorId: hodActorId,
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [
+          {
+            id: 'asg-hod-math',
+            assignmentType: 'hod',
+            tenantId: 'ten-school-1',
+            academicYearId: 'ay-2026',
+            departmentId: 'dept-math',
+            status: 'active',
+            isActive: true,
+            effectiveFrom: '2026-09-01',
+          },
+        ],
+      });
+
+      // 1. ABSTRACT CAPABILITY IS TRUE:
+      // HOD holds the abstract entitlement to moderate examination results
+      assert.equal(hasCapability(hodCtx, 'exams.results.moderate'), true);
+
+      // 2. RESOURCE CANNOT BE ACCESSED IF OUT OF DEPARTMENT SCOPE:
+      // Even though hasCapability is TRUE, can() is FALSE and authorize() THROWS
+      const foreignDeptTarget: ResourceTarget = {
+        tenantId: 'ten-school-1',
+        departmentId: 'dept-humanities', // Different department!
+        submitterId: 'other-teacher',
+      };
+      assert.equal(can(hodCtx, 'exams.results.moderate', foreignDeptTarget), false);
+      assert.throws(
+        () => authorize(hodCtx, 'exams.results.moderate', foreignDeptTarget),
+        (err: any) => {
+          assert.equal(err.name, 'AuthorizationError');
+          assert.equal(err.code, 'OUT_OF_SCOPE');
+          return true;
+        }
+      );
+
+      // 3. RESOURCE CANNOT BE ACCESSED IF CROSS-TENANT:
+      // Even though hasCapability is TRUE, can() is FALSE and authorize() THROWS
+      const crossTenantTarget: ResourceTarget = {
+        tenantId: 'ten-school-foreign', // Foreign tenant!
+        departmentId: 'dept-math',
+        submitterId: 'other-teacher',
+      };
+      assert.equal(can(hodCtx, 'exams.results.moderate', crossTenantTarget), false);
+      assert.throws(
+        () => authorize(hodCtx, 'exams.results.moderate', crossTenantTarget),
+        (err: any) => {
+          assert.equal(err.name, 'AuthorizationError');
+          assert.equal(err.code, 'CROSS_TENANT_DENIED');
+          return true;
+        }
+      );
+
+      // 4. RESOURCE CANNOT BE ACCESSED IF SEPARATION OF DUTIES (SoD) VIOLATED:
+      // Even though hasCapability is TRUE and department matches, self-moderation MUST BLOCK!
+      const selfModerationTarget: ResourceTarget = {
+        tenantId: 'ten-school-1',
+        departmentId: 'dept-math',
+        submitterId: hodActorId, // Actor submitted these marks!
+      };
+      assert.equal(can(hodCtx, 'exams.results.moderate', selfModerationTarget), false);
+      assert.throws(
+        () => authorize(hodCtx, 'exams.results.moderate', selfModerationTarget),
+        (err: any) => {
+          assert.equal(err.name, 'AuthorizationError');
+          assert.equal(err.code, 'SOD_SELF_MODERATION_BLOCKED');
+          return true;
+        }
+      );
+
+      // 5. STAGE CONSTRAINTS CANNOT BE BYPASSED:
+      // Assistant teacher hasCapability('exams.results.enter') === true, but CANNOT enter non-draft
+      const asstCtx = createTestSecurityContext({
+        actorId: 'usr-asst',
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [
+          {
+            id: 'asg-asst-1',
+            assignmentType: 'assistant_teacher',
+            tenantId: 'ten-school-1',
+            academicYearId: 'ay-2026',
+            subjectOfferingId: 'off-bio-1',
+            status: 'active',
+            isActive: true,
+            effectiveFrom: '2026-09-01',
+          },
+        ],
+      });
+      assert.equal(hasCapability(asstCtx, 'exams.results.enter'), true);
+      const submittedStageTarget: ResourceTarget = {
+        tenantId: 'ten-school-1',
+        subjectOfferingId: 'off-bio-1',
+        stage: 'submitted', // Non-draft!
+      };
+      assert.equal(can(asstCtx, 'exams.results.enter', submittedStageTarget), false);
+      assert.throws(
+        () => authorize(asstCtx, 'exams.results.enter', submittedStageTarget),
+        (err: any) => {
+          assert.equal(err.name, 'AuthorizationError');
+          assert.equal(err.code, 'SOD_STAGE_RESTRICTION');
+          return true;
+        }
+      );
     });
   });
 });

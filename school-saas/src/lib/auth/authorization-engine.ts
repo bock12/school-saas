@@ -92,8 +92,19 @@ export interface ResolvedStaffAssignment {
 }
 
 /**
- * Target resource specifier.
- * Callers provide entity identifiers; the engine validates scope containment and SoD.
+ * Target resource specifier representing a server-resolved, trusted resource context.
+ *
+ * CRITICAL ARCHITECTURAL BOUNDARY (TASK-0007 Phase 3A/3B Boundary):
+ * ResourceTarget MUST NOT accept arbitrary, unverified client request parameters directly.
+ * In Phase 3B (API Integration), route handlers and API guards MUST first perform
+ * server-side database lookups to hydrate this object with verified attributes:
+ *   1. Authoritative tenant_id (from the database record, not untrusted query/body)
+ *   2. Structural identifiers (department_id, section_id, subject_offering_id)
+ *   3. Submitter/creator identity (submitterId) for Separation of Duties (SoD) enforcement
+ *   4. Current lifecycle stage (e.g. 'draft', 'submitted') for workflow gating
+ *
+ * Only after server-side verification may this trusted ResourceTarget be passed to
+ * evaluateAuthorization(), can(), or authorize().
  */
 export interface ResourceTarget {
   readonly tenantId: string;
@@ -548,8 +559,18 @@ export function can(
 
 /**
  * Non-authoritative abstract capability check (Guardrail 8).
- * Checks if the actor holds the permission in the abstract (e.g. for UI menus).
- * WARNING: NEVER use hasCapability() to authorize access to specific resources!
+ *
+ * CRITICAL SECURITY INVARIANT:
+ * hasCapability() evaluates whether the actor holds a permission grant in the abstract
+ * (e.g. for conditionally rendering top-level navigation tabs or dashboard menus).
+ *
+ * It CANNOT and MUST NEVER substitute for can() or authorize():
+ *   - It does NOT evaluate tenant isolation (cannot verify target.tenantId)
+ *   - It does NOT evaluate scope containment (cannot verify department, class, or offering match)
+ *   - It does NOT evaluate Separation of Duties (cannot detect self-moderation or self-approval)
+ *   - It does NOT evaluate workflow stage constraints (cannot enforce draft-only rules)
+ *
+ * All resource mutations and sensitive data accesses MUST use authorize() or can().
  */
 export function hasCapability(
   context: TrustedSecurityContext,

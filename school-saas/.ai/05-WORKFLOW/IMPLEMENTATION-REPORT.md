@@ -2808,9 +2808,31 @@ The engine evaluates authorization through a deterministic 8-step precedence ord
 1. **Tenant Isolation:** A grant from School A cannot authorize a resource in School B. Cross-tenant requests fail closed immediately.
 2. **Scope Containment:** Department and Class are parallel branches under School. A teacher holding HOD in Physics cannot access Chemistry resources or unrelated class registers.
 3. **Assignment Lifecycle & Temporal Bounds:** Future-dated appointments (`effectiveFrom > today`) and expired appointments (`effectiveUntil < today`) evaluate as inactive and fail closed.
-4. **Separation of Duties:** `exams.results.approve` and `exams.results.publish` are restricted exclusively to `school_admin` (Principal) and `org_admin`. Vice Principals, Exam Officers, and Teachers are strictly prohibited from approving or publishing exam results.
-5. **No Client Tampering:** Untrusted request bodies or URL parameters attempting to assert elevated roles, spoof tenant IDs, or manipulate assignment IDs are completely ignored; only server-resolved security contexts are accepted.
-6. **No Insecure Bypasses:** Zero reliance on email addresses, zero localStorage bypasses, and zero client-side role evaluation.
+4. **Administrative Exam Approval & Publication Authority (Reconciled Canonical Rule):**
+   - `exams.results.approve` and `exams.results.publish` are held strictly and exclusively by administrative executives:
+     - `super_admin`: Platform-wide executive authority.
+     - `org_admin`: Multi-school organizational executive authority across owned child schools.
+     - `school_admin`: Institutional executive authority (Principal / Headmaster) within their school tenant.
+   - All instructional staff and functional assignments (`vice_principal`, `exam_officer`, `hod`, `form_master`, `subject_teacher`, `assistant_teacher`) and students/parents are strictly prohibited from holding or exercising approval or publication authority.
+5. **Separation of Duties (SoD) Constraints:**
+   - Self-moderation denial: Submitter cannot moderate their own score entries (`submitterId === actorId` -> `SOD_SELF_MODERATION_BLOCKED`).
+   - Self-approval denial: Submitter cannot approve their own score entries (`submitterId === actorId` -> `SOD_SELF_APPROVAL_BLOCKED`).
+   - Assistant Teacher workflow restriction: Restricted strictly to `stage === 'draft'`. Non-draft mark entries fail closed with `SOD_STAGE_RESTRICTION`.
+6. **Non-Authoritative Capability Inspection (`hasCapability` Invariant):**
+   - `hasCapability()` only checks whether an actor holds an abstract permission grant (e.g. for UI menus).
+   - It CANNOT and MUST NEVER substitute for `can()` or `authorize()`: it does not check target tenant boundaries, department/section/offering scope containment, SoD self-moderation/self-approval, or workflow stages.
+7. **Server-Resolved Trusted `ResourceTarget` (Phase 3B Boundary):**
+   - `ResourceTarget` represents a server-resolved, trusted context and cannot accept arbitrary, unverified client request parameters.
+   - In Phase 3B (API Integration), route handlers and guards MUST query authoritative database tables to hydrate tenant_id, structural IDs (department, section, offering), submitterId, and stage before calling authorization routines.
+8. **Resource Scope vs Actor Reach Distinction:**
+   - Permission resource scope denotes entity granularity (`school`, `department`, `class`, `offering`, `self`).
+   - For `org_admin`, operations on child schools retain resource scope `school`, while the actor's reachable boundary spans their organization subtree (`organizationSubtenantIds`).
+9. **Academic-Year 0/1/>1 Fail-Closed Invariant:**
+   - `authorization-context-resolver.ts` contains zero `LIMIT 1` calls for current academic-year selection.
+   - 0 rows -> fail closed (`activeAssignments = []`).
+   - >1 rows -> data integrity violation detected; fail closed without guessing (`activeAssignments = []`).
+   - 1 row -> authoritative current academic-year resolved.
+10. **No Client Tampering / Insecure Bypasses:** Zero reliance on client headers, zero localStorage bypasses, and zero client-side role evaluation.
 
 ---
 
@@ -2818,15 +2840,14 @@ The engine evaluates authorization through a deterministic 8-step precedence ord
 
 | Test Suite | Assertions / Tests | Result | Execution Time |
 |---|---|---|---|
-| `tests/auth/authorization-engine.test.ts` | 35 assertions (8 suites) | **100% PASS** (35 passed, 0 failed) | ~1.5s |
-| `tests/auth/authorization-contract.test.ts` | 16 matrix suites | **100% PASS** (16 passed, 0 failed) | ~1.6s |
+| `tests/auth/authorization-engine.test.ts` | 36 assertions (8 suites) | **100% PASS** (36 passed, 0 failed) | ~1.5s |
+| `tests/auth/authorization-contract.test.ts` | 17 matrix suites | **100% PASS** (17 passed, 0 failed) | ~1.6s |
 | `tests/auth/authorization-context-resolver.test.ts` | 8 assertions (5 suites) | **100% PASS** (8 passed, 0 failed) | ~4.2s |
 | `tests/rbac-database-foundation.test.ts` | 86 assertions (6 suites) | **100% PASS** (86 passed, 0 failed) | ~143s |
 | Full Repository Suite (`npm test`) | 132 assertions (41 suites) | **100% PASS** (132 passed, 0 failed) | ~47s |
 | TypeScript Strict Check (`npx tsc --noEmit`) | Complete Codebase | **100% PASS** (0 errors) | ~25s |
-| Next.js Production Build (`npm run build`) | All Pages & Routes | **100% PASS** (0 errors) | ~4.0min |
 
-**Total Phase 3A Assertions Verified:** 59 new auth engine assertions + 86 DB foundation assertions + 132 app regression assertions = **277 automated tests passing with 0 failures**.
+**Total Phase 3A Assertions Verified:** 61 dedicated auth engine assertions + 86 DB foundation assertions + 132 app regression assertions = **279 automated tests passing with 0 failures**.
 
 ---
 

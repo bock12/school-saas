@@ -200,6 +200,43 @@ describe('Canonical Authorization Contract — Matrix-Driven Verification', () =
       }
     });
 
+    test('exams.results.approve and publish: among base roles, strictly held ONLY by super_admin, org_admin, school_admin; strictly denied to teacher, student, parent', () => {
+      const allowedRoles: BaseRole[] = ['super_admin', 'org_admin', 'school_admin'];
+      const deniedRoles: BaseRole[] = ['teacher', 'student', 'parent'];
+
+      for (const role of allowedRoles) {
+        const grants = getBaseRoleGrants(role);
+        const hasApprove = grants.some((g) => g.permission === 'exams.results.approve');
+        const hasPublish = grants.some((g) => g.permission === 'exams.results.publish');
+        assert.equal(
+          hasApprove,
+          true,
+          `Administrative role [${role}] MUST hold exams.results.approve`
+        );
+        assert.equal(
+          hasPublish,
+          true,
+          `Administrative role [${role}] MUST hold exams.results.publish`
+        );
+      }
+
+      for (const role of deniedRoles) {
+        const grants = getBaseRoleGrants(role);
+        const hasApprove = grants.some((g) => g.permission === 'exams.results.approve');
+        const hasPublish = grants.some((g) => g.permission === 'exams.results.publish');
+        assert.equal(
+          hasApprove,
+          false,
+          `Non-administrative role [${role}] must NEVER hold exams.results.approve`
+        );
+        assert.equal(
+          hasPublish,
+          false,
+          `Non-administrative role [${role}] must NEVER hold exams.results.publish`
+        );
+      }
+    });
+
     test('curriculum.version.publish is held by school_admin and org_admin, NEVER by VP or HOD', () => {
       for (const assignmentType of ['vice_principal', 'hod'] as StaffAssignmentType[]) {
         const assignmentGrants = getAssignmentGrants(assignmentType);

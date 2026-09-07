@@ -654,18 +654,35 @@ Because all schema changes in Phase 2 are **strictly additive** (new appointment
 ### Architecture
 - **Pure Deterministic Evaluator:** Implemented in `src/lib/auth/authorization-engine.ts`. Evaluates `evaluateAuthorization(context, permission, target)` without database or network dependencies.
 - **Static Catalog & Explicit Matrices:** Implemented in `src/lib/auth/permissions-registry.ts`. Defines all 33 canonical permissions with immutable `allowedScopes`, explicit `BASE_ROLE_PERMISSIONS`, and explicit `FUNCTIONAL_ASSIGNMENT_PERMISSIONS`.
-- **Server-Side Context Resolver:** Implemented in `src/lib/auth/authorization-context-resolver.ts`. Resolves trusted session, profile, active academic year (with strict 0/1/>1 fail-closed invariant), active assignments from `school_staff_assignments`, verified child students from `student_parents`, and invokes `get_org_subtenant_ids()` for org hierarchy.
+- **Server-Side Context Resolver:** Implemented in `src/lib/auth/authorization-context-resolver.ts`. Resolves trusted session, profile, active academic year (with strict 0/1/>1 fail-closed invariant, zero `LIMIT 1` calls), active assignments from `school_staff_assignments`, verified child students from `student_parents`, and invokes `get_org_subtenant_ids()` for org hierarchy.
 - **Enforcement APIs:** Exposes `authorize()` (throwing `AuthorizationError`), `can()` (non-throwing boolean), and `hasCapability()` (abstract capability check, strictly non-authoritative for resources).
-- **Separation of Duties (SoD):** Enforces self-moderation denial (`submitterId === actorId`), self-approval denial, exclusive executive approval/publishing restriction (`school_admin`), and assistant teacher draft stage constraint.
+- **Separation of Duties (SoD) & Executive Authority:**
+  - Self-moderation denial: Actor cannot moderate their own entered marks (`submitterId === actorId` -> DENY with `SOD_SELF_MODERATION_BLOCKED`).
+  - Self-approval denial: Actor cannot approve results they submitted (`submitterId === actorId` -> DENY with `SOD_SELF_APPROVAL_BLOCKED`).
+  - Administrative Exam Authority: `exams.results.approve` and `exams.results.publish` are held strictly by administrative executives (`super_admin` at platform scope, `org_admin` across child schools, `school_admin` within institutional school). Strictly denied to all instructional staff and functional assignments (`vice_principal`, `exam_officer`, `hod`, `form_master`, `subject_teacher`, `assistant_teacher`).
+  - Assistant Teacher Stage Constraint: Mark entry restricted strictly to `stage === 'draft'`. Non-draft stages DENY with `SOD_STAGE_RESTRICTION`.
+- **Non-Authoritative Capability Inspection (`hasCapability`):**
+  - Evaluates whether an actor holds a grant in the abstract (e.g. for UI menus).
+  - Can NEVER substitute for `can()` or `authorize()`. It does not evaluate target tenant boundaries, scope containment (department/section/offering), SoD constraints, or workflow stage gating.
+- **Server-Resolved Trusted `ResourceTarget` (Phase 3B Boundary):**
+  - `ResourceTarget` represents a server-resolved, trusted context and must NEVER accept raw, unverified client parameters.
+  - Phase 3B API routes/guards MUST query authoritative database tables to hydrate tenant_id, department_id, section_id, subject_offering_id, submitter_id, and stage before calling authorization routines.
+- **Resource Scope vs Actor Reach Distinction:**
+  - Resource scope denotes the entity granularity (`school`, `department`, `class`, `offering`, `self`).
+  - For `org_admin`, operations on child schools retain resource scope `school`, while the actor's reachable boundary spans their organization subtree (`organizationSubtenantIds`).
+- **Academic-Year 0/1/>1 Fail-Closed Invariant:**
+  - `authorization-context-resolver.ts` contains zero `LIMIT 1` calls for current academic-year selection.
+  - 0 rows -> fail closed (`activeAssignments = []`).
+  - >1 rows -> data integrity violation detected; fail closed without guessing (`activeAssignments = []`).
+  - 1 row -> authoritative current academic-year resolved.
 
 ### Test Verification
-- `tests/auth/authorization-engine.test.ts`: 35 assertions across 8 test suites (100% pass).
-- `tests/auth/authorization-contract.test.ts`: 16 matrix-driven suites testing positive grants and negative space (default-deny) across all 33 permissions, 6 base roles, and 6 assignments (100% pass).
+- `tests/auth/authorization-engine.test.ts`: 36 assertions across 8 test suites (100% pass).
+- `tests/auth/authorization-contract.test.ts`: 17 matrix-driven suites testing positive grants and negative space (default-deny) across all 33 permissions, 6 base roles, and 6 assignments (100% pass).
 - `tests/auth/authorization-context-resolver.test.ts`: 8 assertions across 5 suites (100% pass).
 - `tests/rbac-database-foundation.test.ts`: 86 assertions across 6 suites (100% pass).
 - `npm test`: 132/132 tests pass (100% pass).
 - `npx tsc --noEmit`: 0 errors.
-- `npm run build`: Next.js production build succeeded with 0 errors.
 
 ---
 
