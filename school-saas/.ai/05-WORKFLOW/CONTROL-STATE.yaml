@@ -20,7 +20,14 @@ active_task:
   proposed_permissions:
     - admissions.applicants.manage
     - admissions.applicants.evaluate
-    - curriculum.lesson_plan.create
+    - admissions.applicants.place
+    - admissions.letters.dispatch
+    - admissions.applicants.enroll
+    - curriculum.lesson_plan.generate
+  permission_catalog_count:
+    baseline_frozen_phase_3a: 33
+    proposed_additions: 6
+    resulting_catalog: 39
   frozen_files_intact: true
   application_code_modified: false
   database_migrations_modified: false
