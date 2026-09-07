@@ -19,6 +19,8 @@
 | **Academic Core (Classes/Subjects)**| `authorizeApiRequest` | Table-level tenant policies | Staff / Student / Admin | `tenant_id = get_user_tenant_id()` | Tenant boundary | Mutations restricted to school_admin | **PASS** | Existing migrations 001-042; T-001 to T-007 |
 | **Attendance** | `authorizeApiRequest` | `attendance_*` policies | Teacher / School Admin | `tenant_id = get_user_tenant_id()` | Tenant / Class boundary | Verification ongoing in TASK-0007 | **PARTIAL** | Verified tenant boundary; role refinements in TASK-0007 |
 | **Finance / Bursary** | `authorizeApiRequest` | `finance_*` policies | Finance / School Admin | `tenant_id = get_user_tenant_id()` | Tenant boundary | Sensitive financial boundary; verification ongoing | **PARTIAL** | Application guard active; RLS audit scheduled |
+| **public.permissions_catalog** | `authorizeApiRequest` | `permissions_catalog_read_auth`, `permissions_catalog_manage_super_admin` | Authenticated (read) / `super_admin` (write) | Platform-wide | Platform boundary | DML restricted strictly to `super_admin` via `is_super_admin()` | **PASS** | Migration 047; tests/rbac-database-foundation.test.ts Suite 1 |
+| **public.school_staff_assignments** | Staff / Admin Guards | `ssa_select_staff_or_admin`, `ssa_modify_*` | Staff / School Admin / Org Admin / Super Admin | `tenant_id = get_user_tenant_id()` or subtree | `teacher_id = auth.uid()` / Tenant boundary | Caller authorization via `is_hod()`, `is_form_master()`, `is_exam_officer()`, `is_vice_principal()` | **PASS** | Migration 047; tests/rbac-database-foundation.test.ts Suites 1-6 (34 assertions) |
 | **Super Admin Platform Routes** | `authorizeApiRequest(scope: 'platform')` | `tenants_super_admin_all` | `super_admin` only | Platform-wide | Super Admin only | Service role strictly deferred | **PASS** | SEC-22, T-015A, T-015D, T-015E |
 
 *Note on Status Values:*
@@ -131,4 +133,277 @@
 - **Remediation**: Corrected trigger definition in migration 046 and deployed to live Supabase database.
 - **Residual risk**: No residual exploitable path identified under the tested execution contexts.
 - **Follow-up task**: None. Verified by tests PROFILE-08, PROFILE-09, and PROFILE-10.
+
+### Finding RBAC-001 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: `public.academic_calendar_events` RLS Policy
+- **Security impact**: Dead policy. Policy `"School admins manage calendar events"` references `public.user_roles ur JOIN public.roles r`, tables which do not exist in the database.
+- **Current behavior**: Query evaluation against this policy either errors or denies legitimate school administrators from managing calendar events via client connections.
+- **Expected behavior**: Policy should check `tenant_id = public.get_user_tenant_id() AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin())`.
+- **Evidence**: `supabase/migrations/040_academic_calendar_events.sql` lines 42-46.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 schema remediation.
+- **Residual risk**: Controlled; currently fails closed.
+
+### Finding RBAC-002 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: `/api/academics/ai/lesson-plan` Route Handler
+- **Security impact**: Direct PostgreSQL pool connection queries subject offerings and curriculum versions by ID with zero caller tenant-id or role authorization checks. Any authenticated user (including students or cross-tenant actors) can generate lesson plans for arbitrary subject offerings across any tenant.
+- **Current behavior**: Only checks `if (!user) return 401`. Executes direct pool query using untrusted client input `offering_id`.
+- **Expected behavior**: Must enforce `authorizeApiRequest()` requiring active teacher or school_admin role, verify that target offering belongs to caller's tenant, and verify teacher assignment scope.
+- **Evidence**: `src/app/api/academics/ai/lesson-plan/route.ts` lines 18-49.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 API guard migration.
+- **Residual risk**: Medium; read-only generation but leaks cross-tenant curriculum and teacher names.
+
+### Finding RBAC-003 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: `/api/exam-office/communication-rules` and `/api/exam-office/communication-templates`
+- **Security impact**: Endpoints invoke `createAdminClient()`, which bypasses RLS, and rely on client-supplied `user.user_metadata?.tenant_id` without verifying role or database tenant membership. Any authenticated user can read and insert notification rules and templates.
+- **Current behavior**: Bypasses `authorizeApiRequest()`; relies on untrusted `user_metadata.tenant_id`.
+- **Expected behavior**: Must enforce `authorizeApiRequest()` with `roles: ['school_admin', 'exam_officer']` (or privileged admin client instantiated only post-authorization) and use authoritative `profile.tenant_id`.
+- **Evidence**: `src/app/api/exam-office/communication-rules/route.ts` lines 12-19, 41-47.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 API guard migration.
+- **Residual risk**: High; allows cross-tenant rule poisoning and unauthorized template insertion.
+
+### Finding RBAC-004 (TASK-0007)
+- **Severity**: CRITICAL
+- **Affected component**: `public.approval_requests` Table Policy and `resolveApprovalRequest` Server Action
+- **Security impact**: Complete separation-of-duties collapse. In `013_approval_requests.sql`, the policy `"school_members_see_own_requests"` defines `FOR ALL USING (tenant_id = (SELECT tenant_id FROM public.profiles WHERE id = auth.uid()))`. In `src/app/actions/approvals.ts`, `resolveApprovalRequest` does not check caller role. Any authenticated user in a school (even students) can approve or delete arbitrary grade changes, fee waivers, admissions, and leave requests.
+- **Current behavior**: `FOR ALL` RLS policy grants mutation authority to all tenant members without role check; server action does not check role.
+- **Expected behavior**: RLS `FOR UPDATE` and `FOR DELETE` must strictly require `is_school_admin() OR is_org_admin() OR is_super_admin()`. `resolveApprovalRequest` server action must verify administrative authority.
+- **Evidence**: `013_approval_requests.sql` line 43; `src/app/actions/approvals.ts` lines 62-82.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 RLS and action remediation.
+- **Residual risk**: Critical until remediated in Phase 2.
+
+### Finding RBAC-005 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: Curriculum Server Actions (`approveCurriculum`, `publishCurriculum`)
+- **Security impact**: Server actions in `src/app/actions/curriculum.ts` execute direct PostgreSQL pool updates without checking caller role or tenant membership. Any authenticated user can transition a curriculum version to `approved` or `published`.
+- **Current behavior**: Direct pool `UPDATE curriculum_versions SET status = 'approved' ...` without checking if `userId` is a principal, HOD, or school admin.
+- **Expected behavior**: Must verify caller is authorized for academic approvals within the tenant before executing mutation.
+- **Evidence**: `src/app/actions/curriculum.ts` lines 333-363, 369-400.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 server-action guard migration.
+- **Residual risk**: High; permits unauthorized publishing of unvetted curricula.
+
+### Finding RBAC-006 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: Academic Management RLS Policies on `classes`, `sections`, `subjects`, `departments`
+- **Security impact**: Org admins managing multi-school networks receive RLS denials when trying to manage classes in child schools. Policies created in `007_academics_rls_refactor.sql` require `tenant_id = get_user_tenant_id() AND is_school_admin()`. An `org_admin` has `tenant_id = org.id`, so `tenant_id` does not match the child school's `id`.
+- **Current behavior**: RLS denies `org_admin` from updating or creating classes in child schools.
+- **Expected behavior**: Policies should support organizational hierarchy: `tenant_id = get_user_tenant_id() OR tenant_id IN (SELECT id FROM tenants WHERE parent_id = get_user_tenant_id())` when caller `is_org_admin()`.
+- **Evidence**: `007_academics_rls_refactor.sql` lines 61, 67, 73, 79.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 RLS hierarchy alignment.
+- **Residual risk**: Low security risk (fails closed), but breaks intended org-admin operations.
+
+### Finding RBAC-007 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: Application TypeScript Roles vs PostgreSQL `user_role` Enum
+- **Security impact**: Architectural disconnect. TypeScript types `AppRole` and `TenantRole` recognize `exam_officer`, but `public.user_role` enum has only `('super_admin', 'org_admin', 'school_admin', 'teacher', 'student', 'parent')`. Calling `updateUserRole(userId, 'exam_officer')` fails at database level with an enum casting error.
+- **Current behavior**: Exam Officer cannot be stored in the database as a role.
+- **Expected behavior**: Reconciled via Contextual Functional Assignment in `public.school_staff_assignments` (`assignment_type = 'exam_officer'`), retaining `teacher` as base role.
+- **Evidence**: `src/lib/auth/guards.ts` line 7; `src/app/actions/users.ts` line 7, 214; `001_foundation.sql` line 11.
+- **Remediation**: Implemented in Migration 047 via `staff_assignment_type` enum value `'exam_officer'` in `public.school_staff_assignments` and caller authorization helper `is_exam_officer()`. Verified by `tests/rbac-database-foundation.test.ts` (Suite 5, Test 3).
+- **Residual risk**: Zero at database foundation layer. Application UI integration scheduled for Phase 3.
+
+### Finding RBAC-008 (TASK-0007)
+- **Severity**: LOW
+- **Affected component**: User Management UI (`users-roles-client.tsx`)
+- **Security impact**: Misleading UI presentation. Permission counts (`99 perms`, `60 perms`, `48 perms`, `14 perms`, `5 perms`, `4 perms`) are completely hardcoded numbers. No underlying permission catalog exists.
+- **Current behavior**: Hardcoded numbers rendered in badges.
+- **Expected behavior**: Permission counts should reflect actual canonical permissions defined in the RBAC registry.
+- **Evidence**: `src/app/[tenant]/admin/users-roles/_components/users-roles-client.tsx` lines 28-35.
+- **Remediation**: Scheduled for TASK-0007 Phase 2 UI alignment.
+- **Residual risk**: Zero direct security vulnerability (presentation only).
+
+### Finding RBAC-009 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: Principal & Vice Principal Authorization Ambiguity
+- **Security impact**: Without clear classification, permissions risk being granted based on string job titles or ad-hoc role checks, creating privilege escalation or bypassing executive sign-off boundaries.
+- **Current behavior**: Principal and Vice Principal are treated as UI toggles in `teachers/portal/page.tsx` and job titles in `profiles.job_title` without formal security classification.
+- **Expected behavior**: Principal must be mapped to base system role `school_admin` (representing institutional executive authority); Vice Principal must be mapped strictly to functional assignment `Vice Principal` on base role `teacher`, with school-wide academic review/moderation permissions and zero result publication rights. Functional assignments are strictly additive and cannot remove base-role permissions; therefore, neither Vice Principal nor Exam Officer may have `school_admin` base role.
+- **Evidence**: `src/app/[tenant]/admin/teachers/portal/page.tsx` lines 65, 91, 182-183; `038_sierra_leone_letters_and_cass_export.sql` line 15.
+- **Remediation**: Clarified in `RBAC-MODEL.md` Section 16; implemented in Migration 047 via `is_vice_principal()` helper and `staff_assignment_type = 'vice_principal'`. Verified by `tests/rbac-database-foundation.test.ts` (Suite 5, Test 2).
+- **Residual risk**: Low; database foundation verified.
+
+### Finding RBAC-010 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: Canonical Permission Registry Definition & Storage
+- **Security impact**: Ambiguity over whether permissions live in dynamic database tables or application code risks desynchronization where unhandled permissions fail unpredictably.
+- **Current behavior**: Zero canonical permission registry existed in the repository.
+- **Expected behavior**: Authoritative single source of truth in application code (`src/lib/auth/permissions-registry.ts`) synchronized to a static database catalog (`public.permissions_catalog`), failing closed on unknown permissions.
+- **Evidence**: Repository audit confirming zero permission tables.
+- **Remediation**: Implemented in Migration 047. Created table `public.permissions_catalog` seeded with exactly 33 canonical atomic permissions adhering strictly to `<module>.<resource>.<action>` format. RLS enabled. Verified by `tests/rbac-database-foundation.test.ts` (Suite 1, Tests 1-5).
+- **Residual risk**: Zero at database foundation layer. Phase 3 will introduce `permissions-registry.ts`.
+
+### Finding RBAC-011 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: Base Role vs Functional Assignment Permission Resolution
+- **Security impact**: Unclear resolution formula could lead to permission leakage or accidental denial of core teacher capabilities.
+- **Current behavior**: Role checking is coarse and hardcoded per endpoint.
+- **Expected behavior**: Deterministic additive formula: `Effective Permissions = Base Permissions ∪ ∑ Assignment Permissions`, defaulting to DENY.
+- **Evidence**: `.ai/04-SECURITY/RBAC-MODEL.md` Section 8.
+- **Remediation**: Formalized in `RBAC-MODEL.md` Section 8.
+- **Residual risk**: Zero once resolved.
+
+### Finding RBAC-012 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: Functional Assignment Lifecycle State Machine
+- **Security impact**: Missing lifecycle fields (`is_active`, `effective_from`, `effective_until`) would allow revoked or expired staff (e.g. former HODs or former Exam Officers) to retain sensitive moderation capabilities indefinitely.
+- **Current behavior**: Relational links (`departments.head_teacher_id`, `sections.class_teacher_id`) lack lifecycle states, temporal ranges, and revocation metadata.
+- **Expected behavior**: Explicit state machine (`appointed`, `active`, `suspended`, `expired`, `revoked`) with dynamically evaluated active status via `STABLE` helper function.
+- **Evidence**: `002_school_modules.sql` lines 65-75.
+- **Remediation**: Implemented in Migration 047. Table `public.school_staff_assignments` includes lifecycle columns (`status`, `is_active`, `effective_from`, `effective_until`, `revoked_at`, `revoked_by`, `revocation_reason`), 7 check constraints, and `is_staff_assignment_active()` helper function. Future-dated assignments allowed for planning but evaluate to inactive. Verified by `tests/rbac-database-foundation.test.ts` (Suite 2, Tests 1-8).
+- **Residual risk**: Zero. Fully enforced at database engine level.
+
+### Finding RBAC-013 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: Academic-Year Scoping & Historical Record Integrity
+- **Security impact**: Overwriting staff appointments across academic years would silently rewrite historical authorization audit trails.
+- **Current behavior**: `departments.head_teacher_id` is an unversioned single foreign key.
+- **Expected behavior**: Academic-year-bound assignment records (`academic_year_id UUID REFERENCES academic_years(id)`) combined with immutable transactional audit snapshots.
+- **Evidence**: `002_school_modules.sql` line 67; `041_subjects_curriculum_engine.sql` line 242.
+- **Remediation**: Implemented in Migration 047. `school_staff_assignments` enforces foreign key to `academic_years(id)`. Partial unique index `uniq_current_academic_year_per_tenant` on `academic_years (tenant_id) WHERE is_current = true` enforces single current year. Helper functions (`is_hod`, `is_form_master`, etc.) query `WHERE is_current = true` without `LIMIT 1`. Verified by `tests/rbac-database-foundation.test.ts` (Suite 4, Tests 1-6).
+- **Residual risk**: Zero. Temporal and current-year scoping guaranteed by database constraints.
+
+### Finding RBAC-014 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: Formal Scope Containment & Inheritance Matrix
+- **Security impact**: Informal scope assumptions could allow department-level managers to access peer departments or school-wide resources.
+- **Current behavior**: Ad-hoc scope checks scattered across route handlers.
+- **Expected behavior**: Formal scope model where `department` and `class` are parallel branches under `school` (`platform ⊃ org ⊃ school ⊃ (department || class) ⊃ offering ⊃ self`), with universal invariant that `department` is NEVER a parent of `class`.
+- **Evidence**: `.ai/04-SECURITY/RBAC-MODEL.md` Section 9.
+- **Remediation**: Defined in `RBAC-MODEL.md` Section 9.
+- **Residual risk**: Zero once verified in Phase 2 tests.
+
+### Finding RBAC-015 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: Multi-Tier Organizational Hierarchy Traversal
+- **Security impact**: Single-level `parent_id` checks fail to authorize `org_admin` over grandchild school and campus nodes (hierarchy depth > 2).
+- **Current behavior**: Policies in `014_org_admin_rls.sql` and `046` only check immediate `parent_id = get_user_tenant_id()`.
+- **Expected behavior**: Recursive CTE helper `get_subtenant_ids()` supporting up to 4 hierarchy levels (`organization -> district -> school -> campus`).
+- **Evidence**: `011_hierarchy_columns.sql` line 8; `014_org_admin_rls.sql` line 22.
+- **Remediation**: Specified in `RBAC-MODEL.md` Section 10; scheduled for Phase 2 helper function.
+- **Residual risk**: Medium until recursive helper is deployed.
+
+### Finding RBAC-016 (TASK-0007)
+- **Severity**: CRITICAL
+- **Affected component**: Multi-Role Separation of Duties (Teacher + HOD + Exam Officer)
+- **Security impact**: A staff member holding multiple assignments could enter marks, moderate them, validate them, approve them, and publish them, destroying institutional examination integrity.
+- **Current behavior**: No transactional separation-of-duties check prevents a teacher from moderating or validating their own mark batches.
+- **Expected behavior**: Transactional rule preventing self-moderation (`actor_id != submitter_id`) and strict role restriction reserving approval and publication exclusively for `school_admin`.
+- **Evidence**: `046_fix_rls_boundaries_and_exam_security.sql`; `.ai/04-SECURITY/RBAC-MODEL.md` Section 14.
+- **Remediation**: Documented in `RBAC-MODEL.md` Section 14; scheduled for Phase 2 guards.
+- **Residual risk**: Critical until enforced in Phase 2.
+
+### Finding RBAC-017 (TASK-0007)
+- **Severity**: HIGH
+- **Affected component**: Examination Approval & Publication Authority
+- **Security impact**: Unclear boundaries between Principal and Vice Principal could allow unratified results to be published externally.
+- **Current behavior**: Undefined in database RLS.
+- **Expected behavior**: `exams.results.approve` and `exams.results.publish` reserved strictly for `school_admin` (Principal) and `org_admin`. Vice Principal and Exam Officer have base role `teacher` with moderation rights only, with delegation requiring formal audited delegation tokens.
+- **Evidence**: `030_exam_core_system.sql` line 51; `.ai/04-SECURITY/RBAC-MODEL.md` Section 15.
+- **Remediation**: Clarified in `RBAC-MODEL.md` Section 15.
+- **Residual risk**: Low once Phase 2 guards are deployed.
+
+### Finding RBAC-018 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: Assistant Teacher Security Scope & Authority
+- **Security impact**: An assistant teacher could inadvertently inherit full subject teacher rights (submitting curricula, finalizing grades) if classified broadly as `teacher`.
+- **Current behavior**: `assistant_teacher_id` exists in `subject_offerings` (`041_subjects_curriculum_engine.sql` line 248) but lacks formal authorization rules.
+- **Expected behavior**: Base role `teacher` with functional assignment `Assistant Subject Teacher`, restricted strictly to attendance marking and draft mark entry.
+- **Evidence**: `041_subjects_curriculum_engine.sql` line 248; `src/lib/types/curriculum.ts` line 590.
+- **Remediation**: Formally classified in `RBAC-MODEL.md` Section 17.
+- **Residual risk**: Low once implemented in Phase 2.
+
+### Finding RBAC-019 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: Formalization of `manage` Action
+- **Security impact**: Conflating `manage` with executive actions (`approve`, `publish`) could grant destructive or premature release powers to administrative assistants.
+- **Current behavior**: Informal usage of `manage` across legacy documents.
+- **Expected behavior**: `manage = view + create + update + delete`. Invariant: `manage ≠ approve ≠ publish ≠ moderate ≠ export`. `manage` treated as application shorthand expanding into atomic permissions.
+- **Evidence**: `.ai/04-SECURITY/RBAC-MODEL.md` Section 19.
+- **Remediation**: Formalized in `RBAC-MODEL.md` Section 19.
+- **Residual risk**: Zero.
+
+### Finding RBAC-020 (TASK-0007)
+- **Severity**: LOW
+- **Affected component**: Permission Nomenclature Normalization
+- **Security impact**: Aliased or inconsistent permission strings (`attendance.mark` vs `attendance.sessions.mark`) cause authorization bypasses if route guards check mismatched strings.
+- **Current behavior**: Inconsistent patterns across legacy documents and client components.
+- **Expected behavior**: Strict grammar: `<module>.<resource>.<action>` across all 33 canonical atomic permissions with zero unmapped aliases.
+- **Evidence**: `.ai/04-SECURITY/RBAC-MODEL.md` Section 19-20.
+- **Remediation**: Normalized in `RBAC-MODEL.md` Section 20.
+- **Residual risk**: Zero.
+
+### Finding RBAC-021 (TASK-0007)
+- **Severity**: MEDIUM
+- **Affected component**: Verification of `job_title` Schema Column
+- **Security impact**: Relying on unverified columns for security predicates causes runtime failures or false security assumptions.
+- **Current behavior**: `job_title` exists in `public.profiles` (`010_branding_and_staff_columns.sql` line 28) and is consumed for display badges.
+- **Expected behavior**: Verified as display-only attribute with zero direct security authority.
+- **Evidence**: `010_branding_and_staff_columns.sql` line 28; `src/app/actions/users.ts` line 214.
+- **Remediation**: Documented in `RBAC-MODEL.md` Section 5.
+- **Residual risk**: Zero.
+
+### Finding RBAC-022 (TASK-0007)
+- **Severity**: LOW
+- **Affected component**: Governance Document Status Correction
+- **Security impact**: Claiming proposed architectures as "ACTIVE" before supervisory review confuses implementation boundaries.
+- **Current behavior**: `PRIVILEGED-ACCESS.md` was marked `ACTIVE (TASK-0007 CANONICAL GOVERNANCE)`.
+- **Expected behavior**: Explicitly labeled `PROPOSED — PENDING SUPERVISORY APPROVAL`.
+- **Evidence**: `.ai/04-SECURITY/PRIVILEGED-ACCESS.md` line 3.
+- **Remediation**: Corrected to `PROPOSED — PENDING SUPERVISORY APPROVAL`.
+- **Residual risk**: Zero.
+
+### Finding RBAC-023 (TASK-0007)
+- **Severity**: LOW
+- **Affected component**: Separation of Facts, Proposals, and Approvals
+- **Security impact**: Blurring verified current-state facts with proposed designs weakens audit precision.
+- **Current behavior**: Mixed terminology in preliminary assessment.
+- **Expected behavior**: Explicit taxonomy labels: `CURRENT STATE (Verified Fact)`, `PROPOSED (Pending Approval)`, `APPROVED (Supervisory Approved)`, `PHASE 2 (Future Implementation)`.
+- **Evidence**: `.ai/04-SECURITY/RBAC-MODEL.md` Section 1, 2, 30.
+- **Remediation**: Enforced throughout all Phase 1 governance documents.
+- **Residual risk**: Zero.
+
+### Finding RBAC-024 (TASK-0007-PHASE-2)
+- **Severity**: HIGH
+- **Affected component**: Cross-Tenant Resource Integrity in Staff Assignments
+- **Security impact**: Cross-tenant foreign key combinations (e.g. Tenant A assignment referencing Tenant B teacher, department, section, offering, or academic year) could cause cross-tenant privilege escalation or data corruption.
+- **Current behavior**: Plain foreign keys permit cross-tenant references if tenant boundaries are not checked.
+- **Expected behavior**: Invariant enforced via database trigger `trg_validate_staff_assignment_tenant_integrity` verifying `teacher.tenant_id = assignment.tenant_id`, `academic_year.tenant_id = assignment.tenant_id`, `department.tenant_id = assignment.tenant_id`, `section.tenant_id = assignment.tenant_id`, and `subject_offering.tenant_id = assignment.tenant_id` + academic year consistency.
+- **Evidence**: `supabase/migrations/047_rbac_database_foundation.sql` lines 230-310; `tests/rbac-database-foundation.test.ts` Group 3.
+- **Remediation**: Enforced via `BEFORE INSERT OR UPDATE` trigger `validate_staff_assignment_tenant_integrity()`. All cross-tenant combinations empirically tested and rejected.
+- **Residual risk**: Zero.
+
+### Finding RBAC-025 (TASK-0007-PHASE-2)
+- **Severity**: HIGH
+- **Affected component**: Academic Year Resolution Invariants & LIMIT 1 Elimination
+- **Security impact**: Arbitrary `LIMIT 1` selection when resolving the current academic year could pick an arbitrary year under data anomalies, violating authorization determinism.
+- **Current behavior**: Legacy triggers and functions frequently used `LIMIT 1` to resolve current academic year.
+- **Expected behavior**: Strict fail-closed invariant: 0 current years $\to$ fail closed; 1 current year $\to$ valid; $>1$ current years $\to$ fail closed / integrity violation. Zero `LIMIT 1` permitted.
+- **Evidence**: `supabase/migrations/047_rbac_database_foundation.sql`; `tests/rbac-database-foundation.test.ts` Group 4 & Group 6.
+- **Remediation**: Enforced database constraint `uniq_current_academic_year_per_tenant` on `academic_years(tenant_id) WHERE is_current = true`, explicit count check `(SELECT count(*) ... is_current = true) = 1` in helper functions, and `SELECT id INTO STRICT` in legacy sync triggers.
+- **Residual risk**: Zero.
+
+### Finding RBAC-026 (TASK-0007-PHASE-2)
+- **Severity**: HIGH
+- **Affected component**: Historical Preservation of Staff Assignment Records
+- **Security impact**: `ON DELETE CASCADE` foreign keys could erase historical audit and authorization evidence if referenced resources (e.g. teachers, departments, sections, academic years) are deleted.
+- **Current behavior**: Default cascade deletion risks destroying historical authorization evidence.
+- **Expected behavior**: Foreign keys to referenced entities must enforce `ON DELETE RESTRICT` so historical assignment records cannot be silently destroyed.
+- **Evidence**: `supabase/migrations/047_rbac_database_foundation.sql` lines 340-390; `tests/rbac-database-foundation.test.ts` Group 1 & Group 3.
+- **Remediation**: Configured `ON DELETE RESTRICT` on `teacher_id`, `academic_year_id`, `department_id`, `section_id`, and `subject_offering_id`. Empirically verified deletion restriction.
+- **Residual risk**: Zero.
+
+### Finding RBAC-027 (TASK-0007-PHASE-2)
+- **Severity**: HIGH
+- **Affected component**: Legacy Synchronization Boundary Isolation
+- **Security impact**: Legacy sync triggers modifying HOD or Form Master fields could inadvertently revoke assignments across different academic years, tenants, or resources, or cause infinite trigger recursion.
+- **Current behavior**: Bidirectional sync without strict current-year scoping risks revoking historical assignments across academic years.
+- **Expected behavior**: Sync operations strictly affect only same tenant + same resource + same assignment type + current academic year. Past-year assignments remain untouched. Protected by `pg_trigger_depth() > 1`.
+- **Evidence**: `supabase/migrations/047_rbac_database_foundation.sql` lines 800-1000; `tests/rbac-database-foundation.test.ts` Group 6.
+- **Remediation**: Strict current-year scoping, depth guards, and isolation boundaries applied. Historical year isolation and state transitions (NULL $\to$ A, A $\to$ B, A $\to$ NULL, canonical revoke) empirically verified.
+- **Residual risk**: Zero.
+
+
+
 

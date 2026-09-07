@@ -332,3 +332,159 @@ If an institution submits the generated export to the Ministry of Basic and Seni
 #### Recommendation
 Author a dedicated follow-up task to connect `/api/cass-export` to the authoritative gradebook and assessment results tables (`student_term_marks`, `exam_marks`, or continuous assessment tables), computing the 30% CA + 70% Final Exam aggregate from verified records rather than synthetic formulas. Mark `/api/cass-export` as non-production in documentation until this pipeline is implemented.
 
+---
+
+### REC-0015 — Remediate Dead Policy in Academic Calendar Events Migration
+
+- **Task:** TASK-0007 (Phase 1)
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Database Security / RLS
+- **Severity:** Medium
+- **Status:** PROPOSED
+- **Supervisory Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+In `supabase/migrations/040_academic_calendar_events.sql` lines 42–46, policy `"School admins manage calendar events"` references `public.user_roles ur JOIN public.roles r ON ur.role_id = r.id`. Neither table exists in PostgreSQL.
+
+#### Recommendation
+Under TASK-0007 Phase 2, replace this dead policy with standard profile role checks:
+`tenant_id = public.get_user_tenant_id() AND (public.is_school_admin() OR public.is_org_admin() OR public.is_super_admin())`.
+
+---
+
+### REC-0016 — Introduce Relational Functional Assignment Table for Examination Officers
+
+- **Task:** TASK-0007 (Phase 1)
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Architecture / Schema
+- **Severity:** High
+- **Status:** PROPOSED
+- **Supervisory Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+TypeScript recognizes `exam_officer` as an `AppRole`, but `public.user_role` enum does not contain it. Updating a profile's role to `exam_officer` crashes PostgreSQL.
+
+#### Recommendation
+Reconcile this disconnect without modifying the base `user_role` enum by storing Exam Officer appointments in `public.school_staff_assignments` (`assignment_type = 'exam_officer'`) and providing helper `public.is_exam_officer(tenant_id)`.
+
+
+---
+
+### REC-0017 — Remediate Separation of Duties Collapse on Approval Requests
+
+- **Task:** TASK-0007 (Phase 1)
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Security / Authorization
+- **Severity:** Critical
+- **Status:** PROPOSED
+- **Supervisory Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+In `013_approval_requests.sql`, policy `"school_members_see_own_requests"` defines `FOR ALL USING (tenant_id = user_tenant_id)`. `src/app/actions/approvals.ts` (`resolveApprovalRequest`) checks zero roles. Any student or teacher can approve arbitrary grade changes, fee waivers, or admissions.
+
+#### Recommendation
+Restrict `UPDATE` and `DELETE` on `approval_requests` strictly to `is_school_admin() OR is_org_admin() OR is_super_admin()`, and add role verification in `resolveApprovalRequest`.
+
+---
+
+### REC-0018 — Standardize Server Action Authorization via `authorizeAction()`
+
+- **Task:** TASK-0007 (Phase 1)
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Architecture / Security Guard
+- **Severity:** High
+- **Status:** PROPOSED
+- **Supervisory Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+Server actions in `src/app/actions/curriculum.ts` execute direct pool queries without role or tenant verification.
+
+#### Recommendation
+Implement `authorizeAction(permission, context)` in `src/lib/auth/action-guard.ts` and require it across all mutating server actions.
+
+---
+
+### REC-0019 — Formally Classify Principal and Vice Principal in RBAC Architecture
+
+- **Task:** TASK-0007 (Phase 1 Correction)
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Architecture / RBAC
+- **Severity:** High
+- **Status:** PROPOSED
+- **Supervisory Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+Principal and Vice Principal have been treated informally as UI toggles or text strings in `profiles.job_title`.
+
+#### Recommendation
+Classify Principal as base system role `school_admin` (representing institutional executive authority), and Vice Principal as a functional assignment `Vice Principal` strictly on base role `teacher` with school-wide academic review powers and zero result publication rights. Functional assignments are strictly additive and cannot remove base-role permissions; therefore, neither Vice Principal nor Exam Officer may have `school_admin` base role.
+
+---
+
+### REC-0020 — Establish Code-First Canonical Permission Registry with Database Sync
+
+- **Task:** TASK-0007 (Phase 1 Correction)
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Architecture / Permission Model
+- **Severity:** Medium
+- **Status:** PROPOSED
+- **Supervisory Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+Zero permission registry exists in the repository.
+
+#### Recommendation
+Adopt code-first Canonical Permission Registry in `src/lib/auth/permissions-registry.ts` synchronized to a static database table `public.permissions_catalog`, failing closed on unknown permissions.
+
+---
+
+### REC-0021 — Implement Functional Assignment Lifecycle State Machine
+
+- **Task:** TASK-0007 (Phase 1 Correction)
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Architecture / Schema
+- **Severity:** High
+- **Status:** PROPOSED
+- **Supervisory Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+Relational assignment foreign keys lack lifecycle states, temporal ranges, and revocation metadata.
+
+#### Recommendation
+Add lifecycle fields (`appointed`, `active`, `suspended`, `expired`, `revoked`) and temporal validity (`effective_from`, `effective_until`, `academic_year_id`) to all functional assignment tables.
+
+---
+
+### REC-0022 — Implement Recursive Subtenant Traversal for Multi-School Hierarchy
+
+- **Task:** TASK-0007 (Phase 1 Correction)
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Architecture / Multi-Tenancy
+- **Severity:** High
+- **Status:** PROPOSED
+- **Supervisory Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+Single-level `parent_id` checks fail to authorize `org_admin` over grandchild school and campus nodes (hierarchy depth > 2).
+
+#### Recommendation
+Deploy recursive CTE helper function `public.get_subtenant_ids(UUID)` supporting up to 4 hierarchy levels and bind org-admin RLS policies to it.
+
+---
+
+### REC-0023 — Enforce Transaction-Level Separation of Duties on Result Moderation
+
+- **Task:** TASK-0007 (Phase 1 Correction)
+- **Author:** Gemini / Antigravity (Implementation Engineer)
+- **Category:** Security / Business Logic
+- **Severity:** Critical
+- **Status:** PROPOSED
+- **Supervisory Disposition:** PENDING_SUPERVISORY_REVIEW
+
+#### Problem
+A teacher holding multiple assignments (Teacher + HOD + Exam Officer) could enter marks and moderate their own submissions.
+
+#### Recommendation
+Enforce transaction-level check preventing self-moderation (`actor_id != submitter_id`) and restrict result approval/publication strictly to `school_admin`.
+
+

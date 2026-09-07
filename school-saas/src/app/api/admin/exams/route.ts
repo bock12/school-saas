@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const targetTenantSlug = searchParams.get('tenant') || searchParams.get('tenantSlug') || undefined;
 
     const auth = await authorizeApiRequest(req, {
-      roles: ['school_admin', 'exam_officer', 'super_admin'],
+      permission: 'exams.sessions.manage',
       requestedTenantSlug: targetTenantSlug,
       scope: 'tenant',
     });
@@ -71,13 +71,12 @@ export async function PATCH(req: NextRequest) {
     const targetTenantSlug = searchParams.get('tenant') || searchParams.get('tenantSlug') || undefined;
 
     const auth = await authorizeApiRequest(req, {
-      roles: ['school_admin', 'exam_officer', 'super_admin'],
+      permission: 'exams.sessions.manage',
       requestedTenantSlug: targetTenantSlug,
       scope: 'tenant',
-      resource: {
-        table: 'exam_sessions',
+      resolveResource: {
+        type: 'exam_session',
         id,
-        tenantColumn: 'tenant_id',
       },
     });
 

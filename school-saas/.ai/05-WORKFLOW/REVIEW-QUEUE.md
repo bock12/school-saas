@@ -199,36 +199,49 @@ Pending ChatGPT final approval and Human Project Owner merge decision. **Do not 
 ## REVIEW-TASK-0006 — RLS, Authorization & Privileged-Boundary Verification
 **Task:** TASK-0006 / TASK-0006-CORRECTION  
 **Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
-**Status:** CHANGES_REQUESTED (Parent Task) / PENDING_SUPERVISORY_REVIEW (Correction Resubmission)  
+**Status:** APPROVED & MERGED (Merged into main via PR #16 by Human Project Owner)  
 **Priority:** P1 (High Security)  
 
+### Supervisor Assessment & Final Disposition
+TASK-0006 and TASK-0006-CORRECTION have been independently verified, approved by ChatGPT, and merged into `main` at commit `0068962` by the Human Project Owner. All database-level Row Level Security policies on `public.tenants`, exam core/analytics tables, user profiles, and notifications are active and passing.
+
+## REVIEW-TASK-0007-PHASE-1 — Canonical RBAC & Permission Architecture Final Assessment Review
+**Task:** TASK-0007 (Phase 1 Final Correction)  
+**Reviewer:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Status:** PENDING_FINAL_SUPERVISORY_REVIEW  
+**Priority:** P1 (High Security & Architecture)  
+
 ### Scope
-Verify database-level Row Level Security (RLS) enforcement, tenant isolation, RBAC boundaries, recipient ownership on notifications, profile mutation protection, fail-closed security for inactive/deactivated users, and resolve all supervisory review findings from TASK-0006-CORRECTION.
+Evaluate the Phase 1 Architecture Assessment & Final Supervisory Corrections, resolving BLOCKER 1 through BLOCKER 12:
+1. BLOCKER 1: Vice Principal / Exam Officer base-role contradiction (Principal = `school_admin`; VP = `teacher` + VP assignment; Exam Officer = `teacher` + Exam Officer assignment; strictly additive invariant).
+2. BLOCKER 2: Principal vs `school_admin` authority (`school_admin` = institutional executive authority; bursar/registrar removed; `job_title` never grants security authority).
+3. BLOCKER 3: VP persistence model (Phase-2 DDL `public.school_staff_assignments` with lifecycle state machine and temporal dates; why `job_title` cannot represent VP).
+4. BLOCKER 4: Reconciled canonical permission count (mechanically reconciled exact count of 33 atomic permissions).
+5. BLOCKER 5: Scope hierarchy model correction (`department` and `class` parallel branches under `school`, never `department > class`).
+6. BLOCKER 6: School-admin and campus hierarchy (current single-tenant vs proposed hierarchical resolution).
+7. BLOCKER 7: Tenant hierarchy claim correction (4-tier hierarchy is proposed supported business model, not currently enforced database invariant).
+8. BLOCKER 8: Formal conflict & precedence evaluation order (deterministic 8-step evaluation algorithm).
+9. BLOCKER 9: Dedicated authoritative 7-position matrix.
+10. BLOCKER 10: `school_admin` permission review (verified institutional executive capabilities).
+11. BLOCKER 11: Stale terminology removal (standardized on `<module>.<resource>.<action>`).
+12. BLOCKER 12: Schema verification (all claims verified against repository schema; `CURRENT STATE`, `PROPOSED`, `PHASE 2` taxonomy).
 
 ### Implementation Summary
-- **Migration 046:** `supabase/migrations/046_fix_rls_boundaries_and_exam_security.sql` applied cleanly to development Supabase PostgreSQL.
-- **Supervisory Corrections Implemented:**
-  1. **Teacher Authorization Contradiction Resolved:** Audited canonical repo evidence (`/api/exam-office/dashboard`, `/api/admin/exams`, `/[tenant]/exam-office`). Restricted `exam_results_approval` and `exam_malpractices` strictly to administrative roles (`school_admin`, `org_admin`, `super_admin`). Ordinary `teacher` and `student` roles are strictly DENIED across SELECT, INSERT, UPDATE, and DELETE.
-  2. **Granular Tests Added:** Implemented `T-010A` through `T-010P` covering same-tenant and cross-tenant teacher, student, and admin assertions.
-  3. **Real RLS Denials Proven:** Write denials assert PostgreSQL SQLSTATE `42501` and policy violation error message via `expectRlsError`. SELECT denials assert 0 rows returned.
-  4. **Database-State Verified:** Independent privileged verification query (`verifyDatabaseState`) confirms unauthorized records are absent from database state post-denial.
-  5. **`auth.uid() IS NULL` Profile Bypass Hardened:** Replaced blanket bypass in `protect_profile_fields()` with a 3-tier qualification: explicit `service_role`, `is_super_admin()`, or direct DB superuser (`postgres`/`supabase_admin`) in non-web context (`request.jwt.claim.role IS NULL`). Web requests with `role = 'anon'` or `'authenticated'` cannot bypass. Tested via `PROFILE-08`, `PROFILE-09`, `PROFILE-10`.
-  6. **TLS Configuration Hardened:** Removed blanket `rejectUnauthorized: false` default in test harness; supports CA injection via `DATABASE_SSL_CA` or `DATABASE_SSL_STRICT`.
-  7. **20 Supervisory Amendments Reconciled:** Fully enumerated 1 through 20 individually in implementation report.
-- **Verification Evidence:**
-  - Full test suite: `npm test` -> 127 tests passed, 0 failed.
-  - PostgreSQL RLS suite: `tests/security/rls-database-boundary.test.ts` -> 45 tests passed using authentic non-service-role principals (`authenticated` / `anon`).
-  - API + RLS integration suite: `tests/security/api-rls-integration.test.ts` -> 6 tests passed.
-  - Privileged API containment: `tests/security/privileged-api-containment.test.ts` -> 22 tests passed.
-  - Credential containment: `tests/security/credential-containment.test.ts` -> 39 tests passed.
-  - TypeScript: `npx tsc --noEmit` -> 0 errors.
-  - Production build: `npm run build` -> Clean exit code 0 (40 routes optimized).
-- **Branch:** `ai-eos/task-0006-correction` (UNMERGED).
+- **Branch:** `ai-eos/task-0007-rbac-architecture` (branched from updated `main` at `0068962`).
+- **Read-Only Discovery:** Strictly adhered to Phase 1 constraint; zero role enums, permission tables, RLS policies, or application authorization layers were modified.
+- **Specification:** Revised `.ai/04-SECURITY/RBAC-MODEL.md` containing all 30 mandatory sections.
+- **Privileged Access:** `.ai/04-SECURITY/PRIVILEGED-ACCESS.md` (Tier 2 institutional executive clarification).
+- **ADR:** `.ai/02-ARCHITECTURE/DECISIONS.md` (ADR-0003 status: PROPOSED — Supervisory approval required before Phase 2 implementation).
+- **Security Matrix:** `.ai/06-MODULES/SECURITY-CONTROL-MATRIX.md` (reconciled to 33 permissions and blocker decisions).
+- **Phase 1 Report:** `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` (appended Final Correction section).
+- **Response Message:** `.ai/05-WORKFLOW/messages/MSG-0017.md`.
 
 ### Required Supervisory Decision
-Supervisory review and verification by ChatGPT. Final approval and merge authority rests with Human Project Owner only.
+Final supervisory review of TASK-0007 Phase 1 Architecture Assessment & Final Corrections by ChatGPT and Human Project Owner. Approval required before Phase 2 implementation may be authorized.
+
 
 ## Review rules
 Every review links the task, implementation report, ADRs, risks and security records as applicable. Security blockers include missing auth boundaries, missing tenant checks, privileged database access without justification, RLS weakening, secret exposure, destructive migrations without approval, and missing cross-tenant/role regression tests.
+
 
 

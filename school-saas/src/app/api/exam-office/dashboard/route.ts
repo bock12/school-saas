@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
       searchParams.get('tenantSlug') || searchParams.get('tenant') || undefined;
 
     const auth = await authorizeApiRequest(req, {
-      roles: ['exam_officer', 'school_admin', 'org_admin', 'super_admin'],
+      permission: 'exams.sessions.manage',
       scope: 'tenant',
       requestedTenantSlug,
     });
@@ -238,7 +238,7 @@ export async function POST(req: NextRequest) {
     } = body;
 
     const auth = await authorizeApiRequest(req, {
-      roles: ['school_admin', 'exam_officer', 'org_admin', 'super_admin'],
+      permission: 'exams.sessions.manage',
       scope: 'tenant',
       requestedTenantSlug: tenantSlug || undefined,
     });
@@ -301,13 +301,12 @@ export async function PATCH(req: NextRequest) {
       searchParams.get('tenantSlug') || searchParams.get('tenant') || tenantSlug || undefined;
 
     const auth = await authorizeApiRequest(req, {
-      roles: ['school_admin', 'exam_officer', 'org_admin', 'super_admin'],
+      permission: 'exams.sessions.manage',
       scope: 'tenant',
       requestedTenantSlug,
-      resource: {
-        table: 'exam_sessions',
+      resolveResource: {
+        type: 'exam_session',
         id,
-        tenantColumn: 'tenant_id',
       },
     });
 
