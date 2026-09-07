@@ -1,4 +1,4 @@
-# TASK-0007 Phase 3C-A — Operation-Oriented API Charter & Security Specification
+# TASK-0007 Phase 3C-A — Operation-Oriented API Charter & Security Specification (Revised)
 
 **Task:** TASK-0007 Phase 3C-A  
 **Stage:** Architecture & Specification Only  
@@ -10,341 +10,206 @@
 
 ---
 
-## 1. Executive Architectural Rationale
+## 1. Executive Architectural Rationale & Supervisory Corrections
 
-The preflight discovery of TASK-0007 Phase 3C revealed a fundamental tension in the legacy API design:
-1. **The Monolithic PATCH Anti-Pattern:** A single endpoint (`PATCH /api/admissions`) ingested 24 disparate fields, ranging from benign phone number corrections to irreversible executive admission approvals and state machine transitions. Attempting to attach a single coarse permission (`admissions.applicants.approve`) to this monolithic route created severe privilege over-granting and forced clerical demographic edits to require executive headmaster authority.
-2. **AI Boundary Inversion:** The Academic AI route (`POST /api/academics/ai/lesson-plan`) invoked an external LLM API without verifying tenant tenancy, offering assignment, or role permissions, creating high-risk token-drain and cross-tenant data leakage vulnerabilities.
+In response to the supervisory correction, this revised API Charter establishes a **pure command-oriented architecture** that decomposes admissions and academic AI operations into atomic, dedicated endpoints.
 
-This API Charter establishes an **Operation-Oriented API Architecture** that maps each distinct business capability to a dedicated, bounded API endpoint guarded by trusted resource resolution, pure canonical authorization, and strict side-effect sequencing.
+Key architectural boundaries enforced:
+1. **Admissions Letter Dispatch (`admissions.letters.dispatch`):** Separated from demographic maintenance into a dedicated endpoint (`POST /api/admissions/:id/letter`) with complete lifecycle, retry, idempotency, and asynchronous delivery specifications.
+2. **Stream Track Placement (`admissions.applicants.place`):** Separated from evaluation scoring into a dedicated endpoint (`POST /api/admissions/:id/stream`).
+3. **Student Enrollment Transaction (`admissions.applicants.enroll`):** Separated from executive admission approval into a dedicated command endpoint (`POST /api/admissions/:id/enroll`) that invokes the database transaction via the server-mediated `service_role` boundary.
+4. **Academic AI Ephemeral Generation (`curriculum.lesson_plan.generate`):** Formally defined as an ephemeral pedagogical computation with zero database persistence, preceded by strict prerequisite and quota validation.
 
 ---
 
-## 2. API Architecture Decision: Command-Oriented Admissions Endpoints
-
-### 2.1 Monolithic vs. Command-Oriented Analysis
+## 2. Operation-Oriented Endpoint Inventory
 
 ```text
-┌────────────────────────────────────────┬────────────────────────────────────────┐
-│ Monolithic PATCH Model                 │ Command-Oriented Model (RECOMMENDED)   │
-├────────────────────────────────────────┼────────────────────────────────────────┤
-│ ❌ Single giant payload (24 fields)    │ ✅ Granular, type-safe command payloads│
-│ ❌ Privilege collapse: clerical updates│ ✅ Clean privilege segregation:        │
-│    require executive approve rights    │    clerical (manage) vs scoring (eval) │
-│ ❌ State machine transitions triggered │ ✅ State machine transitions explicit  │
-│    by side effects of field presence   │    and validated against valid states  │
-│ ❌ Audit logging cannot distinguish    │ ✅ Precise, auditable command records  │
-│    data correction from decision       │    with dedicated reason tracking      │
-│ ❌ Exam Officers over-granted or blocked│ ✅ Exam Officers granted strictly to   │
-│                                        │    scoring & streaming endpoints       │
-└────────────────────────────────────────┴────────────────────────────────────────┘
+┌──────────────────────────────────────────────┬────────────────────────────────┬───────────────────────────────┐
+│ Endpoint                                     │ Business Operation             │ Canonical Permission          │
+├──────────────────────────────────────────────┼────────────────────────────────┼───────────────────────────────┤
+│ GET /api/admissions                          │ List & Aggregate Applicants    │ admissions.applicants.view    │
+│ POST /api/admissions                         │ Register Initial Applicant     │ admissions.applicants.create  │
+│ PATCH /api/admissions/:id                    │ Demographic Maintenance        │ admissions.applicants.manage  │
+│ POST /api/admissions/:id/evaluate            │ Entrance Scoring & Assessment  │ admissions.applicants.evaluate│
+│ POST /api/admissions/:id/stream              │ WAEC Stream Track Allocation   │ admissions.applicants.place   │
+│ POST /api/admissions/:id/approve             │ Executive Admission Offer      │ admissions.applicants.approve │
+│ POST /api/admissions/:id/reject              │ Executive Rejection Decision   │ admissions.applicants.approve │
+│ POST /api/admissions/:id/letter              │ Official Letter Dispatch       │ admissions.letters.dispatch   │
+│ POST /api/admissions/:id/enroll              │ Master Student Enrollment      │ admissions.applicants.enroll  │
+│ POST /api/academics/ai/lesson-plan           │ Ephemeral Lesson Generation    │ curriculum.lesson_plan.       │
+│                                              │                                │ generate                      │
+└──────────────────────────────────────────────┴────────────────────────────────┴───────────────────────────────┘
 ```
-
-### 2.2 Endpoint Decomposition Strategy
-
-To maintain backward compatibility during the transitional migration while establishing strict canonical security, the architecture establishes:
-
-1. **`PATCH /api/admissions/:id` (Demographic Maintenance):** Bounded strictly to clerical, demographic, and contact fields. Forbidden from modifying scores, streams, stages, or statuses.
-2. **`POST /api/admissions/:id/evaluate` (Academic Assessment):** Dedicated command for entrance exam scores, interview notes, and national test aggregates (NPSE/BECE).
-3. **`POST /api/admissions/:id/stream` (Stream Track Placement):** Dedicated command for WAEC senior secondary track allocation (Science, Arts, Commercial, Technical).
-4. **`POST /api/admissions/:id/approve` (Executive Adjudication — Offer):** Dedicated executive command to advance applicant to `Offer` stage with formal admission offer.
-5. **`POST /api/admissions/:id/reject` (Executive Adjudication — Rejection):** Dedicated executive command to advance applicant to `Rejected` status with mandatory rejection reason.
-6. **`POST /api/admissions/:id/letter` (Document Dispatch):** Dedicated command to record formal admission letter generation and dispatch.
 
 ---
 
 ## 3. Comprehensive Endpoint Specifications
 
 ### 3.1 `GET /api/admissions` — Applicant Registry Listing & Statistics
-- **Business Operation:** List applicant records and aggregate admission stage/stream statistics for an institution.
-- **Permission:** `admissions.applicants.view`
-- **Canonical Scope:** `school`
-- **Allowed Actors:** `super_admin` (platform reach), `org_admin` (org reach), `school_admin` (school scope), `exam_officer` (school scope).
-- **Resource Resolution:**
-  - Untrusted inputs: `tenantSlug` (query), `schoolLevel`, `stream`, `stage`, `search`, `page`, `limit`.
-  - Authoritative target: Resolved via `resolveSchoolResource(callerContext, requestedTenantSlug)`.
-  - Isolation guarantee: Query is hard-filtered by `tenant_id = trustedSchool.id`.
+- **Business Operation:** Query applicant records and stage/stream metrics.
+- **Permission:** `admissions.applicants.view` | **Scope:** `school`
+- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`, `exam_officer`.
+- **Resource Resolution:** Authoritative school ID resolved from authenticated caller context.
 - **State Transition:** None (Read-only).
-- **Separation of Duties (SoD):** None.
-- **Side Effects:** None.
-- **Audit Requirement:** Standard API access telemetry.
+- **SoD & Audit:** Read access logged in standard telemetry.
 
 ---
 
-### 3.2 `POST /api/admissions` — Applicant Registration
-- **Business Operation:** Create a new candidate admission application record.
-- **Permission:** `admissions.applicants.create`
-- **Canonical Scope:** `school`
+### 3.2 `POST /api/admissions` — Initial Applicant Registration
+- **Business Operation:** Create initial candidate record in `Application` stage.
+- **Permission:** `admissions.applicants.create` | **Scope:** `school`
 - **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`. (`exam_officer`, `teacher`, `student`, `parent` DENIED).
-- **Resource Resolution:**
-  - Untrusted inputs: Request body (`firstName`, `lastName`, `dob`, `schoolLevel`, etc.). Any body-supplied `tenant_id` or `stage` is discarded.
-  - Authoritative target: `trustedSchool.id` derived strictly from authenticated context.
-- **State Transition:** Initial state set deterministically to `stage = 'Application'`, `status = 'active'`.
-- **Separation of Duties (SoD):** None.
-- **Side Effects:**
-  - Automatic stream placement evaluation if BECE subject results are provided at registration for SSS applicants (`stream_auto_placed = true`).
-- **Audit Requirement:** Creation logged in `audit_logs` or `admission_history`.
+- **Resource Resolution:** Target `tenant_id` resolved authoritatively from caller context; client claims ignored.
+- **State Transition:** Deterministically sets `stage = 'Application'`, `status = 'active'`.
+- **Side Effects:** Auto-stream evaluation if valid BECE subjects are provided at intake.
+- **Audit Requirement:** Creation record appended to `admission_history`.
 
 ---
 
 ### 3.3 `PATCH /api/admissions/:id` — Applicant Demographic Maintenance
-- **Business Operation:** Correct or update clerical contact details, parent information, or biographical data.
-- **Permission:** `admissions.applicants.manage` (PROPOSED)
-- **Canonical Scope:** `school`
+- **Business Operation:** Clerical maintenance of candidate biographical details and parent contact data.
+- **Permission:** `admissions.applicants.manage` | **Scope:** `school`
 - **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`. (`exam_officer` STRICTLY DENIED).
 - **Permitted Fields:** `firstName`, `lastName`, `dob`, `gender`, `email`, `phone`, `address`, `city`, `parentName`, `parentPhone`, `parentEmail`, `parentRelation`, `previousSchool`, `targetGrade`.
-- **Forbidden Fields (Rejected with 400 Bad Request if present):** `stage`, `status`, `rejectionReason`, `interviewScore`, `assessmentScore`, `targetStream`, `streamAutoPlaced`, `admissionLetterSent`, `docsVerified`.
-- **Resource Resolution:**
-  - Authoritative target: `resolveApplicantTarget(id)` loads `{ id, tenant_id, organization_id, stage, status }`.
-  - Tenant validation: `applicant.tenant_id` must match `callerContext.schoolId` (or within `org_admin` network).
+- **Forbidden Fields (Rejected with 400 Bad Request):** `stage`, `status`, `rejectionReason`, `interviewScore`, `assessmentScore`, `targetStream`, `streamAutoPlaced`, `admissionLetterSent`, `docsVerified`.
+- **Resource Resolution:** Target applicant resolved from database; tenant match enforced.
 - **State Transition:** None. `stage` and `status` remain unaltered.
-- **Separation of Duties (SoD):** None.
-- **Side Effects:** Updates `updated_at`.
-- **Audit Requirement:** Audit trail recording modified fields and actor identity.
+- **Audit Requirement:** Delta log of updated fields recorded in audit trail.
 
 ---
 
 ### 3.4 `POST /api/admissions/:id/evaluate` — Entrance Evaluation & Scoring
-- **Business Operation:** Record entrance exam marks, interview results, and verify prerequisite examination results (NPSE/BECE).
-- **Permission:** `admissions.applicants.evaluate` (PROPOSED)
-- **Canonical Scope:** `school`
-- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`, `exam_officer` (functional assignment).
+- **Business Operation:** Record entrance exam marks, interview results, and verify external national aggregates (NPSE/BECE).
+- **Permission:** `admissions.applicants.evaluate` | **Scope:** `school`
+- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`, `exam_officer`.
 - **Permitted Fields:** `interviewScore`, `assessmentScore`, `docsVerified`, `npseAggregate`, `beceAggregate`, `beceSubjects`, `wassceCredits`, `wassceSubjects`, `nationalIndexNo`.
-- **Resource Resolution:**
-  - Authoritative target: `resolveApplicantTarget(id)`.
-  - Lifecycle validation: Applicant must be in `stage IN ('Application', 'Assessment', 'Interview')` and `status = 'active'`.
-- **State Transition:** If in `Application`, automatically advances `stage = 'Assessment'` or `stage = 'Interview'`.
-- **Separation of Duties (SoD):** Exam Officer can evaluate scores, but cannot approve admission offer.
-- **Side Effects:** Appends record to `admission_history`.
-- **Audit Requirement:** High-priority score audit recording evaluator ID, timestamp, and score delta.
+- **Resource Resolution:** Target applicant loaded from DB; caller's school authority verified.
+- **Lifecycle Preconditions:** Must be in `stage IN ('Application', 'Assessment', 'Interview')` and `status = 'active'`.
+- **State Transition:** If currently `Application`, automatically advances `stage = 'Assessment'` or `'Interview'`.
+- **SoD:** Evaluator/Exam Officer cannot approve admission or allocate stream.
+- **Audit Requirement:** Score modification audit recorded in `admission_history`.
 
 ---
 
-### 3.5 `POST /api/admissions/:id/stream` — WAEC Stream Track Placement
-- **Business Operation:** Assign a Senior Secondary School applicant to a specialised academic stream track (Science, Arts, Commercial, Technical).
-- **Permission:** `admissions.applicants.evaluate` (PROPOSED)
-- **Canonical Scope:** `school`
+### 3.5 `POST /api/admissions/:id/stream` — WAEC Stream Track Allocation
+- **Business Operation:** Assign Senior Secondary School applicant to a specific academic track (Science, Arts, Commercial, Technical).
+- **Permission:** `admissions.applicants.place` | **Scope:** `school`
 - **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`, `exam_officer`.
 - **Permitted Fields:** `targetStream`, `manualOverrideReason`.
-- **Resource Resolution:**
-  - Authoritative target: `resolveApplicantTarget(id)`.
-  - Validation: Applicant `school_level` must equal `'SSS'`.
+- **Resource Resolution:** Target applicant loaded from DB. Verifies `school_level === 'SSS'`.
+- **Lifecycle Preconditions:** Must be in `stage IN ('Application', 'Assessment', 'Interview', 'Offer')`.
 - **State Transition:** Sets `target_stream`, updates `stream_auto_placed = false`, `stream_placed_at = NOW()`.
-- **Separation of Duties (SoD):** Technical stream qualification does not constitute an offer of admission.
-- **Side Effects:** Appends stream change to `admission_history`.
-- **Audit Requirement:** Mandatory audit record of stream allocation.
+- **SoD:** Stream placement qualifies candidate for a track but DOES NOT issue an admission offer or enroll the student.
+- **Audit Requirement:** Stream allocation event logged in `admission_history`.
 
 ---
 
-### 3.6 `POST /api/admissions/:id/approve` — Admission Offer Adjudication
-- **Business Operation:** Issue a formal admission offer to an applicant.
-- **Permission:** `admissions.applicants.approve` (EXISTING)
-- **Canonical Scope:** `school`
-- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`. (`exam_officer`, `teacher`, `student`, `parent` STRICTLY DENIED).
+### 3.6 `POST /api/admissions/:id/approve` — Executive Admission Offer Adjudication
+- **Business Operation:** Issue a formal admission offer extending an invitation to join the institution.
+- **Permission:** `admissions.applicants.approve` | **Scope:** `school`
+- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`. (`exam_officer` STRICTLY DENIED).
 - **Permitted Fields:** `acceptanceDeadline`, `adjudicationNotes`.
-- **Resource Resolution:**
-  - Authoritative target: `resolveApplicantTarget(id)`.
-  - Lifecycle validation: Must be in `stage IN ('Assessment', 'Interview', 'Application')` and `status = 'active'`. Cannot approve already `Enrolled`, `Rejected`, or `Withdrawn` applicants.
-- **State Transition:** Updates `stage = 'Offer'`, `status = 'active'`, `docs_verified = true`.
-- **Separation of Duties (SoD):** Executive Headmaster / Administrator authority strictly enforced. Evaluators/Exam Officers are blocked from unilateral admission grants.
-- **Side Effects:** Inserts formal state transition log in `admission_history`.
-- **Audit Requirement:** Compliance-level audit log recording executive approver ID and timestamp.
+- **Lifecycle Preconditions:** Must be in `stage IN ('Application', 'Assessment', 'Interview')` and `status = 'active'`. Cannot approve already `Offer`, `Allocation`, or `Rejected` applicants.
+- **State Transition:** Sets `stage = 'Offer'`, `status = 'active'`, `docs_verified = true`.
+- **SoD:** Approval extends an offer; it DOES NOT execute student enrollment.
+- **Audit Requirement:** Formal adjudication record logged in `admission_history`.
 
 ---
 
-### 3.7 `POST /api/admissions/:id/reject` — Admission Rejection Adjudication
-- **Business Operation:** Formally decline or reject an admission application.
-- **Permission:** `admissions.applicants.approve` (EXISTING)
-- **Canonical Scope:** `school`
+### 3.7 `POST /api/admissions/:id/reject` — Executive Admission Rejection Adjudication
+- **Business Operation:** Formally decline or disqualify an admission application.
+- **Permission:** `admissions.applicants.approve` | **Scope:** `school`
 - **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`. (`exam_officer` STRICTLY DENIED).
 - **Permitted Fields:** `rejectionReason` (Mandatory, non-empty string).
-- **Resource Resolution:**
-  - Authoritative target: `resolveApplicantTarget(id)`.
-  - Lifecycle validation: Applicant must not already be in `stage = 'Allocation'` (Enrolled).
+- **Lifecycle Preconditions:** Must not already be enrolled (`stage != 'Allocation'`).
 - **State Transition:** Sets `status = 'rejected'`, `rejection_reason = rejectionReason`.
-- **Separation of Duties (SoD):** Only authorized administrators can formally reject applicants.
-- **Side Effects:** Records rejection event in `admission_history`.
-- **Audit Requirement:** Compliance-level rejection audit log.
+- **Audit Requirement:** Rejection reason and executive author logged in `admission_history`.
 
 ---
 
-### 3.8 `POST /api/admissions/:id/letter` — Document Dispatch Recording
-- **Business Operation:** Generate and record dispatch of formal admission letter to parent/guardian.
-- **Permission:** `admissions.applicants.manage` (PROPOSED)
-- **Canonical Scope:** `school`
-- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`.
-- **Permitted Fields:** `deliveryMethod` ('email' | 'sms' | 'in_person'), `letterTemplateId`.
-- **Resource Resolution:**
-  - Authoritative target: `resolveApplicantTarget(id)`.
-  - Lifecycle validation: Applicant must be in `stage = 'Offer'` or `stage = 'Allocation'`.
-- **State Transition:** Sets `admission_letter_sent = true`, `admission_letter_sent_at = NOW()`.
-- **Separation of Duties (SoD):** None.
-- **Side Effects:** Enqueues notification delivery job if email/SMS selected.
-- **Audit Requirement:** Dispatch record logged in `admission_history`.
+### 3.8 `POST /api/admissions/:id/letter` — Official Admission Letter Dispatch (Detailed Section 7)
+- **Business Operation:** Generate and dispatch official institutional admission offer letter.
+- **Permission:** `admissions.letters.dispatch` | **Scope:** `school`
+- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`. (`exam_officer`, `teacher`, `student`, `parent` STRICTLY DENIED).
+- **Eligible Applicant State:** Applicant must be in `stage IN ('Offer', 'Allocation')` and `status = 'active'`. Letters CANNOT be dispatched to applicants in `Application`, `Assessment`, `Interview`, or `Rejected` states (returns HTTP 422).
+- **Resending Permitted:** YES. Families may request duplicate copies or updated letters. Resending is permitted.
+- **Who Can Resend:** Authorized administrators holding `admissions.letters.dispatch`.
+- **Dispatch Mode:**
+  - **Synchronous:** Renders PDF document content / template preview and returns to client.
+  - **Asynchronous:** Enqueues background notification job for outbound email/SMS delivery.
+- **External Providers:** Outbound delivery dispatches to configured email gateway (SendGrid / Resend) or SMS provider (Twilio / Africa's Talking).
+- **Dispatch Status Control:** Server-controlled. The server writes `admission_letter_sent = true` and `admission_letter_sent_at = NOW()`. Any client-supplied timestamps or flags in the request body are strictly ignored.
+- **Immutability & History:** While `applicants.admission_letter_sent_at` reflects the latest dispatch timestamp, every dispatch event appends an immutable record into `public.admission_history` (`from_stage = stage`, `to_stage = stage`, `comment = 'Admission letter dispatched via ' || deliveryMethod`, `created_by = auth.uid()`).
+- **Idempotency & Retry:** Client sends an optional `idempotencyKey`. If a duplicate request arrives within 60 seconds with the same key, the server returns the previous dispatch result without enqueuing duplicate messages.
+- **Audit Requirements:** Full audit log recording template ID, recipient contact info, delivery channel, timestamp, and enacting administrator UUID.
 
 ---
 
-### 3.9 `POST /api/academics/ai/lesson-plan` — Academic AI Lesson Plan Generation
-- **Business Operation:** Generate pedagogical classroom delivery outline for a published curriculum topic.
-- **Permission:** `curriculum.lesson_plan.create` (PROPOSED)
-- **Canonical Scope:** `offering`
-- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`, `subject_teacher` (assigned to offering), `hod` (department head of offering's department).
-- **Permitted Fields:** `offering_id` (UUID), `topic_id` (UUID), `duration_minutes` (number, 20-120), `style` ('standard' | 'inquiry' | 'project' | 'direct').
-- **Resource Resolution:**
-  - Authoritative target: `resolveSubjectOfferingTarget(offering_id)` loads:
-    `{ offering_id, subject_id, school_id, organization_id, department_id, assigned_teacher_id, academic_year_id, curriculum_version_id, curriculum_status }`.
-  - Teacher verification: If caller is a `teacher`, caller's actor ID must match `assigned_teacher_id`.
-  - Department verification: If caller is an `hod`, offering's department must match HOD's department.
-  - Lifecycle verification: `curriculum_status` must equal `'published'`.
-  - Topic verification: `topic_id` must belong to `curriculum_version_id`.
-- **State Transition:** None (Generative computation).
-- **Separation of Duties (SoD):** None.
+### 3.9 `POST /api/admissions/:id/enroll` — Master Student Enrollment Transaction
+- **Business Operation:** Convert an admitted candidate into a permanent active student in the school registry.
+- **Permission:** `admissions.applicants.enroll` | **Scope:** `school`
+- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`. (`exam_officer`, `teacher`, `student`, `parent` STRICTLY DENIED).
+- **Lifecycle Preconditions:**
+  - `applicant.stage` must equal `'Offer'`.
+  - `applicant.status` must equal `'active'`.
+  - `applicant.docs_verified` must equal `true`.
+  - Rejects with HTTP 422 if applicant has not been offered admission or documents are unverified.
+- **Execution Model:**
+  - Server extracts verified caller `auth.uid()`.
+  - Evaluates `admissions.applicants.enroll`.
+  - Executes database transaction via `service_role` calling hardened `enroll_applicant(p_applicant_id, p_actor_id)`.
+- **State Transition:** Mutates applicant to `stage = 'Allocation'`, `status = 'enrolled'`.
 - **Side Effects:**
-  - Writes token consumption log to `ai_usage_logs` (`tenant_id`, `user_id`, `offering_id`, `input_tokens`, `output_tokens`, `model = 'gemini-2.0-flash'`).
-- **Audit Requirement:** Audit of token consumption against tenant quota.
+  - Generates permanent matriculation number (`STU-XXXXXX`).
+  - Inserts new row into `public.students`.
+  - Inserts or reuses record in `public.parents`.
+  - Inserts junction row in `public.student_parents`.
+  - Appends audit row to `public.admission_history`.
+- **Audit Requirement:** Compliance-level audit recording enacting administrator UUID, student ID, and timestamp.
 
 ---
 
-## 4. Resource Authorization & Trusted Resolution Model
-
-All endpoints MUST resolve authoritative context from trusted database state rather than client-supplied claims.
-
-```text
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                              TRUSTED RESOURCE RESOLUTION FLOW                           │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│  Client Request: { applicantId: "uuid-123", tenantSlug: "hastings" }                  │
-│        │                                                                               │
-│        ▼                                                                               │
-│  1. Authenticate JWT Session ──► auth.uid()                                           │
-│        │                                                                               │
-│        ▼                                                                               │
-│  2. Load Authoritative Target Record (Bypassing Untrusted Client Claims):              │
-│     SELECT id, tenant_id, stage, status FROM applicants WHERE id = 'uuid-123'          │
-│        │                                                                               │
-│        ▼                                                                               │
-│  3. Resolve Canonical Authorization Context for Caller:                                │
-│     Caller: roles, schoolId, organizationId, functionalAssignments                     │
-│        │                                                                               │
-│        ▼                                                                               │
-│  4. Construct TrustedResourceTarget:                                                   │
-│     Target: { resourceType: 'applicant', schoolId: applicant.tenant_id, ... }          │
-│        │                                                                               │
-│        ▼                                                                               │
-│  5. Pure Engine Evaluation:                                                            │
-│     evaluatePermission('admissions.applicants.evaluate', target, context)              │
-│        │                                                                               │
-│        ▼                                                                               │
-│     [ ALLOW ] ──► Execute Command Logic                                                │
-│     [ DENY  ] ──► Return 403 Forbidden                                                 │
-│                                                                                        │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 4.1 Authoritative Facts Required for Admissions Target
-To evaluate permissions against an applicant, the resolver must construct a `TrustedResourceTarget` containing:
-- `resourceType`: `'applicant'`
-- `id`: Applicant UUID
-- `schoolId`: `applicant.tenant_id` (The school owning the record)
-- `organizationId`: School's parent organization UUID
-- `stage`: Current admission lifecycle stage
-- `status`: Current record status
-
-### 4.2 Authoritative Facts Required for Academic AI Offering Target
-To evaluate `curriculum.lesson_plan.create`, the resolver must construct a `TrustedResourceTarget` containing:
-- `resourceType`: `'offering'`
-- `id`: Subject Offering UUID
-- `schoolId`: `offering.tenant_id`
-- `organizationId`: School's parent organization UUID
-- `departmentId`: Subject's department UUID
-- `offeringId`: `offering.id`
-- `assignedTeacherId`: `offering.teacher_id` (Linked teacher user profile)
-- `curriculumVersionId`: `offering.curriculum_version_id`
-- `curriculumStatus`: `cv.status` (Must be `'published'`)
+### 3.10 `POST /api/academics/ai/lesson-plan` — Ephemeral AI Lesson Plan Generation
+- **Business Operation:** Generate classroom instructional delivery outline for a published curriculum topic.
+- **Permission:** `curriculum.lesson_plan.generate` | **Scope:** `offering`
+- **Allowed Actors:** `super_admin`, `org_admin`, `school_admin`, `subject_teacher` (assigned to offering), `hod` (department head).
+- **Ephemeral Semantics:**
+  - Does NOT insert records into a `lesson_plans` table (no such table exists in the schema).
+  - Returns structured JSON to client session for display, clipboard copying, or plain-text download.
+  - Future persistence will be governed separately by `curriculum.lesson_plan.manage` without conflating syllabus drafting (`curriculum.version.create`).
+- **Resource Resolution:** Resolves subject offering, teacher assignment, curriculum version status (`published`), and topic.
+- **Strict Execution Pipeline:** Authenticate → Resolve trusted offering target → Evaluate permission → Validate published curriculum status → Check tenant AI token quota → Call Google Gemini API → Log token usage to `ai_usage_logs` → Return JSON.
+- **Side Effects:** Consumes external AI tokens; writes audit row to `public.ai_usage_logs`.
 
 ---
 
-## 5. AI Side-Effect Security & Execution Ordering
+## 4. Comprehensive Security Test Contract (Required Section 10)
 
-Under invariant `INV-3C-A-09`, external AI model invocations consume external institutional credits and must **never** be triggered speculatively or prior to authorization.
+The subsequent implementation phase must satisfy this expanded test contract:
 
-### 5.1 Mandatory Execution Pipeline
+### 4.1 Admissions Security Test Contract
+1. **`TEST-ADM-01` (Teacher Maintenance Rejection):** Teacher attempts `PATCH /api/admissions/:id`. Expected: 403 Forbidden.
+2. **`TEST-ADM-02` (Exam Officer Evaluation Authority):** Exam Officer submits entrance scores via `POST /api/admissions/:id/evaluate`. Expected: 200 OK. History updated.
+3. **`TEST-ADM-03` (Exam Officer Approval Rejection):** Exam Officer attempts `POST /api/admissions/:id/approve`. Expected: 403 Forbidden.
+4. **`TEST-ADM-04` (Exam Officer Demographic Rejection):** Exam Officer attempts `PATCH /api/admissions/:id`. Expected: 403 Forbidden.
+5. **`TEST-ADM-05` (Stream Placement Authorization):** Unauthorized actor (e.g. Teacher) attempts `POST /api/admissions/:id/stream`. Expected: 403 Forbidden.
+6. **`TEST-ADM-06` (Letter Dispatch Authorization):** Unauthorized actor (e.g. Exam Officer or Teacher) attempts `POST /api/admissions/:id/letter`. Expected: 403 Forbidden.
+7. **`TEST-ADM-07` (Enrollment Authorization):** Unauthorized actor (e.g. Exam Officer or Teacher) attempts `POST /api/admissions/:id/enroll`. Expected: 403 Forbidden.
+8. **`TEST-ADM-08` (Approval Does Not Imply Enrollment):** Calling `POST /api/admissions/:id/approve` updates `stage = 'Offer'`. Verifies zero student rows created in `public.students`.
+9. **`TEST-ADM-09` (Enrollment Requires Offer Stage):** Attempting `POST /api/admissions/:id/enroll` on an applicant in `stage = 'Application'` or `'Assessment'`. Expected: 422 Unprocessable Entity.
+10. **`TEST-ADM-10` (Cross-School Access Denied):** School A administrator attempts any mutation on an applicant belonging to School B. Expected: 403 Forbidden. Target record untouched.
 
-```text
-Step 1: Authenticate Caller
-        Verify valid Supabase session token. Reject unauthenticated (401).
-           ↓
-Step 2: Validate Schema & Input Parameters
-        Verify offering_id, topic_id format. Reject malformed payloads (400).
-           ↓
-Step 3: Resolve Trusted Resource Target
-        Fetch offering, subject, teacher assignment, curriculum version from DB.
-        Reject non-existent resources (404).
-           ↓
-Step 4: Resolve Canonical Authorization Context
-        Load caller's effective roles, assignments, and tenant boundaries.
-           ↓
-Step 5: Pure Engine Permission Evaluation
-        evaluatePermission('curriculum.lesson_plan.create', offeringTarget, authContext).
-        Reject unauthorized callers (403). Zero downstream calls occur.
-           ↓
-Step 6: Validate Institutional Business Preconditions
-        Verify offering.curriculum_status === 'published'.
-        Verify topic belongs to offering's curriculum version.
-        Reject invalid curriculum state (422 Unprocessable Entity).
-           ↓
-Step 7: Enforce AI Quotas & Rate Limits
-        Check tenant AI usage limit in ai_usage_logs for current billing period.
-        Reject quota exhaustion (429 Too Many Requests).
-           ↓
-Step 8: Construct Bounded Grounding Prompt
-        Assemble structured prompt using strictly DB-resolved topic & outcomes.
-           ↓
-Step 9: Invoke External AI Provider (Google Gemini API)
-        Execute HTTP POST with server-held GEMINI_API_KEY.
-        Handle provider timeout / 502 gracefully.
-           ↓
-Step 10: Persist Audit & Token Attribution
-        Insert row into ai_usage_logs with exact token counts and tenant_id.
-           ↓
-Step 11: Return Formatted Result to Client
-```
+### 4.2 Enrollment Database Security Test Contract
+1. **`TEST-ENR-01` (Direct Client RPC Denied):** Ordinary authenticated user (student/teacher) calls `supabase.rpc('enroll_applicant')`. Expected: 403 Permission Denied (PostgreSQL function execution revoked).
+2. **`TEST-ENR-02` (Anonymous RPC Denied):** Anonymous unauthenticated caller calls `supabase.rpc('enroll_applicant')`. Expected: 403 Permission Denied.
+3. **`TEST-ENR-03` (Wrong Tenant Enrollment Denied):** Server command attempts enrollment where applicant `tenant_id` does not match caller's authorized reach. Expected: 403 Forbidden.
+4. **`TEST-ENR-04` (Human Actor Identity Preserved):** Legitimate administrator enrolls applicant via command endpoint. Expected: 200 OK. Audit record in `admission_history.created_by` matches administrator's `auth.uid()`, NOT `service_role`.
+5. **`TEST-ENR-05` (Concurrency & Duplicate Prevention):** Two concurrent enrollment requests executed simultaneously on the same applicant UUID. Expected: Exactly one request succeeds (HTTP 200); the other fails with 422 (already allocated). Exactly ONE row created in `public.students`.
 
-### 5.2 Failure & Security Invariants
-1. **Zero-Token Unauthorized Requests:** If an attacker attempts to generate a lesson plan for an offering in another school, or if a student/parent attempts to invoke the endpoint, the pipeline aborts at Step 5. **Zero calls are made to Google Gemini**.
-2. **Deterministic Attribution:** `tenant_id` in `ai_usage_logs` is derived from the **offering's authoritative school ID**, never from client-controlled headers.
-3. **Draft Syllabus Protection:** If a teacher attempts to generate AI content for a curriculum that is still in draft or archive status, the pipeline aborts at Step 6 with HTTP 422.
-
----
-
-## 6. Comprehensive Security Test Plan
-
-The subsequent implementation phase must satisfy the following comprehensive test matrix:
-
-### 6.1 Cross-Tenant Isolation Tests
-1. **`TEST-SEC-XT-01` (Admissions View Cross-Tenant):** School A `school_admin` attempts `GET /api/admissions?tenantSlug=school-b`. Expected: 403 Forbidden (or filtered strictly to School A).
-2. **`TEST-SEC-XT-02` (Admissions Mutation Cross-Tenant):** School A `school_admin` attempts `PATCH /api/admissions/uuid-of-school-b-applicant`. Expected: 403 Forbidden. Target record untouched.
-3. **`TEST-SEC-XT-03` (Academic AI Cross-Tenant):** School A teacher attempts `POST /api/academics/ai/lesson-plan` with `offering_id` of School B. Expected: 403 Forbidden. External AI mock count = 0.
-4. **`TEST-SEC-XT-04` (Org Admin Boundary):** Org 1 `org_admin` attempts command against School in Org 2. Expected: 403 Forbidden.
-
-### 6.2 Role & Privilege Abuse Tests
-1. **`TEST-SEC-RO-01` (Teacher Admissions Approval):** Teacher attempts `POST /api/admissions/:id/approve`. Expected: 403 Forbidden.
-2. **`TEST-SEC-RO-02` (Exam Officer Demographic Mutation):** Exam Officer attempts `PATCH /api/admissions/:id` with new parent email. Expected: 403 Forbidden.
-3. **`TEST-SEC-RO-03` (Exam Officer Executive Approval):** Exam Officer attempts `POST /api/admissions/:id/approve`. Expected: 403 Forbidden.
-4. **`TEST-SEC-RO-04` (Student/Parent Admissions Mutation):** Student attempts `POST /api/admissions/:id/evaluate`. Expected: 403 Forbidden.
-5. **`TEST-SEC-RO-05` (Unassigned Teacher AI Generation):** Teacher A attempts `POST /api/academics/ai/lesson-plan` for an offering assigned to Teacher B (in same school). Expected: 403 Forbidden (unless Teacher A is HOD of that department).
-
-### 6.3 Scope Abuse Tests
-1. **`TEST-SEC-SC-01` (Offering Scope Containment):** Teacher assigned to Offering 1 attempts to invoke offering-scoped action on Offering 2 in the same school. Expected: 403 Forbidden.
-2. **`TEST-SEC-SC-02` (Department Scope Containment):** HOD of Science Department attempts to invoke departmental lesson planning on an Arts Department offering. Expected: 403 Forbidden.
-
-### 6.4 Client Spoofing Tests
-1. **`TEST-SEC-SP-01` (Client-Injected Role):** Client sends `{ role: 'super_admin' }` in JSON body to `/api/admissions/:id/approve`. Expected: Request evaluated strictly using JWT role; spoofed body field ignored; 403 Forbidden.
-2. **`TEST-SEC-SP-02` (Client-Injected Tenant ID):** Client sends `{ tenant_id: 'foreign-uuid' }` in `POST /api/admissions`. Expected: Record created strictly under caller's authenticated tenant ID.
-3. **`TEST-SEC-SP-03` (Client-Injected Stage):** Client sends `{ stage: 'Offer' }` to `PATCH /api/admissions/:id`. Expected: 400 Bad Request (Field forbidden in maintenance endpoint).
-
-### 6.5 AI Side-Effect & Token Drain Tests
-1. **`TEST-SEC-AI-01` (Auth Failure Mock Count):** Unauthenticated request to `/api/academics/ai/lesson-plan`. Expected: 401 Unauthorized. Gemini fetch spy called 0 times.
-2. **`TEST-SEC-AI-02` (Draft Curriculum Rejection):** Valid teacher request for offering with `curriculum_status = 'draft'`. Expected: 422 Unprocessable Entity. Gemini fetch spy called 0 times.
-3. **`TEST-SEC-AI-03` (Authorized Invocation):** Authorized teacher request for published offering. Expected: 200 OK. Gemini fetch spy called exactly 1 time with correct system grounding. Usage logged to `ai_usage_logs`.
+### 4.3 Academic AI Security Test Contract
+1. **`TEST-AI-01` (Unauthorized AI Call Containment):** Unauthenticated or unauthorized user calls `POST /api/academics/ai/lesson-plan`. Expected: 401/403. External Gemini API mock called **0 times**.
+2. **`TEST-AI-02` (Cross-Tenant Offering Containment):** Teacher from School A requests lesson plan for offering in School B. Expected: 403 Forbidden. Gemini API mock called **0 times**.
+3. **`TEST-AI-03` (Unassigned Teacher Containment):** Teacher A requests lesson plan for offering assigned to Teacher B (same school, not HOD). Expected: 403 Forbidden. Gemini API mock called **0 times**.
+4. **`TEST-AI-04` (Draft Curriculum Containment):** Authorized teacher requests lesson plan for offering linked to `curriculum_status = 'draft'`. Expected: 422 Unprocessable Entity. Gemini API mock called **0 times**.
+5. **`TEST-AI-05` (Authorized Generation & Accounting):** Assigned teacher requests lesson plan for published offering. Expected: 200 OK. Gemini mock called exactly 1 time. Exact token counts recorded in `ai_usage_logs` with offering's authoritative `tenant_id`.

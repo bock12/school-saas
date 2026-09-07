@@ -1,4 +1,4 @@
-# TASK-0007 Phase 3C-A — Database Security Boundary Design & `enroll_applicant` Remediation
+# TASK-0007 Phase 3C-A — Database Security Boundary Design & `enroll_applicant` Remediation (Revised)
 
 **Task:** TASK-0007 Phase 3C-A  
 **Stage:** Architecture & Specification Only  
@@ -21,11 +21,71 @@ This design defect allows any authenticated client session (including students, 
 3. Tenant isolation boundaries.
 4. Row-Level Security (RLS) policies on `students`, `parents`, and `applicants`.
 
-This document delivers an **exhaustive 18-point architectural dissection** of `public.enroll_applicant` and specifies a **remediation design** to establish a secure database boundary.
+This document delivers an **exhaustive 18-point architectural dissection** of `public.enroll_applicant`, specifies the **complete actor identity resolution chain for service-role execution**, and formulates a **remediation design** to establish a secure database boundary.
 
 ---
 
-## 2. Exhaustive 18-Point Dissection of `public.enroll_applicant`
+## 2. Reconciling Service-Role Execution with Human Actor Identity (Required Section 4)
+
+A fundamental architectural question arises when using privileged database credentials:
+> *If the database transaction executes using the privileged `service_role` connection, how does the database know which human actor caused the enrollment, and how is audit attribution preserved without treating `service_role` itself as the actor?*
+
+### 2.1 The Complete Identity & Authorization Chain
+
+The architecture resolves this by enforcing a strictly ordered, server-mediated identity chain:
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                         COMPLETE ACTOR IDENTITY RESOLUTION CHAIN                       │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  1. Authenticated Human Session (Browser Client)                                       │
+│     - Authenticated administrator triggers enrollment in web UI.                       │
+│     - Sends HTTPS POST /api/admissions/:id/enroll with cryptographic session cookie.   │
+│                                                                                        │
+│  2. Session Authentication (auth.uid())                                                │
+│     - Next.js Server boundary invokes createClient() -> supabase.auth.getUser().       │
+│     - Supabase Auth validates JWT signature and extracts caller identity:              │
+│       trustedHumanActorId = user.id (UUID).                                            │
+│     - If invalid or expired, execution halts immediately with HTTP 401.                │
+│                                                                                        │
+│  3. Canonical Authorization Engine Evaluation                                          │
+│     - Context Resolver hydrates caller profile (roles, schoolId, assignments).         │
+│     - Resource Resolver loads authoritative applicant target from DB.                  │
+│     - Canonical Engine evaluates:                                                      │
+│       evaluatePermission('admissions.applicants.enroll', applicantTarget, authContext) │
+│     - If caller lacks permission or cross-tenant reach, execution halts with HTTP 403. │
+│                                                                                        │
+│  4. Business Precondition Verification (Server Command Boundary)                       │
+│     - Checks applicant.stage === 'Offer', status === 'active', docs_verified === true. │
+│     - If preconditions fail, execution halts with HTTP 422.                            │
+│                                                                                        │
+│  5. Privileged Internal Database Invocation (service_role)                             │
+│     - The server instantiates the privileged Supabase Admin Client (service_role key). │
+│     - The server invokes the database function, passing the verified human identity:   │
+│       adminClient.rpc('enroll_applicant', {                                            │
+│         p_applicant_id: applicantTarget.id,                                            │
+│         p_actor_id: trustedHumanActorId                                                │
+│       })                                                                               │
+│                                                                                        │
+│  6. Database Transaction & Execution Verification (PostgreSQL)                         │
+│     - Database verifies connection role is service_role or postgres.                   │
+│     - Database verifies p_actor_id is non-null and corresponds to an active profile.   │
+│     - Database locks applicant row: SELECT ... FOR UPDATE.                             │
+│     - Database records p_actor_id directly into admission_history.created_by.          │
+│     - Transaction commits. Returns permanent student ID.                               │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.2 Why `service_role` Does NOT Represent the Human Actor
+- `service_role` is a **transport and privilege-escalation mechanism**, not an identity. It is used strictly because PostgreSQL table-level RLS restricts direct multi-table insertions across `students`, `parents`, and `student_parents`.
+- The human actor identity is established by cryptographic JWT authentication at the server boundary (`auth.uid()`) and passed as an explicit, tamper-proof parameter `p_actor_id` to the stored procedure.
+- The stored procedure records `p_actor_id` in `admission_history.created_by`, guaranteeing 100% human audit attribution.
+
+---
+
+## 3. Exhaustive 18-Point Dissection of `public.enroll_applicant`
 
 ### 1. Current EXECUTE Privileges
 In PostgreSQL, functions created without an explicit `REVOKE` grant `EXECUTE` privilege to `PUBLIC` by default. Consequently, both `anon` and `authenticated` roles hold execute permissions. PostgREST automatically exposes this function at `/rest/v1/rpc/enroll_applicant`.
@@ -84,10 +144,10 @@ PostgREST dispatches this to PostgreSQL. Because the function is `SECURITY DEFIN
 **Verdict: ABSOLUTELY NO.** Client-side callable execution of `enroll_applicant` represents an unacceptable security liability. Admissions enrollment is an irreversible, high-consequence administrative action that creates legal student records. It must never be exposed to direct client RPC invocation.
 
 ### 14. Server-Only Execution Requirement
-**Verdict: YES.** The function must become strictly server-only. It must be executable exclusively by the trusted backend environment via the `service_role` connection, or guarded by strict cryptographic session verification.
+**Verdict: YES.** The function must become strictly server-only. It must be executable exclusively by the trusted backend environment via the `service_role` connection.
 
 ### 15. Actor Identity Derivation from `auth.uid()`
-**Verdict: MANDATORY.** The function must derive the enacting administrator's identity directly from `auth.uid()` when called within an authenticated session, or receive an authenticated, cryptographically signed actor context from the trusted server backend. The client must never provide `p_admin_id`.
+**Verdict: MANDATORY.** The human actor identity must be authoritatively derived from `auth.uid()` at the server boundary and passed as verified `p_actor_id`. The client must never provide `p_admin_id`.
 
 ### 16. Required GRANT / REVOKE Model
 ```sql
@@ -109,50 +169,23 @@ The test suite must verify:
 
 ---
 
-## 3. Secure Execution Architecture: The Server-Mediated Boundary
+## 4. Comprehensive Database Security Model for `enroll_applicant` (Required Section 5)
 
-To achieve defense-in-depth, enrollment execution is decoupled into two strictly ordered layers:
-
-```text
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        SECURE ENROLLMENT ARCHITECTURE PIPELINE                         │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│  Client UI (e.g. Headmaster clicking "Enroll Applicant")                               │
-│        │                                                                               │
-│        ▼ [HTTPS POST with Auth Cookie]                                                 │
-│  LAYER 1: Server Command Boundary (Next.js Server Action / Route)                      │
-│        │                                                                               │
-│        ├── 1. Authenticate session: auth.uid()                                         │
-│        ├── 2. Resolve Applicant Target: fetch applicant record from DB                 │
-│        ├── 3. Resolve Canonical Authorization Context (roles, schoolId, assignments)   │
-│        ├── 4. Evaluate Canonical Permission:                                           │
-│        │      evaluatePermission('admissions.applicants.approve', target, context)     │
-│        │      [ DENY ] ──► Return 403 Forbidden                                        │
-│        │      [ ALLOW ] ──► Proceed                                                    │
-│        ├── 5. Enforce Business Preconditions:                                          │
-│        │      - applicant.stage must be 'Offer'                                        │
-│        │      - applicant.status must be 'active'                                      │
-│        │      - applicant.docs_verified must be true                                   │
-│        │                                                                               │
-│        ▼ [Privileged Internal Call via service_role]                                   │
-│  LAYER 2: Hardened Database RPC (public.enroll_applicant)                              │
-│        │                                                                               │
-│        ├── 1. Verify caller is service_role                                            │
-│        ├── 2. SELECT ... FROM applicants WHERE id = p_applicant_id FOR UPDATE          │
-│        ├── 3. Verify stage != 'Allocation' (inside lock)                               │
-│        ├── 4. Insert Student record                                                    │
-│        ├── 5. Insert / Link Parent record                                              │
-│        ├── 6. Update Applicant: stage = 'Allocation', status = 'enrolled'              │
-│        ├── 7. Insert Audit Record: created_by = validated_admin_id                     │
-│        └── 8. Commit Transaction & Return new student UUID                            │
-│                                                                                        │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+| Security Dimension | Specification & Enforcement Mechanism |
+|---|---|
+| **1. Invocation Boundary** | Callable **strictly by `service_role`**. Revoked completely from `PUBLIC`, `anon`, and `authenticated`. PostgREST blocks any non-service-role caller with HTTP 403. |
+| **2. Business Authorization** | Authorized strictly by canonical permission **`admissions.applicants.enroll`** evaluated at the server command boundary prior to database execution. |
+| **3. Actor Identity** | Server extracts **`auth.uid()`** from verified session JWT and passes it as `p_actor_id`. PostgreSQL verifies that `p_actor_id` exists in `public.profiles` and is active. |
+| **4. Resource Authorization** | Server loads applicant record and verifies `applicant.tenant_id === callerContext.schoolId` (or within `org_admin` institutional hierarchy). Cross-tenant requests are rejected with HTTP 403 before reaching the database. |
+| **5. Lifecycle Prerequisites** | Applicant must be in **`stage = 'Offer'`**, **`status = 'active'`**, and **`docs_verified = true`**. Rejects with HTTP 422 if applicant has not been offered admission or documents are unverified. |
+| **6. Atomic Transaction** | Atomically executes: (1) `SELECT ... FOR UPDATE`, (2) `INSERT INTO students`, (3) `INSERT/SELECT parents`, (4) `INSERT INTO student_parents`, (5) `UPDATE applicants SET stage = 'Allocation', status = 'enrolled'`, (6) `INSERT INTO admission_history`. Rolls back 100% on any failure. |
+| **7. Concurrency & Race Prevention** | **`SELECT * INTO v_applicant FROM public.applicants WHERE id = p_applicant_id FOR UPDATE`**. The row lock serializes concurrent enrollment requests. The second transaction observes `stage = 'Allocation'` and aborts with an exception. |
+| **8. Audit Integrity** | Enacting human actor UUID (`p_actor_id`), tenant ID, applicant ID, timestamp (`NOW()`), and transition comment are recorded immutably in `public.admission_history`. |
+| **9. Direct RPC Prevention** | PostgREST enforces PostgreSQL function grants. Because `EXECUTE` is revoked from `anon` and `authenticated`, any direct client call via `supabase.rpc()` fails immediately at the PostgREST layer. |
 
 ---
 
-## 4. Remediation Migration Specification (Proposed Future Migration)
+## 5. Remediation Migration Specification (Proposed Future Migration)
 
 > [!IMPORTANT]
 > This SQL code is a specification for the subsequent implementation task. In accordance with task constraints, **no database migration is modified or applied during this architecture phase**.
@@ -162,18 +195,13 @@ To achieve defense-in-depth, enrollment execution is decoupled into two strictly
 -- PROPOSED REMEDIATION SPECIFICATION: 048_harden_enroll_applicant_rpc.sql
 -- ====================================================================
 
--- 1. Revoke public/client execution privileges immediately
-REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID) FROM anon;
-REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID) FROM authenticated;
+-- 1. Drop existing vulnerable function signature to clear public execute grants
+DROP FUNCTION IF EXISTS public.enroll_applicant(UUID, UUID);
 
--- 2. Grant execution strictly to service_role
-GRANT EXECUTE ON FUNCTION public.enroll_applicant(UUID, UUID) TO service_role;
-
--- 3. Replace function with concurrency-safe, row-locking implementation
+-- 2. Create hardened function with explicit actor parameter
 CREATE OR REPLACE FUNCTION public.enroll_applicant(
   p_applicant_id UUID,
-  p_admin_id UUID
+  p_actor_id UUID
 )
 RETURNS UUID
 SECURITY DEFINER
@@ -187,20 +215,27 @@ DECLARE
   v_parent_last TEXT;
   v_admission_number TEXT;
   v_gender gender_type;
-  v_enactor_id UUID;
+  v_verified_actor RECORD;
 BEGIN
-  -- 1. Security Check: Ensure caller has administrative privileges or is service_role
+  -- 1. Invocation Boundary Check: Must be invoked by service_role or superuser
   IF current_user NOT IN ('service_role', 'postgres') AND auth.role() != 'service_role' THEN
     RAISE EXCEPTION 'Access Denied: enroll_applicant may only be invoked by authorized service_role';
   END IF;
 
-  -- 2. Resolve enactor: Prefer auth.uid() if present; fallback to p_admin_id under service_role
-  v_enactor_id := COALESCE(auth.uid(), p_admin_id);
-  IF v_enactor_id IS NULL THEN
-    RAISE EXCEPTION 'Audit Failure: Enacting administrator ID is required';
+  -- 2. Actor Identity Verification: Enacting human actor must be an active profile
+  IF p_actor_id IS NULL THEN
+    RAISE EXCEPTION 'Audit Failure: Enacting administrator ID (p_actor_id) is required';
   END IF;
 
-  -- 3. Concurrency Lock: Lock applicant row to prevent race conditions
+  SELECT id, tenant_id INTO v_verified_actor
+  FROM public.profiles
+  WHERE id = p_actor_id AND is_active = true;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Audit Failure: Enacting actor % is not a valid active profile', p_actor_id;
+  END IF;
+
+  -- 3. Concurrency Lock: Lock applicant row exclusively to prevent race conditions
   SELECT * INTO v_applicant 
   FROM public.applicants 
   WHERE id = p_applicant_id
@@ -210,11 +245,16 @@ BEGIN
     RAISE EXCEPTION 'Applicant not found: %', p_applicant_id;
   END IF;
 
+  -- 4. Lifecycle Validation: Must be in 'Offer' stage to enroll
   IF v_applicant.stage = 'Allocation' THEN
     RAISE EXCEPTION 'Applicant % has already been enrolled and allocated', p_applicant_id;
   END IF;
 
-  -- 4. Generate Deterministic Admission Number (STU- + 6 random hex)
+  IF v_applicant.stage != 'Offer' THEN
+    RAISE EXCEPTION 'Lifecycle Violation: Applicant must be in Offer stage to enroll. Current stage: %', v_applicant.stage;
+  END IF;
+
+  -- 5. Generate Deterministic Admission Number (STU- + 6 random hex)
   v_admission_number := 'STU-' || upper(substr(md5(random()::text), 1, 6));
 
   -- Cast gender safely
@@ -224,7 +264,7 @@ BEGIN
     v_gender := NULL;
   END;
 
-  -- 5. Insert Student
+  -- 6. Insert Student Record
   INSERT INTO public.students (
     tenant_id,
     admission_number,
@@ -261,7 +301,7 @@ BEGIN
     true
   ) RETURNING id INTO v_student_id;
 
-  -- 6. Link or Create Parent
+  -- 7. Insert or Link Parent Record
   SELECT id INTO v_parent_id 
   FROM public.parents 
   WHERE tenant_id = v_applicant.tenant_id AND phone = v_applicant.parent_phone
@@ -292,7 +332,7 @@ BEGIN
     ) RETURNING id INTO v_parent_id;
   END IF;
 
-  -- 7. Insert Student-Parent Junction
+  -- 8. Insert Student-Parent Junction
   INSERT INTO public.student_parents (
     tenant_id,
     student_id,
@@ -309,7 +349,7 @@ BEGIN
     true
   );
 
-  -- 8. Advance Applicant State Machine
+  -- 9. Advance Applicant State Machine
   UPDATE public.applicants 
   SET 
     stage = 'Allocation',
@@ -318,7 +358,7 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_applicant_id;
 
-  -- 9. Record Immutable Audit History
+  -- 10. Record Immutable Audit History with Human Actor Attribution
   INSERT INTO public.admission_history (
     tenant_id,
     applicant_id,
@@ -329,25 +369,19 @@ BEGIN
   ) VALUES (
     v_applicant.tenant_id,
     p_applicant_id,
-    v_applicant.stage,
+    'Offer',
     'Allocation',
     'Student successfully enrolled into institutional student registry via canonical authorization.',
-    v_enactor_id
+    p_actor_id
   );
 
   RETURN v_student_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 3. Strict Permission Revocation & Grant Model
+REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID) FROM anon;
+REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.enroll_applicant(UUID, UUID) TO service_role;
 ```
-
----
-
-## 5. Summary of Remediation Guarantees
-
-| Security Concern | Pre-Remediation State | Post-Remediation State | Invariant Enforced |
-|---|---|---|---|
-| **Direct Client RPC Access** | Granted to `PUBLIC` (`anon`, `authenticated`) | Revoked from `PUBLIC`, `anon`, `authenticated`. Restricted to `service_role`. | `INV-3C-A-08` |
-| **Actor Identity Integrity** | Trusted untrusted client `p_admin_id` | Enforced from `auth.uid()` or validated server session context. | `INV-3C-A-04` |
-| **Authorization Enforcement** | Zero RBAC check; bypassed API layer | Mandatory evaluation of `admissions.applicants.approve` at server boundary. | `INV-3C-A-01` |
-| **Tenant Isolation** | Caller could enroll foreign tenant applicant | Server target resolution checks caller's reachable school boundary. | `INV-3C-A-03` |
-| **Race Conditions / Concurrency** | Unlocked read; race causes duplicate students | `SELECT ... FOR UPDATE` row lock serializes enrollment. | `INV-3C-A-07` |

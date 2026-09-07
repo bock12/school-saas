@@ -3029,53 +3029,58 @@ Gemini has completed implementation, testing, static verification, production bu
 **Supervisory Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
 **Final Authority:** Human Project Owner  
 
-### 1. Executive Summary
+### 1. Executive Summary & Supervisory Corrections
 
-During TASK-0007 Phase 3C preflight, three critical gaps were uncovered:
-1. **GAP-A (Academic AI):** Reusing `curriculum.version.create` for classroom AI lesson planning represents a semantic mismatch.
-2. **GAP-B (Admissions PATCH):** Collapsing 24 disparate fields across demographic maintenance, academic scoring, WAEC streaming, and executive adjudication under `admissions.applicants.approve` is an architectural anti-pattern that violates the principle of least privilege.
-3. **GAP-C (Database Security):** `public.enroll_applicant` in `017_enroll_applicant_rpc.sql` was created with `SECURITY DEFINER` without caller authentication or permission checks, and granted to `PUBLIC`, allowing unprivileged client RPC invocation.
+Following the supervisory review of TASK-0007 Phase 3C-A ("CHANGES REQUESTED"), the architecture and governance specifications were comprehensively revised to resolve all five required supervisory corrections:
+1. **Admissions Letter Dispatch Separated:** Formally segregated official admission letter dispatch into a dedicated capability: `admissions.letters.dispatch`.
+2. **Stream Placement Separated from Evaluation:** Segregated WAEC senior secondary track allocation into `admissions.applicants.place`, eliminating privilege creep where markers could alter stream tracks.
+3. **Enrollment Separated from Approval:** Formally decoupled executive admission offers (`admissions.applicants.approve`) from the legal student/parent registry creation transaction (`admissions.applicants.enroll`).
+4. **Actor Identity Chain for Service-Role Execution:** Documented the complete 6-stage identity and authorization pipeline reconciling `service_role` transport with human `auth.uid()` attribution.
+5. **Ephemeral Lesson-Plan Semantics:** Clarified that the current schema does not persist lesson plans, refining the operation to `curriculum.lesson_plan.generate`.
 
-In Phase 3C-A, complete architecture and governance specifications have been formulated to resolve all three gaps without altering the frozen Phase 3A canonical engine (`src/lib/auth/permissions-registry.ts`, `authorization-engine.ts`, `authorization-context-resolver.ts`) and without modifying application code or database migrations.
+### 2. Architecture Deliverables Produced & Revised
 
-### 2. Architecture Deliverables Produced
-
-1. **Permission Architecture & Catalog Delta Specification:**  
+1. **Permission Architecture & Catalog Delta Specification (Revised):**  
    `.ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-PERMISSION-ARCHITECTURE.md`
-   - Defines canonical lifecycle distinguishing Curriculum Authoring, Lesson Plan Generation, Lesson Plan Editing, and Curriculum Publishing.
-   - Specifies proposed permission `curriculum.lesson_plan.create` (scope: `offering`).
-   - Decomposes admissions operations into Demographic Maintenance (`admissions.applicants.manage`), Evaluation & Streaming (`admissions.applicants.evaluate`), and Executive Adjudication (`admissions.applicants.approve`).
-   - Strictly bounds Exam Officer authority to technical evaluation and streaming; forbids executive approval, demographic mutation, and student enrollment.
-   - Delivers the consolidated decision table covering all 11 core capabilities.
+   - Defines canonical lifecycle distinguishing Curriculum Authoring, Ephemeral Lesson Plan Generation, Future Lesson Plan Persistence, and Curriculum Publishing.
+   - Specifies proposed permission `curriculum.lesson_plan.generate` (scope: `offering`).
+   - Decomposes admissions into 5 dedicated capabilities: `admissions.applicants.manage`, `evaluate`, `place`, `letters.dispatch`, and `enroll`.
+   - Strictly bounds Exam Officer authority to technical evaluation (`evaluate`) and stream qualification (`place`); forbids executive approval, demographic mutation, letter dispatch, and enrollment.
+   - Delivers the consolidated decision matrix covering all 12 core capabilities.
+   - Formalizes the permission catalog count: 33 frozen + 6 proposed = 39 atomic permissions.
 
-2. **Operation-Oriented API Charter & Security Specification:**  
+2. **Operation-Oriented API Charter & Security Specification (Revised):**  
    `.ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-API-CHARTER.md`
-   - Establishes command-oriented endpoint decomposition:
+   - Establishes pure command-oriented endpoint architecture:
+     - `GET /api/admissions` (Listing & stage metrics)
+     - `POST /api/admissions` (Initial registration)
      - `PATCH /api/admissions/:id` (Demographic Maintenance strictly)
      - `POST /api/admissions/:id/evaluate` (Entrance Exam & Assessment Scoring)
      - `POST /api/admissions/:id/stream` (WAEC Stream Track Placement)
      - `POST /api/admissions/:id/approve` (Executive Offer Adjudication)
      - `POST /api/admissions/:id/reject` (Executive Rejection Adjudication)
-     - `POST /api/admissions/:id/letter` (Document Dispatch Tracking)
-     - `POST /api/academics/ai/lesson-plan` (Academic AI Lesson Planning)
-   - Documents trusted resource resolution targets for both admissions and academic AI offerings.
-   - Enforces strict 11-step execution pipeline for Academic AI to guarantee zero external LLM invocations before authentication, resource resolution, and authorization pass.
-   - Defines comprehensive 15-point automated security test plan.
+     - `POST /api/admissions/:id/letter` (Official Letter Dispatch Tracking)
+     - `POST /api/admissions/:id/enroll` (Master Student Enrollment Transaction)
+     - `POST /api/academics/ai/lesson-plan` (Ephemeral Academic AI Lesson Planning)
+   - Documents trusted resource resolution targets for admissions and offerings.
+   - Details letter dispatch side effects: state preconditions (`Offer`/`Allocation`), resending permissions, server-controlled timestamps, asynchronous delivery queues, and idempotency.
+   - Defines expanded 15-point automated security test contract.
 
-3. **Database Security Boundary Design & `enroll_applicant` Remediation:**  
+3. **Database Security Boundary Design & `enroll_applicant` Remediation (Revised):**  
    `.ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-DB-SECURITY-DESIGN.md`
    - Exhaustive 18-point dissection of `public.enroll_applicant`.
+   - Reconciles `service_role` execution with human actor identity (`auth.uid()` passed as verified `p_actor_id`).
+   - Specifies complete 9-point database security model (invocation boundary, business authorization, actor identity, resource authorization, lifecycle prerequisites, atomic transaction, concurrency row-locking `FOR UPDATE`, audit integrity, and direct RPC revocation).
    - Formulates remediation SQL migration specification:
      - `REVOKE ALL ON FUNCTION public.enroll_applicant FROM PUBLIC, anon, authenticated;`
      - `GRANT EXECUTE ON FUNCTION public.enroll_applicant TO service_role;`
-     - Enforces caller verification and concurrency locking (`SELECT ... FOR UPDATE`).
-   - Designs server-mediated execution model deriving actor identity from `auth.uid()`.
 
 ### 3. Verification & Invariant Audit
 
 - **Application Files Changed:** `0` (Zero application code modified).
 - **Database Migrations Changed:** `0` (Zero migration files modified).
 - **Phase 3A Files Changed:** `0` (Zero lines changed against `d38490b` / `e4d673e`).
+- **Phase 3B Files Changed:** `0` (Zero lines changed against `fa16b8a` / `e4d673e`).
 - **TypeScript Static Verification (`npx tsc --noEmit`):** `100% PASS (0 errors)`.
 - **Automated Test Suite (`npm test`):** `221 / 221 tests passing across 19 suites`.
 
@@ -3085,6 +3090,7 @@ In Phase 3C-A, complete architecture and governance specifications have been for
 TASK ID: TASK-0007-PHASE-3C-A
 STATUS: ARCHITECTURE READY — AWAITING SUPERVISORY APPROVAL
 ```
+
 
 
 
