@@ -1,4 +1,4 @@
-# TASK-0007 Phase 3C-A — Database Security Boundary Design & `enroll_applicant` Remediation (Revised)
+# TASK-0007 Phase 3C-A — Database Security Boundary Design & `enroll_applicant` Remediation (Final Revision)
 
 **Task:** TASK-0007 Phase 3C-A  
 **Stage:** Architecture & Specification Only  
@@ -12,80 +12,138 @@
 
 ## 1. Executive Security Analysis
 
-During the preflight discovery of TASK-0007 Phase 3C, an architectural vulnerability was identified in the database boundary:
+During the preflight discovery of TASK-0007 Phase 3C, a critical database security defect was identified:
 `public.enroll_applicant` (defined in `supabase/migrations/017_enroll_applicant_rpc.sql`) was created as a `SECURITY DEFINER` function without revocation of public execution privileges, without caller identity verification, and with reliance on an untrusted, client-supplied administrator ID (`p_admin_id`).
 
-This design defect allows any authenticated client session (including students, parents, or users from external tenants) to invoke `supabase.rpc('enroll_applicant', ...)` directly over the Supabase PostgREST API, bypassing:
+This vulnerability allows any authenticated client session (including students, parents, or users from external tenants) to invoke `supabase.rpc('enroll_applicant', ...)` directly over the Supabase PostgREST API, bypassing:
 1. The Next.js API layer.
 2. The canonical RBAC authorization engine (`permissions-registry.ts`, `authorization-engine.ts`).
 3. Tenant isolation boundaries.
 4. Row-Level Security (RLS) policies on `students`, `parents`, and `applicants`.
 
-This document delivers an **exhaustive 18-point architectural dissection** of `public.enroll_applicant`, specifies the **complete actor identity resolution chain for service-role execution**, and formulates a **remediation design** to establish a secure database boundary.
+This document delivers an **exhaustive 18-point architectural dissection** of `public.enroll_applicant`, establishes the **precise 10-point trust boundary specification reconciling service-role transport with human actor identity**, formalizes the **direct RPC threat model**, and specifies the **comprehensive 9-point database security model**.
 
 ---
 
-## 2. Reconciling Service-Role Execution with Human Actor Identity (Required Section 4)
+## 2. Precise Service-Role / Human Actor Trust Boundary Specification (Required Section 3)
 
-A fundamental architectural question arises when using privileged database credentials:
-> *If the database transaction executes using the privileged `service_role` connection, how does the database know which human actor caused the enrollment, and how is audit attribution preserved without treating `service_role` itself as the actor?*
-
-### 2.1 The Complete Identity & Authorization Chain
-
-The architecture resolves this by enforcing a strictly ordered, server-mediated identity chain:
+### 2.1 The Conceptual Disambiguation
+To prevent architectural confusion, the system strictly distinguishes three orthogonal concepts:
+- **Transport Privilege:** The `service_role` database connection credential. It exists solely to allow trusted backend code to execute multi-table administrative writes across tables protected by restrictive RLS (`students`, `parents`, `student_parents`). **`service_role` is a transport mechanism, NOT an identity.**
+- **Business Authorization:** The decision rendered by the canonical Phase 3A engine (`admissions.applicants.enroll`) confirming that the human actor holds authority over the target school.
+- **Human Actor Identity:** The unique identifier of the authenticated person (`auth.uid()`) who authorized and initiated the action.
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                         COMPLETE ACTOR IDENTITY RESOLUTION CHAIN                       │
+│                        PRECISE ACTOR IDENTITY & TRUST PIPELINE                         │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                        │
-│  1. Authenticated Human Session (Browser Client)                                       │
-│     - Authenticated administrator triggers enrollment in web UI.                       │
-│     - Sends HTTPS POST /api/admissions/:id/enroll with cryptographic session cookie.   │
+│  [1] Authenticated Human Session (Browser / API Client)                                │
+│      - Client initiates POST /api/admissions/:id/enroll with cryptographic cookie/JWT. │
 │                                                                                        │
-│  2. Session Authentication (auth.uid())                                                │
-│     - Next.js Server boundary invokes createClient() -> supabase.auth.getUser().       │
-│     - Supabase Auth validates JWT signature and extracts caller identity:              │
-│       trustedHumanActorId = user.id (UUID).                                            │
-│     - If invalid or expired, execution halts immediately with HTTP 401.                │
+│  [2] Session Authentication (auth.uid())                                               │
+│      - Next.js Server Boundary executes: supabase.auth.getUser(token).                 │
+│      - Cryptographically verifies signature using Supabase Auth JWT secret.           │
+│      - Extracts authenticated user UUID: trustedHumanActorId = user.id.                │
 │                                                                                        │
-│  3. Canonical Authorization Engine Evaluation                                          │
-│     - Context Resolver hydrates caller profile (roles, schoolId, assignments).         │
-│     - Resource Resolver loads authoritative applicant target from DB.                  │
-│     - Canonical Engine evaluates:                                                      │
-│       evaluatePermission('admissions.applicants.enroll', applicantTarget, authContext) │
-│     - If caller lacks permission or cross-tenant reach, execution halts with HTTP 403. │
+│  [3] Canonical Authorization Context & Target Resolution                               │
+│      - Resolves caller context (roles, schoolId, organizationSubtenantIds).            │
+│      - Loads authoritative applicant record from DB (id, tenant_id, stage, status).    │
+│      - Evaluates: evaluatePermission('admissions.applicants.enroll', target, context).│
+│      - Rejects with HTTP 403 if unauthorized or cross-tenant.                          │
 │                                                                                        │
-│  4. Business Precondition Verification (Server Command Boundary)                       │
-│     - Checks applicant.stage === 'Offer', status === 'active', docs_verified === true. │
-│     - If preconditions fail, execution halts with HTTP 422.                            │
+│  [4] Server Command Construction                                                       │
+│      - Server constructs internal parameters: p_applicant_id = target.id,              │
+│        p_actor_id = trustedHumanActorId.                                               │
+│      - Discards any client-supplied actorId/adminId in HTTP request body.              │
 │                                                                                        │
-│  5. Privileged Internal Database Invocation (service_role)                             │
-│     - The server instantiates the privileged Supabase Admin Client (service_role key). │
-│     - The server invokes the database function, passing the verified human identity:   │
-│       adminClient.rpc('enroll_applicant', {                                            │
-│         p_applicant_id: applicantTarget.id,                                            │
-│         p_actor_id: trustedHumanActorId                                                │
-│       })                                                                               │
+│  [5] Privileged Internal Invocation (service_role transport)                           │
+│      - Next.js Server uses SUPABASE_SERVICE_ROLE_KEY to call PostgreSQL RPC.           │
 │                                                                                        │
-│  6. Database Transaction & Execution Verification (PostgreSQL)                         │
-│     - Database verifies connection role is service_role or postgres.                   │
-│     - Database verifies p_actor_id is non-null and corresponds to an active profile.   │
-│     - Database locks applicant row: SELECT ... FOR UPDATE.                             │
-│     - Database records p_actor_id directly into admission_history.created_by.          │
-│     - Transaction commits. Returns permanent student ID.                               │
+│  [6] Database Transaction & Stored Procedure Execution                                 │
+│      - PostgreSQL verifies connection role is service_role or postgres.                │
+│      - PostgreSQL validates p_actor_id against active profiles table.                  │
+│      - PostgreSQL exclusively locks applicant row: SELECT ... FOR UPDATE.              │
+│      - PostgreSQL writes p_actor_id permanently into admission_history.created_by.     │
+│      - Commits transaction; returns new student UUID.                                  │
 │                                                                                        │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 Why `service_role` Does NOT Represent the Human Actor
-- `service_role` is a **transport and privilege-escalation mechanism**, not an identity. It is used strictly because PostgreSQL table-level RLS restricts direct multi-table insertions across `students`, `parents`, and `student_parents`.
-- The human actor identity is established by cryptographic JWT authentication at the server boundary (`auth.uid()`) and passed as an explicit, tamper-proof parameter `p_actor_id` to the stored procedure.
-- The stored procedure records `p_actor_id` in `admission_history.created_by`, guaranteeing 100% human audit attribution.
+### 2.2 Exhaustive 10-Point Trust Boundary Specification
+1. **Where `auth.uid()` is obtained:** Extracted on the server by Next.js Server Actions / route handlers via `createClient()` / `supabase.auth.getUser()`, which validates the cryptographic JWT signature.
+2. **Where authentication occurs:** At the Next.js API/Server boundary. If the JWT is missing, expired, or invalid, execution halts immediately with HTTP 401 Unauthorized.
+3. **Where canonical authorization occurs:** At the server boundary prior to any database mutation via `evaluateAuthorization()` or `can(authContext, 'admissions.applicants.enroll', applicantTarget)`. If unauthorized, returns HTTP 403 Forbidden.
+4. **Where `p_actor_id` is constructed:** In the server route handler from `user.id` (`auth.uid()`).
+5. **How the server prevents client-controlled `p_actor_id`:** The server ignores or strips any client-supplied `actorId`, `adminId`, or `userId` in the HTTP payload. It exclusively binds `p_actor_id = auth.uid()`.
+6. **Why an ordinary client cannot invoke the same server command:** The server endpoint checks `can(authContext, 'admissions.applicants.enroll', target)`. An ordinary client (student, parent, unassigned teacher, exam officer) lacks this permission and is rejected with HTTP 403.
+7. **How the database knows the invocation is from the trusted server boundary:** The PostgreSQL function `enroll_applicant` is REVOKED from `PUBLIC`, `anon`, and `authenticated`. It is granted EXCLUSIVELY to `service_role`. When the server calls the RPC using the `SUPABASE_SERVICE_ROLE_KEY`, PostgreSQL verifies `current_user = 'service_role'` or `auth.role() = 'service_role'`.
+8. **How audit attribution is preserved:** The server passes the verified human actor UUID as `p_actor_id`. The database function verifies `p_actor_id` against `public.profiles` (`is_active = true`) and inserts it into `admission_history.created_by`.
+9. **How a malicious server caller cannot impersonate another actor through an arbitrary UUID:** The server application code binds `p_actor_id` directly from `auth.uid()` of the cryptographic JWT. Since the secret `SUPABASE_SERVICE_ROLE_KEY` is held only on the trusted server and never exposed to clients, clients cannot execute arbitrary RPC calls or fabricate `p_actor_id`.
+10. **Whether the RPC should receive `p_actor_id` at all:** Yes, receiving `p_actor_id UUID` as an explicit parameter in a function restricted to `service_role` is the standard, secure, and robust PostgreSQL pattern in Supabase when executing server-mediated administrative transactions.
 
 ---
 
-## 3. Exhaustive 18-Point Dissection of `public.enroll_applicant`
+## 3. Direct RPC Threat Model (Required Section 4)
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                             DIRECT RPC THREAT MODEL & DEFENSE                          │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  ATTACKER:                                                                             │
+│    An authenticated ordinary application user (student, parent, unprivileged teacher,  │
+│    or an actor from a foreign school tenant) holding a valid JWT.                      │
+│                                                                                        │
+│  ATTACK VECTOR:                                                                        │
+│    Attacker bypasses the Next.js frontend and directly invokes:                        │
+│    POST /rest/v1/rpc/enroll_applicant                                                  │
+│    Headers: { Authorization: "Bearer <Attacker-JWT>" }                                 │
+│    Body:    { p_applicant_id: "target-applicant-uuid", p_actor_id: "principal-uuid" }   │
+│                                                                                        │
+│  VULNERABILITY IN LEGACY MIGRATION 017:                                                │
+│    Function public.enroll_applicant was granted to PUBLIC by default. PostgREST        │
+│    accepted the call, executed as SECURITY DEFINER, bypassed RLS, and enrolled the      │
+│    applicant without authorization checks.                                             │
+│                                                                                        │
+│  REMEDIATED DEFENSE (DESIRED RESULT: DENY):                                            │
+│    1. PostgreSQL grants for public.enroll_applicant are explicitly REVOKED from        │
+│       PUBLIC, anon, and authenticated.                                                 │
+│    2. PostgREST checks PostgreSQL privileges for the connected role (authenticated).   │
+│    3. Because authenticated lacks EXECUTE privilege, PostgREST rejects the call        │
+│       immediately with HTTP 403 Permission Denied (or HTTP 404 Function Not Found).   │
+│    4. The function code NEVER executes. Database state is 100% untouched.               │
+│                                                                                        │
+│  WHY ATTACKER CANNOT REPRODUCE SERVER-MEDIATED PATH:                                   │
+│    1. The attacker does not possess the SUPABASE_SERVICE_ROLE_KEY (held strictly       │
+│       in secure server environment variables).                                         │
+│    2. The only way to trigger enrollment is via POST /api/admissions/:id/enroll.       │
+│    3. The server endpoint enforces createClient() authentication and canonical         │
+│       evaluatePermission('admissions.applicants.enroll').                             │
+│    4. The attacker's credentials lack this permission, yielding HTTP 403 at server.    │
+│                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. Comprehensive Database Security Model for `enroll_applicant` (Required Section 5)
+
+| Security Dimension | Specification & Enforcement Mechanism |
+|---|---|
+| **1. Invocation Boundary** | Callable **strictly by `service_role`**. Revoked completely from `PUBLIC`, `anon`, and `authenticated`. PostgREST blocks any non-service-role caller with HTTP 403. |
+| **2. Business Authorization** | Authorized strictly by canonical permission **`admissions.applicants.enroll`** evaluated at the server command boundary prior to database execution. |
+| **3. Actor Identity** | Server extracts **`auth.uid()`** from verified session JWT and passes it as `p_actor_id`. PostgreSQL verifies that `p_actor_id` exists in `public.profiles` and is active. |
+| **4. Resource Authorization** | Server loads applicant record and verifies `applicant.tenant_id === callerContext.schoolId` (or within `org_admin` institutional hierarchy). Cross-tenant requests are rejected with HTTP 403 before reaching the database. |
+| **5. Lifecycle Prerequisites** | Applicant must be in **`stage = 'Offer'`**, **`status = 'active'`**, and **`docs_verified = true`**. Rejects with HTTP 422 if applicant has not been offered admission or documents are unverified. |
+| **6. Atomic Transaction** | Atomically executes: (1) `SELECT ... FOR UPDATE`, (2) `INSERT INTO students`, (3) `INSERT/SELECT parents`, (4) `INSERT INTO student_parents`, (5) `UPDATE applicants SET stage = 'Allocation', status = 'enrolled'`, (6) `INSERT INTO admission_history`. Rolls back 100% on any failure. |
+| **7. Concurrency & Race Prevention** | **`SELECT * INTO v_applicant FROM public.applicants WHERE id = p_applicant_id FOR UPDATE`**. The row lock serializes concurrent enrollment requests. The second transaction observes `stage = 'Allocation'` and aborts with an exception. |
+| **8. Audit Integrity** | Enacting human actor UUID (`p_actor_id`), tenant ID, applicant ID, timestamp (`NOW()`), and transition comment are recorded immutably in `public.admission_history`. |
+| **9. Direct RPC Prevention** | PostgREST enforces PostgreSQL function grants. Because `EXECUTE` is revoked from `anon` and `authenticated`, any direct client call via `supabase.rpc()` fails immediately at the PostgREST layer. |
+
+---
+
+## 5. Exhaustive 18-Point Dissection of `public.enroll_applicant`
 
 ### 1. Current EXECUTE Privileges
 In PostgreSQL, functions created without an explicit `REVOKE` grant `EXECUTE` privilege to `PUBLIC` by default. Consequently, both `anon` and `authenticated` roles hold execute permissions. PostgREST automatically exposes this function at `/rest/v1/rpc/enroll_applicant`.
@@ -169,23 +227,7 @@ The test suite must verify:
 
 ---
 
-## 4. Comprehensive Database Security Model for `enroll_applicant` (Required Section 5)
-
-| Security Dimension | Specification & Enforcement Mechanism |
-|---|---|
-| **1. Invocation Boundary** | Callable **strictly by `service_role`**. Revoked completely from `PUBLIC`, `anon`, and `authenticated`. PostgREST blocks any non-service-role caller with HTTP 403. |
-| **2. Business Authorization** | Authorized strictly by canonical permission **`admissions.applicants.enroll`** evaluated at the server command boundary prior to database execution. |
-| **3. Actor Identity** | Server extracts **`auth.uid()`** from verified session JWT and passes it as `p_actor_id`. PostgreSQL verifies that `p_actor_id` exists in `public.profiles` and is active. |
-| **4. Resource Authorization** | Server loads applicant record and verifies `applicant.tenant_id === callerContext.schoolId` (or within `org_admin` institutional hierarchy). Cross-tenant requests are rejected with HTTP 403 before reaching the database. |
-| **5. Lifecycle Prerequisites** | Applicant must be in **`stage = 'Offer'`**, **`status = 'active'`**, and **`docs_verified = true`**. Rejects with HTTP 422 if applicant has not been offered admission or documents are unverified. |
-| **6. Atomic Transaction** | Atomically executes: (1) `SELECT ... FOR UPDATE`, (2) `INSERT INTO students`, (3) `INSERT/SELECT parents`, (4) `INSERT INTO student_parents`, (5) `UPDATE applicants SET stage = 'Allocation', status = 'enrolled'`, (6) `INSERT INTO admission_history`. Rolls back 100% on any failure. |
-| **7. Concurrency & Race Prevention** | **`SELECT * INTO v_applicant FROM public.applicants WHERE id = p_applicant_id FOR UPDATE`**. The row lock serializes concurrent enrollment requests. The second transaction observes `stage = 'Allocation'` and aborts with an exception. |
-| **8. Audit Integrity** | Enacting human actor UUID (`p_actor_id`), tenant ID, applicant ID, timestamp (`NOW()`), and transition comment are recorded immutably in `public.admission_history`. |
-| **9. Direct RPC Prevention** | PostgREST enforces PostgreSQL function grants. Because `EXECUTE` is revoked from `anon` and `authenticated`, any direct client call via `supabase.rpc()` fails immediately at the PostgREST layer. |
-
----
-
-## 5. Remediation Migration Specification (Proposed Future Migration)
+## 6. Remediation Migration Specification (Proposed Future Migration)
 
 > [!IMPORTANT]
 > This SQL code is a specification for the subsequent implementation task. In accordance with task constraints, **no database migration is modified or applied during this architecture phase**.
