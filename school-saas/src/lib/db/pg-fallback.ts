@@ -1,7 +1,28 @@
 import 'server-only';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Pool, PoolConfig } from 'pg';
 
 let pool: Pool | null = null;
+
+function resolveCaCertificate(): string | undefined {
+  const envCa = process.env.DATABASE_SSL_CA;
+  if (envCa) {
+    if (fs.existsSync(envCa)) {
+      return fs.readFileSync(envCa, 'utf8');
+    }
+    if (envCa.includes('BEGIN CERTIFICATE')) {
+      return envCa;
+    }
+  }
+
+  const defaultCaPath = path.join(process.cwd(), 'supabase', 'certs', 'prod-ca-2021.crt');
+  if (fs.existsSync(defaultCaPath)) {
+    return fs.readFileSync(defaultCaPath, 'utf8');
+  }
+
+  return undefined;
+}
 
 /**
  * Server-only PostgreSQL direct connection pool.
@@ -21,7 +42,10 @@ export function getPgPool(): Pool | null {
     };
 
     if (!isLocalhost) {
-      config.ssl = { rejectUnauthorized: true };
+      const ca = resolveCaCertificate();
+      config.ssl = ca
+        ? { rejectUnauthorized: true, ca }
+        : { rejectUnauthorized: true };
     }
 
     pool = new Pool(config);

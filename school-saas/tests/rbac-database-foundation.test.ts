@@ -13,7 +13,7 @@ for (const line of envContent.split(/\r?\n/)) {
   }
 }
 
-import { resolveTestSslConfig } from './security/rls-database-boundary.test.ts';
+import { resolveTestSslConfig } from './security/rls-database-boundary.test';
 
 const defaultCaPath = path.join(process.cwd(), 'supabase', 'certs', 'prod-ca-2021.crt');
 if (!process.env.DATABASE_SSL_CA && fs.existsSync(defaultCaPath)) {
