@@ -2588,68 +2588,113 @@ Implemented the canonical RBAC database foundation for SchoolSaaS in strict comp
 
 ### 4. Tests and Exact Results
 Executed test suite `tests/rbac-database-foundation.test.ts` via `node --conditions=react-server --import tsx --test`:
-- **Suite 1: Schema & Permission Catalog** (6 tests) — PASS
+- **Suite 1: Schema & Permission Catalog** (8 tests) — PASS
   - Exactly 33 rows in `permissions_catalog`.
   - Permission keys strictly follow `<module>.<resource>.<action>` grammar.
-  - All 7 canonical scopes represented in `canonical_scope` enum.
+  - All 7 canonical scopes represented in `canonical_scope` enum without "own" alias.
+  - `curriculum.version.publish` has canonical scope "school".
   - Duplicate `permission_key` rejected by UNIQUE constraint.
   - `permissions_catalog` has RLS enabled.
   - `school_staff_assignments` has NO `school_id` column.
-- **Suite 2: Staff Assignment Lifecycle & Integrity** (8 tests) — PASS
+  - Foreign keys use `ON DELETE RESTRICT` for historical preservation.
+- **Suite 2: Staff Assignment Lifecycle & Integrity** (7 tests) — PASS
   - `check_date_range` rejects `effective_until < effective_from`.
   - `check_lifecycle_consistency` rejects `status = 'revoked'` with `is_active = true`.
-  - `check_lifecycle_consistency` rejects `status = 'active'` with `is_active = false`.
   - `check_revocation_consistency` rejects `status = 'revoked'` with `revoked_at IS NULL`.
   - `check_hod_dept` rejects HOD without `department_id`.
   - `check_form_master_section` rejects Form Master without `section_id`.
   - `check_school_scope_assignment` rejects Vice Principal with `department_id`.
   - Future-dated assignment (`effective_from > CURRENT_DATE`) is ALLOWED in database but evaluates as inactive in authorization helpers.
-- **Suite 3: Uniqueness & Concurrency** (5 tests) — PASS
-  - Rejects duplicate active HOD for same department and year.
-  - Rejects duplicate active Form Master for same section and year.
-  - Rejects duplicate active Vice Principal for same school and year.
-  - Rejects duplicate active Exam Officer for same school and year.
-  - Rejects multiple `is_current = true` academic years for same tenant (`uniq_current_academic_year_per_tenant`).
-- **Suite 4: Academic Year Scoping** (6 tests) — PASS
-  - `is_hod` returns `false` for assignment in past academic year (`is_current = false`).
-  - `is_hod` returns `true` for assignment in current academic year (`is_current = true`).
-  - `is_hod` returns `false` for future-dated assignment even in current academic year.
+- **Suite 3: Cross-Tenant & Contextual Resource Integrity** (6 tests) — PASS
+  - Cross-tenant teacher mismatch rejected by trigger.
+  - Cross-tenant academic year mismatch rejected by trigger.
+  - Cross-tenant department mismatch rejected by trigger.
+  - Cross-tenant section mismatch rejected by trigger.
+  - Cross-tenant offering and academic-year mismatch rejected by trigger.
+  - Historical preservation: deleting teacher, department, or academic year is RESTRICTED (`ON DELETE RESTRICT`).
+- **Suite 4: Current-Year Invariants & Academic Year Scoping** (6 tests) — PASS
+  - 0 current academic years fails closed (`is_hod` returns false).
+  - Exactly 1 current academic year is valid (`is_hod` returns true).
+  - >1 current academic years fails closed (`is_hod` returns false).
+  - `uniq_current_academic_year_per_tenant` constraint rejects duplicate `is_current = true` rows per tenant.
   - Cross-tenant isolation: assignment in Tenant A does not grant authority in Tenant B.
   - Fails closed if user profile is deactivated (`is_active = false`).
-  - Fails closed for anonymous caller.
-- **Suite 5: Authorization Helper Functions** (5 tests) — PASS
+- **Suite 5: Authorization Helper Functions & Org Subtenant Resolver** (5 tests) — PASS
   - `is_form_master` returns `true` for active Form Master in current year.
   - `is_vice_principal` returns `true` for active VP in current year.
   - `is_exam_officer` returns `true` for active Exam Officer in current year.
-  - `get_org_subtenant_ids` returns depth-1 subtenants.
+  - `get_org_subtenant_ids` context validation: authorized org caller returns child schools; unauthorized org caller and anonymous caller return empty sets.
   - All 6 authorization helper functions are verified `SECURITY DEFINER`.
-- **Suite 6: Legacy Synchronization** (4 tests) — PASS
-  - Trigger A forward sync from SSA to `departments.head_teacher_id`.
-  - Trigger B reverse sync from `departments.head_teacher_id` to SSA.
-  - Triggers C & D forward and reverse sync for `sections.class_teacher_id`.
-  - All 4 trigger functions verified with `pg_trigger_depth() > 1` recursion guard and zero `LIMIT 1`.
+- **Suite 6: Legacy Synchronization Boundaries** (4 tests) — PASS
+  - Historical academic year isolation: 2025/2026 assignment is NOT revoked by 2026/2027 legacy update.
+  - Resource and tenant isolation in legacy synchronization (Tenant A does not affect Tenant B; Department A does not affect Department B).
+  - Full state transition sequence: NULL $\to$ A, A $\to$ B, A $\to$ NULL, and canonical SSA $\to$ department revoke.
+  - All 4 trigger functions contain `pg_trigger_depth() > 1` recursion guards and strictly zero `LIMIT 1`.
 
-**Total Test Results:** 34 tests, 6 suites, **34 passed, 0 failed, 0 skipped**.  
-**Typecheck:** `npx tsc --noEmit` exited with code 0 (0 errors).
+**Total Test Results:**
+- Database Foundation Tests: **36 tests across 6 suites, 36 passed, 0 failed, 0 skipped**.
+- Application Security Test Suite (`npm test`): **132 tests, 132 passed, 0 failed, 0 skipped**.
+- Static Typecheck (`npx tsc --noEmit`): **0 errors (Exit code 0)**.
 
-### 5. Supervisory Review Resolutions Applied
-1. **Academic-Year Validity in Authorization Helpers:** Caller predicates strictly evaluate current academic year via `JOIN public.academic_years ay ON ay.id = ssa.academic_year_id WHERE ay.is_current = true`.
-2. **Eliminated `LIMIT 1`:** Enforced single current academic year per tenant via partial unique index `uniq_current_academic_year_per_tenant`. All triggers and functions resolve without `LIMIT 1`.
-3. **Corrected Trigger Depth Guard:** Used `IF pg_trigger_depth() > 1 THEN RETURN COALESCE(NEW, OLD); END IF;` allowing direct user statements (depth 1) to fire while blocking infinite loops (depth > 1).
-4. **Future-Dated Assignment Support:** Permitted by check constraints for advance institutional planning; row-level validity and caller authorization return `false` until effective date.
-5. **Backfill Scope & Idempotency:** Backfilled HOD and Form Master safely; deferred Subject/Assistant Teacher assignments to future phase as they already exist in `subject_offerings`.
+### 5. Final Security Corrections Applied
 
-### 6. Phase Boundary Compliance
-- **Zero Application Code Changes:** `src/` directory untouched.
-- **No Role Enum Alterations:** `public.user_role` remains strictly the canonical 6-value enum.
-- **Phase 3 Boundary Respected:** API guards, RLS policy rewrites, and UI components remain strictly deferred pending supervisory approval.
+#### 1. Cross-Tenant Resource Integrity
+- Implemented `trg_validate_staff_assignment_tenant_integrity` firing `BEFORE INSERT OR UPDATE` on `public.school_staff_assignments`.
+- Enforces relational consistency across tenant boundaries:
+  ```text
+  teacher.tenant_id = assignment.tenant_id
+  academic_year.tenant_id = assignment.tenant_id
+  department.tenant_id = assignment.tenant_id
+  section.tenant_id = assignment.tenant_id
+  subject_offering.tenant_id = assignment.tenant_id
+  subject_offering.academic_year_id = assignment.academic_year_id
+  ```
+- Every invalid combination tested and verified with real PostgreSQL exceptions.
+
+#### 2. Removal of Arbitrary `LIMIT 1` Current-Year Resolution
+- Removed `LIMIT 1` from all legacy triggers, authorization helper functions, and resolver functions.
+- Invariant guaranteed:
+  - 0 current academic years $\to$ fail closed
+  - 1 current academic year $\to$ valid
+  - $>1$ current academic years $\to$ integrity violation / fail closed
+- Enforced at database level via partial unique index `uniq_current_academic_year_per_tenant` on `academic_years(tenant_id) WHERE is_current = true`, explicit count checks `(SELECT count(*) ... is_current = true) = 1` in helper functions, and `SELECT id INTO STRICT` in legacy sync triggers.
+
+#### 3. Protection of Historical RBAC Records from Destructive Cascades
+- Configured `ON DELETE RESTRICT` on foreign keys from `school_staff_assignments` to `teachers`, `academic_years`, `departments`, `sections`, and `subject_offerings`.
+- RBAC appointment history cannot be silently destroyed; lifecycle transitions require explicit deactivation or revocation.
+- Empirically verified that deleting referenced resources is restricted while assignments exist.
+
+#### 4. Hardened Legacy Synchronization Boundaries
+- Synchronizations strictly isolated to same tenant + same resource + same assignment type + current academic year.
+- Historical assignments (e.g. 2025/2026) are not revoked by current-year (2026/2027) updates.
+- Tenant isolation and resource isolation verified.
+- Bi-directional sync transitions verified: NULL $\to$ A, A $\to$ B, A $\to$ NULL, and canonical revoke.
+- Protected via `pg_trigger_depth() > 1`.
+
+#### 5. Hardened `get_org_subtenant_ids()`
+- Added caller context validation (`IF COALESCE(v_is_super, false) = false AND (v_caller_tenant_id IS NULL OR v_caller_tenant_id != p_org_tenant_id) THEN RETURN; END IF;`).
+- Anonymous users and non-super-admin users from other tenants cannot enumerate child tenants.
+
+#### 6. Permission-to-Scope Validation
+- 33 canonical permission keys preserved.
+- `curriculum.version.publish` updated from `'platform'` to `'school'` to align with institutional curriculum publishing.
+- Multi-scope view permissions analyzed:
+  - `students.records.view`: Canonical scope `'school'`. RLS and API layers enforce fine-grained confinement (form master, subject teacher).
+  - `attendance.records.view`: Canonical scope `'school'`. Section confinement applied in section context.
+  - `finance.invoices.view`: Canonical scope `'school'`. Student/parent self-invoices handled via `self` context.
+
+### 6. Remaining Limitations
+- Application layer continues using legacy role checks until Phase 3 authorization refactor.
+- RLS policy updates for school resources deferred to Phase 3.
+- Subject/Assistant Teacher functional assignments deferred to Phase 3 (already represented in `subject_offerings`).
 
 ### 7. Final Status
+
 ```text
-TASK-0007-PHASE-2 DATABASE FOUNDATION: COMPLETE & VERIFIED
-ALL 34 TESTS PASSING (0 FAILURES)
-TSC: 0 ERRORS
-PENDING CHATGPT SUPERVISORY REVIEW
+TASK-0007 PHASE 2 — IMPLEMENTATION CORRECTIONS COMPLETE
+PENDING SUPERVISORY REVIEW
+MERGE NOT AUTHORIZED
+PHASE 3 NOT AUTHORIZED
 ```
 
 

@@ -557,33 +557,48 @@ The following security events MUST emit immutable audit records to `public.audit
    - `uniq_active_vp_per_school_year` on `(tenant_id, academic_year_id, teacher_id) WHERE assignment_type = 'vice_principal' AND status = 'active'`.
    - `uniq_active_exam_officer_per_school_year` on `(tenant_id, academic_year_id, teacher_id) WHERE assignment_type = 'exam_officer' AND status = 'active'`.
 
-7. **6 SECURITY DEFINER Authorization Helper Functions:**
+7. **Cross-Tenant & Contextual Integrity Trigger (`trg_validate_staff_assignment_tenant_integrity`):**
+   - Enforces `BEFORE INSERT OR UPDATE` on `public.school_staff_assignments`:
+     - `teacher.tenant_id = assignment.tenant_id`
+     - `academic_year.tenant_id = assignment.tenant_id`
+     - `department.tenant_id = assignment.tenant_id` (if department_id is not null)
+     - `section.tenant_id = assignment.tenant_id` (if section_id is not null)
+     - `subject_offering.tenant_id = assignment.tenant_id` (if subject_offering_id is not null)
+     - `subject_offering.academic_year_id = assignment.academic_year_id` (contextual academic-year consistency)
+
+8. **Historical Preservation (`ON DELETE RESTRICT`):**
+   - Foreign keys on `school_staff_assignments` (`teacher_id`, `academic_year_id`, `department_id`, `section_id`, `subject_offering_id`) configured with `ON DELETE RESTRICT`.
+   - Historical authorization evidence cannot be silently cascade-deleted; requires lifecycle deactivation/revocation.
+
+9. **6 SECURITY DEFINER Authorization Helper Functions:**
    - `is_staff_assignment_active(p_assignment_id UUID)`: Row-level predicate checking active status, `is_active = true`, `effective_from <= CURRENT_DATE`, and unexpired/unrevoked.
-   - `is_hod(p_department_id UUID)`: Caller authorization joining `academic_years` `WHERE is_current = true` (fails closed if 0 or >1 current years; no `LIMIT 1`).
+   - `is_hod(p_department_id UUID)`: Caller authorization joining `academic_years` `WHERE is_current = true` with subquery count validation `(SELECT count(*) ... is_current = true) = 1` (fails closed if 0 or >1 current years; strictly zero `LIMIT 1`).
    - `is_form_master(p_section_id UUID)`: Caller authorization for Form Master in current academic year.
    - `is_exam_officer(p_tenant_id UUID)`: Caller authorization for Exam Officer in current academic year.
    - `is_vice_principal(p_tenant_id UUID)`: Caller authorization for Vice Principal in current academic year.
-   - `get_org_subtenant_ids(p_org_tenant_id UUID)`: Depth-1 tenant hierarchy resolver returning child school IDs.
+   - `get_org_subtenant_ids(p_org_tenant_id UUID)`: Depth-1 tenant hierarchy resolver with caller context authorization (`is_super_admin() OR get_user_tenant_id() = p_org_tenant_id`); prevents unauthorized tenant enumeration.
 
-8. **Future-Dated Assignment Semantics:**
-   - Institutional scheduling allows creating assignments with `effective_from > CURRENT_DATE`.
-   - Rows persist validly but authorization predicates return `false` until the effective date arrives.
+10. **Future-Dated Assignment Semantics:**
+    - Institutional scheduling allows creating assignments with `effective_from > CURRENT_DATE`.
+    - Rows persist validly but authorization predicates return `false` until the effective date arrives.
 
-9. **Idempotent Legacy Backfill:**
-   - Backfilled active HOD assignments from `departments.head_teacher_id` with `effective_from = ay.start_date`.
-   - Backfilled active Form Master assignments from `sections.class_teacher_id` with `effective_from = ay.start_date`.
-   - Subject Teacher and Assistant Teacher assignments deferred to future migration (actively modeled on `subject_offerings`).
+11. **Idempotent Legacy Backfill:**
+    - Backfilled active HOD assignments from `departments.head_teacher_id` with `effective_from = ay.start_date`.
+    - Backfilled active Form Master assignments from `sections.class_teacher_id` with `effective_from = ay.start_date`.
+    - Subject Teacher and Assistant Teacher assignments deferred to future migration (actively modeled on `subject_offerings`).
 
-10. **4 Bi-directional Sync Triggers with Recursion Guards:**
+12. **4 Bi-directional Sync Triggers with Recursion & Isolation Hardening:**
     - `sync_hod_assignment_to_dept` (Forward: SSA -> departments.head_teacher_id)
     - `sync_dept_hod_to_assignments` (Reverse: departments.head_teacher_id -> SSA)
     - `sync_form_master_assignment_to_section` (Forward: SSA -> sections.class_teacher_id)
     - `sync_section_class_teacher_to_assignments` (Reverse: sections.class_teacher_id -> SSA)
     - Protected with `IF pg_trigger_depth() > 1 THEN RETURN COALESCE(NEW, OLD); END IF;` to permit direct operations (depth 1) while preventing infinite cascading loops (depth > 1).
-    - Reverse triggers resolve current academic year without `LIMIT 1`.
+    - Scoped strictly to same tenant + same resource + same assignment type + current academic year.
+    - Historical academic years (e.g. 2025/2026) are isolated and unaffected by current-year updates.
+    - Strict current academic year resolution via `SELECT id INTO STRICT` without `LIMIT 1`.
 
-11. **Verification Test Suite:**
-    - `tests/rbac-database-foundation.test.ts`: 34 automated assertions across 6 test suites executed directly against PostgreSQL over TLS. 100% pass rate (34 passed, 0 failed).
+13. **Verification Test Suite:**
+    - `tests/rbac-database-foundation.test.ts`: 36 automated assertions across 6 test suites executed directly against PostgreSQL over TLS. 100% pass rate (36 passed, 0 failed).
 
 ### PENDING — Future Migrations & Phases
 
@@ -602,11 +617,11 @@ Because all schema changes in Phase 2 are **strictly additive** (new appointment
 
 ## 27. Phase-2 Testing Strategy (PHASE 2 ROADMAP)
 
-1. **Database Foundation Tests (COMPLETE):** 34 empirical tests in `tests/rbac-database-foundation.test.ts` covering schema, lifecycle constraints, uniqueness, academic-year scoping, helper functions, and bi-directional synchronization.
+1. **Database Foundation Tests (COMPLETE):** 36 empirical tests in `tests/rbac-database-foundation.test.ts` covering schema, lifecycle constraints, uniqueness, academic-year scoping, cross-tenant integrity, delete restriction, helper functions, and bi-directional synchronization.
 2. **Unit Tests (Phase 3):** Matrix evaluation of permission resolver across all 33 permissions, roles, and scopes.
 3. **API Guard Tests (Phase 3):** Verification of permission checks in `authorizeApiRequest`.
 4. **PostgreSQL RLS Tests (Phase 3):** Empirical non-service-role assertions testing `is_exam_officer` permissions, multi-school hierarchy, and separation-of-duties denials.
-5. **Regression Testing:** Automated execution of all repository tests.
+5. **Regression Testing:** Automated execution of all repository tests (`npm test` — 132/132 passing).
 
 ---
 
@@ -629,10 +644,13 @@ Because all schema changes in Phase 2 are **strictly additive** (new appointment
 
 ## 30. Phase-2 Implementation Status
 
-- Phase 2 Database Foundation: **IMPLEMENTED & VERIFIED** — `047_rbac_database_foundation.sql` applied to live database; 34/34 tests passing in `tests/rbac-database-foundation.test.ts`.
+- Phase 2 Database Foundation: **IMPLEMENTATION CORRECTIONS COMPLETE** — `047_rbac_database_foundation.sql` applied to live database; 36/36 tests passing in `tests/rbac-database-foundation.test.ts`; 132/132 tests passing in `npm test`.
 - Phase 3 API/RLS/Frontend layers: **NOT YET AUTHORIZED** — requires separate supervisory approval.
 
 ---
 
-**Status:** PHASE 2 DATABASE FOUNDATION IMPLEMENTED — PENDING SUPERVISORY REVIEW
+**Status:** TASK-0007 PHASE 2 — IMPLEMENTATION CORRECTIONS COMPLETE
+**Supervisory State:** PENDING SUPERVISORY REVIEW
+**Merge Authority:** MERGE NOT AUTHORIZED
+**Phase 3 Authority:** PHASE 3 NOT AUTHORIZED
 

@@ -9,16 +9,20 @@ engineering_memory: .ai/
 active_task:
   id: TASK-0007-PHASE-2
   parent_task: TASK-0007
-  status: IMPLEMENTED
-  sub_status: DATABASE_FOUNDATION_VERIFIED
+  status: IMPLEMENTATION_CORRECTIONS_COMPLETE
+  sub_status: SECURITY_CORRECTIONS_VERIFIED
   branch: ai-eos/task-0007-rbac-phase-2-foundation
   migration: 047_rbac_database_foundation.sql
   test_suite: tests/rbac-database-foundation.test.ts
-  test_assertions_passed: 34
+  test_assertions_passed: 36
   test_assertions_failed: 0
+  app_tests_passed: 132
+  app_tests_failed: 0
   typecheck_status: PASS
   authority: chatgpt
   target: gemini
+  merge_authorized: false
+  phase_3_authorized: false
   authorized_at: "2026-09-07"
   implemented_at: "2026-09-07"
 last_completed_task:
@@ -27,20 +31,22 @@ last_completed_task:
   phase_1_corrections_applied: 13
   branch: ai-eos/task-0007-rbac-architecture
 last_instruction:
-  id: TASK-0007-PHASE-2
+  id: TASK-0007-PHASE-2-CORRECTIONS
   from: chatgpt
   to: gemini
-  type: AUTHORIZED_TASK
+  type: CHANGES_REQUESTED
   task_id: TASK-0007
-  status: IMPLEMENTATION_COMPLETE
+  status: CORRECTIONS_REQUESTED
 last_response:
-  id: MSG-0018
+  id: MSG-0019
   from: gemini
   to: chatgpt
   type: IMPLEMENTATION_REPORT
   task_id: TASK-0007-PHASE-2
   status: PENDING_SUPERVISORY_REVIEW
-  in_response_to: TASK-0007-PHASE-2
+  merge_authorized: false
+  phase_3_authorized: false
+  in_response_to: TASK-0007-PHASE-2-CORRECTIONS
 
 pending:
   recommendations:

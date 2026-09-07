@@ -364,5 +364,46 @@
 - **Remediation**: Enforced throughout all Phase 1 governance documents.
 - **Residual risk**: Zero.
 
+### Finding RBAC-024 (TASK-0007-PHASE-2)
+- **Severity**: HIGH
+- **Affected component**: Cross-Tenant Resource Integrity in Staff Assignments
+- **Security impact**: Cross-tenant foreign key combinations (e.g. Tenant A assignment referencing Tenant B teacher, department, section, offering, or academic year) could cause cross-tenant privilege escalation or data corruption.
+- **Current behavior**: Plain foreign keys permit cross-tenant references if tenant boundaries are not checked.
+- **Expected behavior**: Invariant enforced via database trigger `trg_validate_staff_assignment_tenant_integrity` verifying `teacher.tenant_id = assignment.tenant_id`, `academic_year.tenant_id = assignment.tenant_id`, `department.tenant_id = assignment.tenant_id`, `section.tenant_id = assignment.tenant_id`, and `subject_offering.tenant_id = assignment.tenant_id` + academic year consistency.
+- **Evidence**: `supabase/migrations/047_rbac_database_foundation.sql` lines 230-310; `tests/rbac-database-foundation.test.ts` Group 3.
+- **Remediation**: Enforced via `BEFORE INSERT OR UPDATE` trigger `validate_staff_assignment_tenant_integrity()`. All cross-tenant combinations empirically tested and rejected.
+- **Residual risk**: Zero.
+
+### Finding RBAC-025 (TASK-0007-PHASE-2)
+- **Severity**: HIGH
+- **Affected component**: Academic Year Resolution Invariants & LIMIT 1 Elimination
+- **Security impact**: Arbitrary `LIMIT 1` selection when resolving the current academic year could pick an arbitrary year under data anomalies, violating authorization determinism.
+- **Current behavior**: Legacy triggers and functions frequently used `LIMIT 1` to resolve current academic year.
+- **Expected behavior**: Strict fail-closed invariant: 0 current years $\to$ fail closed; 1 current year $\to$ valid; $>1$ current years $\to$ fail closed / integrity violation. Zero `LIMIT 1` permitted.
+- **Evidence**: `supabase/migrations/047_rbac_database_foundation.sql`; `tests/rbac-database-foundation.test.ts` Group 4 & Group 6.
+- **Remediation**: Enforced database constraint `uniq_current_academic_year_per_tenant` on `academic_years(tenant_id) WHERE is_current = true`, explicit count check `(SELECT count(*) ... is_current = true) = 1` in helper functions, and `SELECT id INTO STRICT` in legacy sync triggers.
+- **Residual risk**: Zero.
+
+### Finding RBAC-026 (TASK-0007-PHASE-2)
+- **Severity**: HIGH
+- **Affected component**: Historical Preservation of Staff Assignment Records
+- **Security impact**: `ON DELETE CASCADE` foreign keys could erase historical audit and authorization evidence if referenced resources (e.g. teachers, departments, sections, academic years) are deleted.
+- **Current behavior**: Default cascade deletion risks destroying historical authorization evidence.
+- **Expected behavior**: Foreign keys to referenced entities must enforce `ON DELETE RESTRICT` so historical assignment records cannot be silently destroyed.
+- **Evidence**: `supabase/migrations/047_rbac_database_foundation.sql` lines 340-390; `tests/rbac-database-foundation.test.ts` Group 1 & Group 3.
+- **Remediation**: Configured `ON DELETE RESTRICT` on `teacher_id`, `academic_year_id`, `department_id`, `section_id`, and `subject_offering_id`. Empirically verified deletion restriction.
+- **Residual risk**: Zero.
+
+### Finding RBAC-027 (TASK-0007-PHASE-2)
+- **Severity**: HIGH
+- **Affected component**: Legacy Synchronization Boundary Isolation
+- **Security impact**: Legacy sync triggers modifying HOD or Form Master fields could inadvertently revoke assignments across different academic years, tenants, or resources, or cause infinite trigger recursion.
+- **Current behavior**: Bidirectional sync without strict current-year scoping risks revoking historical assignments across academic years.
+- **Expected behavior**: Sync operations strictly affect only same tenant + same resource + same assignment type + current academic year. Past-year assignments remain untouched. Protected by `pg_trigger_depth() > 1`.
+- **Evidence**: `supabase/migrations/047_rbac_database_foundation.sql` lines 800-1000; `tests/rbac-database-foundation.test.ts` Group 6.
+- **Remediation**: Strict current-year scoping, depth guards, and isolation boundaries applied. Historical year isolation and state transitions (NULL $\to$ A, A $\to$ B, A $\to$ NULL, canonical revoke) empirically verified.
+- **Residual risk**: Zero.
+
+
 
 

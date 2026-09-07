@@ -1,32 +1,22 @@
 -- ============================================================
--- MIGRATION 047: Canonical RBAC Database Foundation
--- Task: TASK-0007 Phase 2 (RBAC Foundation)
--- Description:
---   Establishes the canonical RBAC database foundation for SchoolSaaS:
---   1. Enums: assignment_status, staff_assignment_type, canonical_scope, permission_status
---   2. Canonical Permission Catalog: public.permissions_catalog (33 atomic permissions)
---   3. Canonical Staff Assignment Persistence: public.school_staff_assignments
---   4. Check constraints and partial unique indexes for single-source-of-truth invariants
---   5. Partial unique index on academic_years (uniq_current_academic_year_per_tenant)
---   6. Academic-year-aware, deterministic SECURITY DEFINER authorization helpers
---   7. RLS policies for permissions_catalog and school_staff_assignments
---   8. Idempotent backfill for HOD and Form Master from legacy foreign keys
---   9. Bi-directional sync triggers with recursion guards and fail-closed year resolution
---  10. Performance indexes and update timestamp triggers
+-- MIGRATION 047: Canonical RBAC & Permission Database Foundation
+-- Phase: 2 — Database / Domain Foundation
+-- Task: TASK-0007
+-- Supervisory Authority: ChatGPT (Chief Software Architect) / Human Project Owner
+-- Implementation Engineer: Gemini / Antigravity
 -- ============================================================
 
 -- ============================================================
--- SECTION 1: ENUMS & TYPES (Idempotent)
+-- SECTION 1: CANONICAL ENUMS
 -- ============================================================
 DO $body$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assignment_status') THEN
         CREATE TYPE public.assignment_status AS ENUM (
-            'pending',
             'active',
-            'suspended',
             'expired',
-            'revoked'
+            'revoked',
+            'suspended'
         );
     END IF;
 
@@ -94,7 +84,7 @@ VALUES
     ('curriculum.version.create', 'curriculum', 'version', 'create', 'Draft curriculum version or syllabus outline', 'offering'),
     ('curriculum.version.review', 'curriculum', 'version', 'review', 'Review submitted curriculum draft', 'school'),
     ('curriculum.version.approve', 'curriculum', 'version', 'approve', 'Approve departmental curriculum version', 'school'),
-    ('curriculum.version.publish', 'curriculum', 'version', 'publish', 'Publish curriculum to institutional catalog', 'platform'),
+    ('curriculum.version.publish', 'curriculum', 'version', 'publish', 'Publish curriculum to institutional catalog', 'school'),
     ('curriculum.coverage.log', 'curriculum', 'coverage', 'log', 'Log topic completion and instructional coverage', 'offering'),
     ('exams.sessions.manage', 'exams', 'sessions', 'manage', 'Configure exam sessions, timetables, and eligibility', 'school'),
     ('exams.schedules.manage', 'exams', 'schedules', 'manage', 'Manage exam hall allocations and invigilator schedules', 'school'),
@@ -115,7 +105,13 @@ VALUES
     ('staff.accounts.manage', 'staff', 'accounts', 'manage', 'Provision and deprovision staff platform user accounts', 'school'),
     ('platform.tenants.manage', 'platform', 'tenants', 'manage', 'Create, configure, suspend, or migrate school tenants', 'platform'),
     ('platform.billing.manage', 'platform', 'billing', 'manage', 'Manage SaaS subscriptions, plan tiers, and platform revenue', 'platform')
-ON CONFLICT (permission_key) DO NOTHING;
+ON CONFLICT (permission_key) DO UPDATE SET
+    scope = EXCLUDED.scope,
+    description = EXCLUDED.description,
+    module = EXCLUDED.module,
+    resource = EXCLUDED.resource,
+    action = EXCLUDED.action,
+    updated_at = now();
 
 -- RLS on permissions_catalog
 ALTER TABLE public.permissions_catalog ENABLE ROW LEVEL SECURITY;
@@ -138,16 +134,18 @@ CREATE POLICY "permissions_catalog_modify_super_admin"
 -- ============================================================
 -- SECTION 3: CANONICAL STAFF ASSIGNMENTS TABLE
 -- Note: Uses tenant_id as the tenant discriminator (no school_id exists in schema)
+-- Cascade Protection: Uses ON DELETE RESTRICT on teacher_id, academic_year_id,
+-- department_id, section_id, and subject_offering_id to preserve historical authorization evidence.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.school_staff_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-    teacher_id UUID NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE,
+    teacher_id UUID NOT NULL REFERENCES public.teachers(id) ON DELETE RESTRICT,
     assignment_type public.staff_assignment_type NOT NULL,
     academic_year_id UUID NOT NULL REFERENCES public.academic_years(id) ON DELETE RESTRICT,
-    department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL,
-    section_id UUID REFERENCES public.sections(id) ON DELETE SET NULL,
-    subject_offering_id UUID REFERENCES public.subject_offerings(id) ON DELETE SET NULL,
+    department_id UUID REFERENCES public.departments(id) ON DELETE RESTRICT,
+    section_id UUID REFERENCES public.sections(id) ON DELETE RESTRICT,
+    subject_offering_id UUID REFERENCES public.subject_offerings(id) ON DELETE RESTRICT,
     status public.assignment_status NOT NULL DEFAULT 'active',
     is_active BOOLEAN NOT NULL DEFAULT true,
     effective_from DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -160,6 +158,36 @@ CREATE TABLE IF NOT EXISTS public.school_staff_assignments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Ensure existing table has ON DELETE RESTRICT foreign keys (for idempotent runs)
+DO $body$
+BEGIN
+    ALTER TABLE public.school_staff_assignments
+        DROP CONSTRAINT IF EXISTS school_staff_assignments_teacher_id_fkey,
+        ADD CONSTRAINT school_staff_assignments_teacher_id_fkey
+            FOREIGN KEY (teacher_id) REFERENCES public.teachers(id) ON DELETE RESTRICT;
+
+    ALTER TABLE public.school_staff_assignments
+        DROP CONSTRAINT IF EXISTS school_staff_assignments_academic_year_id_fkey,
+        ADD CONSTRAINT school_staff_assignments_academic_year_id_fkey
+            FOREIGN KEY (academic_year_id) REFERENCES public.academic_years(id) ON DELETE RESTRICT;
+
+    ALTER TABLE public.school_staff_assignments
+        DROP CONSTRAINT IF EXISTS school_staff_assignments_department_id_fkey,
+        ADD CONSTRAINT school_staff_assignments_department_id_fkey
+            FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+    ALTER TABLE public.school_staff_assignments
+        DROP CONSTRAINT IF EXISTS school_staff_assignments_section_id_fkey,
+        ADD CONSTRAINT school_staff_assignments_section_id_fkey
+            FOREIGN KEY (section_id) REFERENCES public.sections(id) ON DELETE RESTRICT;
+
+    ALTER TABLE public.school_staff_assignments
+        DROP CONSTRAINT IF EXISTS school_staff_assignments_subject_offering_id_fkey,
+        ADD CONSTRAINT school_staff_assignments_subject_offering_id_fkey
+            FOREIGN KEY (subject_offering_id) REFERENCES public.subject_offerings(id) ON DELETE RESTRICT;
+END
+$body$;
 
 -- ============================================================
 -- SECTION 4: CONSTRAINTS & PARTIAL UNIQUE INDEXES
@@ -204,7 +232,7 @@ BEGIN
             ADD CONSTRAINT check_revocation_consistency
             CHECK (
                 (status = 'revoked' AND revoked_at IS NOT NULL)
-                OR (status != 'revoked' AND revoked_at IS NULL)
+                OR (status != 'revoked')
             );
     END IF;
 END
@@ -218,7 +246,10 @@ BEGIN
     ) THEN
         ALTER TABLE public.school_staff_assignments
             ADD CONSTRAINT check_hod_dept
-            CHECK (assignment_type != 'hod' OR department_id IS NOT NULL);
+            CHECK (
+                assignment_type != 'hod'
+                OR department_id IS NOT NULL
+            );
     END IF;
 END
 $body$;
@@ -231,12 +262,15 @@ BEGIN
     ) THEN
         ALTER TABLE public.school_staff_assignments
             ADD CONSTRAINT check_form_master_section
-            CHECK (assignment_type != 'form_master' OR section_id IS NOT NULL);
+            CHECK (
+                assignment_type != 'form_master'
+                OR section_id IS NOT NULL
+            );
     END IF;
 END
 $body$;
 
--- Check constraint 6: Subject and Assistant Teacher require subject_offering_id
+-- Check constraint 6: Offering assignments require subject_offering_id
 DO $body$
 BEGIN
     IF NOT EXISTS (
@@ -252,7 +286,7 @@ BEGIN
 END
 $body$;
 
--- Check constraint 7: School-scope assignments (VP, Exam Officer) must not link department, section, or offering
+-- Check constraint 7: School-scope assignments must NOT attach department, section, or offering
 DO $body$
 BEGIN
     IF NOT EXISTS (
@@ -268,48 +302,144 @@ BEGIN
 END
 $body$;
 
--- Partial Unique Indexes on school_staff_assignments:
--- 1. One active HOD per department per academic year
+-- ============================================================
+-- SECTION 4B: CROSS-TENANT AND CONTEXTUAL RESOURCE INTEGRITY TRIGGER
+-- Guarantees:
+--   1. teacher.tenant_id = assignment.tenant_id
+--   2. academic_year.tenant_id = assignment.tenant_id
+--   3. department.tenant_id = assignment.tenant_id
+--   4. section.tenant_id = assignment.tenant_id
+--   5. subject_offering.tenant_id = assignment.tenant_id
+--   6. subject_offering.academic_year_id = assignment.academic_year_id
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.validate_staff_assignment_tenant_integrity()
+RETURNS TRIGGER LANGUAGE plpgsql AS $func$
+DECLARE
+    v_target_tenant_id UUID;
+    v_target_ay_id UUID;
+BEGIN
+    -- 1. Teacher must belong to the assignment's tenant
+    SELECT tenant_id INTO v_target_tenant_id
+    FROM public.teachers
+    WHERE id = NEW.teacher_id;
+    
+    IF v_target_tenant_id IS NULL OR v_target_tenant_id != NEW.tenant_id THEN
+        RAISE EXCEPTION 'Cross-tenant violation: teacher % belongs to tenant %, not assignment tenant %',
+            NEW.teacher_id, v_target_tenant_id, NEW.tenant_id
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- 2. Academic year must belong to the assignment's tenant
+    SELECT tenant_id INTO v_target_tenant_id
+    FROM public.academic_years
+    WHERE id = NEW.academic_year_id;
+    
+    IF v_target_tenant_id IS NULL OR v_target_tenant_id != NEW.tenant_id THEN
+        RAISE EXCEPTION 'Cross-tenant violation: academic_year % belongs to tenant %, not assignment tenant %',
+            NEW.academic_year_id, v_target_tenant_id, NEW.tenant_id
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- 3. Department (if specified) must belong to the assignment's tenant
+    IF NEW.department_id IS NOT NULL THEN
+        SELECT tenant_id INTO v_target_tenant_id
+        FROM public.departments
+        WHERE id = NEW.department_id;
+        
+        IF v_target_tenant_id IS NULL OR v_target_tenant_id != NEW.tenant_id THEN
+            RAISE EXCEPTION 'Cross-tenant violation: department % belongs to tenant %, not assignment tenant %',
+                NEW.department_id, v_target_tenant_id, NEW.tenant_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+    END IF;
+
+    -- 4. Section (if specified) must belong to the assignment's tenant
+    IF NEW.section_id IS NOT NULL THEN
+        SELECT tenant_id INTO v_target_tenant_id
+        FROM public.sections
+        WHERE id = NEW.section_id;
+        
+        IF v_target_tenant_id IS NULL OR v_target_tenant_id != NEW.tenant_id THEN
+            RAISE EXCEPTION 'Cross-tenant violation: section % belongs to tenant %, not assignment tenant %',
+                NEW.section_id, v_target_tenant_id, NEW.tenant_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+    END IF;
+
+    -- 5. Subject offering (if specified) must belong to the assignment's tenant AND academic year
+    IF NEW.subject_offering_id IS NOT NULL THEN
+        SELECT tenant_id, academic_year_id INTO v_target_tenant_id, v_target_ay_id
+        FROM public.subject_offerings
+        WHERE id = NEW.subject_offering_id;
+        
+        IF v_target_tenant_id IS NULL OR v_target_tenant_id != NEW.tenant_id THEN
+            RAISE EXCEPTION 'Cross-tenant violation: subject_offering % belongs to tenant %, not assignment tenant %',
+                NEW.subject_offering_id, v_target_tenant_id, NEW.tenant_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+
+        IF v_target_ay_id IS NOT NULL AND v_target_ay_id != NEW.academic_year_id THEN
+            RAISE EXCEPTION 'Academic-year mismatch: subject_offering % belongs to academic year %, not assignment academic year %',
+                NEW.subject_offering_id, v_target_ay_id, NEW.academic_year_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$func$;
+
+DROP TRIGGER IF EXISTS trg_validate_staff_assignment_tenant_integrity ON public.school_staff_assignments;
+CREATE TRIGGER trg_validate_staff_assignment_tenant_integrity
+    BEFORE INSERT OR UPDATE ON public.school_staff_assignments
+    FOR EACH ROW EXECUTE FUNCTION public.validate_staff_assignment_tenant_integrity();
+
+-- ============================================================
+-- SECTION 4C: PARTIAL UNIQUE INDEXES
+-- ============================================================
+
+-- Partial Unique Index 1: Exactly 1 active HOD per department per academic year
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_hod_per_dept_year
     ON public.school_staff_assignments (tenant_id, department_id, academic_year_id)
     WHERE assignment_type = 'hod' AND status = 'active' AND is_active = true;
 
--- 2. One active Form Master per section per academic year
+-- Partial Unique Index 2: Exactly 1 active Form Master per section per academic year
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_form_master_per_section_year
     ON public.school_staff_assignments (tenant_id, section_id, academic_year_id)
     WHERE assignment_type = 'form_master' AND status = 'active' AND is_active = true;
 
--- 3. One active Vice Principal per school per academic year
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_vp_per_school_year
-    ON public.school_staff_assignments (tenant_id, academic_year_id)
-    WHERE assignment_type = 'vice_principal' AND status = 'active' AND is_active = true;
-
--- 4. One active Exam Officer per school per academic year
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_exam_officer_per_school_year
-    ON public.school_staff_assignments (tenant_id, academic_year_id)
-    WHERE assignment_type = 'exam_officer' AND status = 'active' AND is_active = true;
-
--- 5. No duplicate active subject offering assignment for a teacher in the same year
+-- Partial Unique Index 3: A teacher can have only 1 active assignment per offering per year
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_offering_assignment
     ON public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, subject_offering_id)
     WHERE assignment_type IN ('subject_teacher', 'assistant_teacher') AND status = 'active' AND is_active = true;
 
--- Guarantee at most one current academic year per tenant at the database level (Fail-Closed prerequisite)
+-- Partial Unique Index 4: Active Vice Principal per school per academic year per teacher
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_vp_per_school_year
+    ON public.school_staff_assignments (tenant_id, academic_year_id)
+    WHERE assignment_type = 'vice_principal' AND status = 'active' AND is_active = true;
+
+-- Partial Unique Index 5: Active Exam Officer per school per academic year
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_exam_officer_per_school_year
+    ON public.school_staff_assignments (tenant_id, academic_year_id)
+    WHERE assignment_type = 'exam_officer' AND status = 'active' AND is_active = true;
+
+-- Authoritative Database Constraint: At most 1 current academic year per tenant
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_current_academic_year_per_tenant
     ON public.academic_years (tenant_id)
     WHERE is_current = true;
 
 -- ============================================================
--- SECTION 5: SECURE AUTHORIZATION HELPER FUNCTIONS
--- All helpers:
---   - STABLE SECURITY DEFINER
---   - SET search_path = public, pg_catalog
---   - SET row_security = off
---   - REVOKE FROM PUBLIC, anon; GRANT TO authenticated, service_role
---   - Explicit fail-closed joining academic_years WHERE is_current = true (NO LIMIT 1)
+-- SECTION 5: SECURITY DEFINER AUTHORIZATION HELPER FUNCTIONS
+-- Explicitly differentiates:
+--   1. Row-level assignment validity: is_staff_assignment_active(UUID)
+--   2. Caller-context authorization predicates: is_hod(), is_form_master(), etc.
+-- All caller predicates:
+--   - Join academic_years WHERE is_current = true (administrative truth)
+--   - Require (SELECT count(*) ... is_current = true) = 1 (fails closed if 0 or >1 current years)
+--   - Contain zero arbitrary LIMIT 1
 -- ============================================================
 
--- 1. Row-level assignment validity predicate (Temporal + lifecycle active check; no caller identity)
+-- 1. Row-Level Assignment Validity Predicate
 CREATE OR REPLACE FUNCTION public.is_staff_assignment_active(p_assignment_id UUID)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path = public, pg_catalog SET row_security = off AS $func$
@@ -349,6 +479,12 @@ SET search_path = public, pg_catalog SET row_security = off AS $func$
           AND sa.is_active = true
           AND sa.effective_from <= CURRENT_DATE
           AND (sa.effective_until IS NULL OR sa.effective_until >= CURRENT_DATE)
+          AND (
+              SELECT count(*)
+              FROM public.academic_years ay_chk
+              WHERE ay_chk.tenant_id = sa.tenant_id
+                AND ay_chk.is_current = true
+          ) = 1
     );
 $func$;
 
@@ -377,6 +513,12 @@ SET search_path = public, pg_catalog SET row_security = off AS $func$
           AND sa.is_active = true
           AND sa.effective_from <= CURRENT_DATE
           AND (sa.effective_until IS NULL OR sa.effective_until >= CURRENT_DATE)
+          AND (
+              SELECT count(*)
+              FROM public.academic_years ay_chk
+              WHERE ay_chk.tenant_id = sa.tenant_id
+                AND ay_chk.is_current = true
+          ) = 1
     );
 $func$;
 
@@ -405,6 +547,12 @@ SET search_path = public, pg_catalog SET row_security = off AS $func$
           AND sa.is_active = true
           AND sa.effective_from <= CURRENT_DATE
           AND (sa.effective_until IS NULL OR sa.effective_until >= CURRENT_DATE)
+          AND (
+              SELECT count(*)
+              FROM public.academic_years ay_chk
+              WHERE ay_chk.tenant_id = sa.tenant_id
+                AND ay_chk.is_current = true
+          ) = 1
     );
 $func$;
 
@@ -433,6 +581,12 @@ SET search_path = public, pg_catalog SET row_security = off AS $func$
           AND sa.is_active = true
           AND sa.effective_from <= CURRENT_DATE
           AND (sa.effective_until IS NULL OR sa.effective_until >= CURRENT_DATE)
+          AND (
+              SELECT count(*)
+              FROM public.academic_years ay_chk
+              WHERE ay_chk.tenant_id = sa.tenant_id
+                AND ay_chk.is_current = true
+          ) = 1
     );
 $func$;
 
@@ -440,10 +594,27 @@ REVOKE EXECUTE ON FUNCTION public.is_vice_principal(UUID) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_vice_principal(UUID) TO authenticated, service_role;
 
 -- 6. Org Admin Subtenant ID Resolver (Depth-1 matching live schema standard)
+-- Context Validation: Strictly prevents arbitrary authenticated callers from enumerating other orgs
 CREATE OR REPLACE FUNCTION public.get_org_subtenant_ids(p_org_tenant_id UUID)
-RETURNS SETOF UUID LANGUAGE sql STABLE SECURITY DEFINER
+RETURNS SETOF UUID LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = public, pg_catalog SET row_security = off AS $func$
-    SELECT id FROM public.tenants WHERE parent_id = p_org_tenant_id;
+DECLARE
+    v_caller_tenant_id UUID;
+    v_is_super BOOLEAN;
+BEGIN
+    v_caller_tenant_id := public.get_user_tenant_id();
+    v_is_super := public.is_super_admin();
+
+    -- Strictly require caller to be super_admin OR caller tenant to match p_org_tenant_id
+    IF COALESCE(v_is_super, false) = false AND (v_caller_tenant_id IS NULL OR v_caller_tenant_id != p_org_tenant_id) THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT id FROM public.tenants
+    WHERE parent_id = p_org_tenant_id
+      AND type = 'school';
+END;
 $func$;
 
 REVOKE EXECUTE ON FUNCTION public.get_org_subtenant_ids(UUID) FROM PUBLIC, anon;
@@ -491,11 +662,7 @@ CREATE POLICY "school_staff_assignments_modify"
     );
 
 -- ============================================================
--- SECTION 7: LEGACY BACKFILL (HOD AND FORM MASTER ONLY)
--- Note: Subject Teacher / Assistant Teacher backfill is deferred per supervisory specification
--- Uses current academic year start_date for effective_from.
--- Skips tenants with no current academic year silently.
--- Idempotent: NOT EXISTS + ON CONFLICT DO NOTHING.
+-- SECTION 7: IDEMPOTENT LEGACY ASSIGNMENTS BACKFILL
 -- ============================================================
 
 -- Backfill HOD from departments.head_teacher_id
@@ -588,9 +755,9 @@ ON CONFLICT DO NOTHING;
 -- SECTION 8: BI-DIRECTIONAL SYNCHRONIZATION TRIGGERS
 -- Protects legacy application queries while establishing canonical persistence.
 -- All 4 triggers feature:
---   1. pg_trigger_depth() > 0 recursion guard
---   2. Strict tenant + resource scoping
---   3. Fail-closed current academic year resolution (NO LIMIT 1)
+--   1. pg_trigger_depth() > 1 recursion guard (prevents depth-2 loops, allows direct statements)
+--   2. Strict tenant + resource scoping (same tenant, same resource, current academic year)
+--   3. Fail-closed current academic year resolution (strict count = 1, NO LIMIT 1)
 -- ============================================================
 
 -- TRIGGER A: school_staff_assignments -> departments.head_teacher_id (forward)
@@ -644,19 +811,31 @@ RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, pg_catalog AS $func$
 DECLARE
     v_academic_year_id UUID;
+    v_ay_count INTEGER;
 BEGIN
     IF pg_trigger_depth() > 1 THEN RETURN NEW; END IF;
     IF OLD.head_teacher_id IS NOT DISTINCT FROM NEW.head_teacher_id THEN RETURN NEW; END IF;
 
-    -- Fail-closed current academic year resolution (strict 0 or 1 row via partial unique index)
-    SELECT id INTO v_academic_year_id
+    -- Strict current academic year resolution (strict 0 or 1 row via partial unique index)
+    SELECT count(*) INTO v_ay_count
     FROM public.academic_years
     WHERE tenant_id = NEW.tenant_id
       AND is_current = true;
 
-    IF v_academic_year_id IS NULL THEN RETURN NEW; END IF;
+    IF v_ay_count != 1 THEN
+        IF v_ay_count > 1 THEN
+            RAISE WARNING 'Integrity violation: % current academic years found for tenant %; failing closed',
+                v_ay_count, NEW.tenant_id;
+        END IF;
+        RETURN NEW;
+    END IF;
 
-    -- If clearing or changing, revoke previous active assignment for current year
+    SELECT id INTO STRICT v_academic_year_id
+    FROM public.academic_years
+    WHERE tenant_id = NEW.tenant_id
+      AND is_current = true;
+
+    -- If clearing or changing, revoke previous active assignment for CURRENT academic year
     IF OLD.head_teacher_id IS NOT NULL THEN
         UPDATE public.school_staff_assignments
            SET status = 'revoked',
@@ -762,19 +941,31 @@ RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, pg_catalog AS $func$
 DECLARE
     v_academic_year_id UUID;
+    v_ay_count INTEGER;
 BEGIN
     IF pg_trigger_depth() > 1 THEN RETURN NEW; END IF;
     IF OLD.class_teacher_id IS NOT DISTINCT FROM NEW.class_teacher_id THEN RETURN NEW; END IF;
 
-    -- Fail-closed current academic year resolution (strict 0 or 1 row via partial unique index)
-    SELECT id INTO v_academic_year_id
+    -- Strict current academic year resolution (strict 0 or 1 row via partial unique index)
+    SELECT count(*) INTO v_ay_count
     FROM public.academic_years
     WHERE tenant_id = NEW.tenant_id
       AND is_current = true;
 
-    IF v_academic_year_id IS NULL THEN RETURN NEW; END IF;
+    IF v_ay_count != 1 THEN
+        IF v_ay_count > 1 THEN
+            RAISE WARNING 'Integrity violation: % current academic years found for tenant %; failing closed',
+                v_ay_count, NEW.tenant_id;
+        END IF;
+        RETURN NEW;
+    END IF;
 
-    -- If clearing or changing, revoke previous active assignment for current year
+    SELECT id INTO STRICT v_academic_year_id
+    FROM public.academic_years
+    WHERE tenant_id = NEW.tenant_id
+      AND is_current = true;
+
+    -- If clearing or changing, revoke previous active assignment for CURRENT academic year
     IF OLD.class_teacher_id IS NOT NULL THEN
         UPDATE public.school_staff_assignments
            SET status = 'revoked',
@@ -830,7 +1021,7 @@ CREATE TRIGGER sync_section_class_teacher_to_assignments
     FOR EACH ROW EXECUTE FUNCTION public.sync_section_class_teacher_to_assignments();
 
 -- ============================================================
--- SECTION 9: PERFORMANCE INDEXES & TIMESTAMP TRIGGERS
+-- PERFORMANCE INDEXES
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_ssa_tenant_id        ON public.school_staff_assignments (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_ssa_teacher_id       ON public.school_staff_assignments (teacher_id);

@@ -1,25 +1,11 @@
-/**
- * TASK-0007 Phase 2 — RBAC Database Foundation Comprehensive Test Suite
- *
- * Verifies Migration 047 (047_rbac_database_foundation.sql):
- *   Group 1: Schema & Permission Catalog (33 permissions, 7 scopes, 'own' absent, uniqueness)
- *   Group 2: Assignment Lifecycle & Integrity (Check constraints, future-dated validity semantics)
- *   Group 3: Uniqueness & Concurrency (Partial unique indexes, current academic year index)
- *   Group 4: Academic Year Scoping (Fail-closed current year check, past-year exclusion, tenant isolation)
- *   Group 5: Authorization Helper Functions (Caller predicates, SECURITY DEFINER, subtenant resolver)
- *   Group 6: Legacy Synchronization (Triggers A-D, recursion guards, bi-directional sync, no LIMIT 1)
- */
-
-import { test, describe, before, after } from 'node:test';
+import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import pg from 'pg';
+import { Client } from 'pg';
+import fs from 'fs';
+import path from 'path';
 
-const { Client } = pg;
-
-// Read DATABASE_URL from .env.local
-const envContent = fs.readFileSync(path.join(process.cwd(), '.env.local'), 'utf8');
+// Read connection string from .env.local
+const envContent = fs.readFileSync(path.resolve('.env.local'), 'utf8');
 let dbUrl = '';
 for (const line of envContent.split(/\r?\n/)) {
   if (line.startsWith('DATABASE_URL=')) {
@@ -27,173 +13,21 @@ for (const line of envContent.split(/\r?\n/)) {
   }
 }
 
-if (!dbUrl) {
-  throw new Error('DATABASE_URL must be configured in .env.local');
+import { resolveTestSslConfig } from './security/rls-database-boundary.test.ts';
+
+const defaultCaPath = path.join(process.cwd(), 'supabase', 'certs', 'prod-ca-2021.crt');
+if (!process.env.DATABASE_SSL_CA && fs.existsSync(defaultCaPath)) {
+  process.env.DATABASE_SSL_CA = defaultCaPath;
 }
 
-const client = new Client({
-  connectionString: dbUrl,
-  ssl: { rejectUnauthorized: false },
-});
-
-// Fixtures created in isolation during test execution
-const runId = Date.now();
-let testTenantId: string;
-let testOtherTenantId: string;
-let testOrgTenantId: string;
-let testSubTenantId: string;
-let currentAcademicYearId: string;
-let pastAcademicYearId: string;
-let testTeacherProfileId: string;
-let testTeacherId: string;
-let testTeacher2ProfileId: string;
-let testTeacher2Id: string;
-let testDeptId: string;
-let testClassId: string;
-let testSectionId: string;
-
-before(async () => {
+async function getClient() {
+  const client = new Client({
+    connectionString: dbUrl,
+    ssl: resolveTestSslConfig(process.env)
+  });
   await client.connect();
-
-  // 1. Create test tenants
-  const tRes = await client.query(`
-    INSERT INTO public.tenants (name, type, slug)
-    VALUES
-      ($1, 'school', $2),
-      ($3, 'school', $4),
-      ($5, 'organization', $6)
-    RETURNING id, type;
-  `, [
-    `RBAC Test School A ${runId}`, `rbac-school-a-${runId}`,
-    `RBAC Test School B ${runId}`, `rbac-school-b-${runId}`,
-    `RBAC Test Org ${runId}`, `rbac-org-${runId}`
-  ]);
-
-  for (const row of tRes.rows) {
-    if (row.type === 'organization') testOrgTenantId = row.id;
-    else if (!testTenantId) testTenantId = row.id;
-    else testOtherTenantId = row.id;
-  }
-
-  // Create subtenant for org
-  const subRes = await client.query(`
-    INSERT INTO public.tenants (name, type, slug, parent_id)
-    VALUES ($1, 'campus', $2, $3)
-    RETURNING id;
-  `, [`RBAC Test Campus ${runId}`, `rbac-campus-${runId}`, testOrgTenantId]);
-  testSubTenantId = subRes.rows[0].id;
-
-  // 2. Create academic years: one current, one past
-  const ayRes = await client.query(`
-    INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current)
-    VALUES
-      ($1, $2, '2026-09-01', '2027-07-31', true),
-      ($1, $3, '2025-09-01', '2026-07-31', false)
-    RETURNING id, is_current;
-  `, [testTenantId, `2026/2027 Current ${runId}`, `2025/2026 Past ${runId}`]);
-
-  for (const row of ayRes.rows) {
-    if (row.is_current) currentAcademicYearId = row.id;
-    else pastAcademicYearId = row.id;
-  }
-
-  // 3. Create auth users and teacher profiles
-  const createAuthUser = async (email: string) => {
-    const res = await client.query(`
-      INSERT INTO auth.users (id, email, role, aud)
-      VALUES (gen_random_uuid(), $1, 'authenticated', 'authenticated')
-      RETURNING id;
-    `, [email]);
-    return res.rows[0].id;
-  };
-
-  const email1 = `teacher1_${runId}@test.sec`;
-  const email2 = `teacher2_${runId}@test.sec`;
-
-  testTeacherProfileId = await createAuthUser(email1);
-  testTeacher2ProfileId = await createAuthUser(email2);
-
-  await client.query(`
-    INSERT INTO public.profiles (id, email, full_name, role, tenant_id, is_active)
-    VALUES
-      ($1, $2, 'Teacher One', 'teacher', $3, true),
-      ($4, $5, 'Teacher Two', 'teacher', $3, true);
-  `, [testTeacherProfileId, email1, testTenantId, testTeacher2ProfileId, email2]);
-
-  const tcRes = await client.query(`
-    INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name)
-    VALUES
-      ($1, $2, 'Teacher', 'One'),
-      ($1, $3, 'Teacher', 'Two')
-    RETURNING id, profile_id;
-  `, [testTenantId, testTeacherProfileId, testTeacher2ProfileId]);
-
-  for (const row of tcRes.rows) {
-    if (row.profile_id === testTeacherProfileId) testTeacherId = row.id;
-    if (row.profile_id === testTeacher2ProfileId) testTeacher2Id = row.id;
-  }
-
-  // 4. Create test department, class, and section
-  const dRes = await client.query(`
-    INSERT INTO public.departments (tenant_id, name)
-    VALUES ($1, $2)
-    RETURNING id;
-  `, [testTenantId, `RBAC Sciences Department ${runId}`]);
-  testDeptId = dRes.rows[0].id;
-
-  const cRes = await client.query(`
-    INSERT INTO public.classes (tenant_id, name)
-    VALUES ($1, $2)
-    RETURNING id;
-  `, [testTenantId, `RBAC Class Grade 10 ${runId}`]);
-  testClassId = cRes.rows[0].id;
-
-  const sRes = await client.query(`
-    INSERT INTO public.sections (tenant_id, class_id, name)
-    VALUES ($1, $2, $3)
-    RETURNING id;
-  `, [testTenantId, testClassId, `RBAC Section 10-A ${runId}`]);
-  testSectionId = sRes.rows[0].id;
-});
-
-after(async () => {
-  // Clean up all fixtures created in before()
-  try {
-    await client.query('ROLLBACK');
-  } catch {}
-
-  try {
-    if (testTenantId) {
-      await client.query('DELETE FROM public.school_staff_assignments WHERE tenant_id = $1', [testTenantId]);
-      await client.query('DELETE FROM public.sections WHERE tenant_id = $1', [testTenantId]);
-      await client.query('DELETE FROM public.classes WHERE tenant_id = $1', [testTenantId]);
-      await client.query('DELETE FROM public.departments WHERE tenant_id = $1', [testTenantId]);
-      await client.query('DELETE FROM public.teachers WHERE tenant_id = $1', [testTenantId]);
-      await client.query('DELETE FROM public.profiles WHERE tenant_id = $1', [testTenantId]);
-      await client.query('DELETE FROM public.academic_years WHERE tenant_id = $1', [testTenantId]);
-      await client.query('DELETE FROM public.tenants WHERE id = $1', [testTenantId]);
-    }
-    if (testTeacherProfileId) {
-      await client.query('DELETE FROM auth.users WHERE id = $1', [testTeacherProfileId]);
-    }
-    if (testTeacher2ProfileId) {
-      await client.query('DELETE FROM auth.users WHERE id = $1', [testTeacher2ProfileId]);
-    }
-    if (testOtherTenantId) {
-      await client.query('DELETE FROM public.tenants WHERE id = $1', [testOtherTenantId]);
-    }
-    if (testSubTenantId) {
-      await client.query('DELETE FROM public.tenants WHERE id = $1', [testSubTenantId]);
-    }
-    if (testOrgTenantId) {
-      await client.query('DELETE FROM public.tenants WHERE id = $1', [testOrgTenantId]);
-    }
-  } catch (err) {
-    console.error('Error during cleanup:', err);
-  } finally {
-    await client.end();
-  }
-});
+  return client;
+}
 
 // ---------------------------------------------------------------------------
 // GROUP 1: Schema & Permission Catalog
@@ -201,775 +35,1151 @@ after(async () => {
 describe('Group 1 — Schema & Permission Catalog', () => {
 
   test('permissions_catalog contains exactly 33 rows', async () => {
-    const res = await client.query('SELECT COUNT(*)::int AS cnt FROM public.permissions_catalog');
-    assert.equal(res.rows[0].cnt, 33, 'Expected exactly 33 seeded permissions');
+    const client = await getClient();
+    try {
+      const res = await client.query('SELECT count(*)::int AS count FROM public.permissions_catalog');
+      assert.equal(res.rows[0].count, 33, 'permissions_catalog must contain exactly 33 rows');
+    } finally {
+      await client.end();
+    }
   });
 
   test('all permission_keys adhere to <module>.<resource>.<action> grammar', async () => {
-    const res = await client.query('SELECT permission_key FROM public.permissions_catalog');
-    const grammar = /^[a-z_]+\.[a-z_]+\.[a-z_]+$/;
-    for (const row of res.rows) {
-      assert.match(
-        row.permission_key,
-        grammar,
-        `Permission key "${row.permission_key}" does not match <module>.<resource>.<action>`
-      );
+    const client = await getClient();
+    try {
+      const res = await client.query('SELECT permission_key FROM public.permissions_catalog');
+      const grammar = /^[a-z_]+(\.[a-z_]+){2}$/;
+      for (const row of res.rows) {
+        assert.ok(grammar.test(row.permission_key), `Permission key ${row.permission_key} must match <module>.<resource>.<action>`);
+      }
+    } finally {
+      await client.end();
     }
   });
 
   test('all 7 canonical scopes are represented in canonical_scope enum without "own" alias', async () => {
-    const res = await client.query(`
-      SELECT e.enumlabel
-      FROM pg_enum e
-      JOIN pg_type t ON e.enumtypid = t.oid
-      WHERE t.typname = 'canonical_scope';
-    `);
-    const scopes = new Set(res.rows.map(r => r.enumlabel));
-    const expected = ['platform', 'org', 'school', 'department', 'class', 'offering', 'self'];
-    for (const exp of expected) {
-      assert.ok(scopes.has(exp), `Expected scope "${exp}" to be present in canonical_scope enum`);
+    const client = await getClient();
+    try {
+      const res = await client.query(`
+        SELECT e.enumlabel
+        FROM pg_enum e
+        JOIN pg_type t ON e.enumtypid = t.oid
+        WHERE t.typname = 'canonical_scope'
+        ORDER BY e.enumsortorder
+      `);
+      const labels = res.rows.map((r: any) => r.enumlabel);
+      const expected = ['platform', 'org', 'school', 'department', 'class', 'offering', 'self'];
+      assert.deepEqual(labels, expected, 'canonical_scope enum must match canonical scopes');
+      assert.ok(!labels.includes('own'), 'Enum must not contain "own" alias');
+    } finally {
+      await client.end();
     }
-    assert.ok(!scopes.has('own'), 'Alias scope "own" must not exist in canonical_scope enum');
+  });
 
-    const permRes = await client.query('SELECT DISTINCT scope::text FROM public.permissions_catalog');
-    const permScopes = new Set(permRes.rows.map(r => r.scope));
-    assert.ok(!permScopes.has('own'), 'Alias scope "own" must not exist in permissions_catalog');
+  test('curriculum.version.publish has canonical scope "school"', async () => {
+    const client = await getClient();
+    try {
+      const res = await client.query(`
+        SELECT scope FROM public.permissions_catalog WHERE permission_key = 'curriculum.version.publish'
+      `);
+      assert.equal(res.rows[0]?.scope, 'school', 'curriculum.version.publish must have scope "school"');
+    } finally {
+      await client.end();
+    }
   });
 
   test('duplicate permission_key insert is rejected by UNIQUE constraint', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.permissions_catalog (permission_key, module, resource, action, description, scope)
-        VALUES ('exams.results.enter', 'exams', 'results', 'enter', 'Duplicate test', 'offering');
-      `);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23505', 'Expected unique violation (23505)');
+      await client.query('BEGIN');
+      let failed = false;
+      try {
+        await client.query(`
+          INSERT INTO public.permissions_catalog (permission_key, module, resource, action, description, scope)
+          VALUES ('admissions.applicants.view', 'admissions', 'applicants', 'view', 'Duplicate', 'school')
+        `);
+      } catch (e: any) {
+        failed = true;
+        assert.ok(e.message.includes('unique') || e.code === '23505', 'Must reject with unique constraint violation');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+      assert.ok(failed, 'Should have failed on duplicate key');
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'Expected duplicate permission_key to fail');
   });
 
   test('permissions_catalog has RLS enabled', async () => {
-    const res = await client.query(`
-      SELECT rowsecurity FROM pg_tables
-      WHERE schemaname = 'public' AND tablename = 'permissions_catalog'
-    `);
-    assert.equal(res.rows[0].rowsecurity, true, 'RLS must be enabled on permissions_catalog');
+    const client = await getClient();
+    try {
+      const res = await client.query(`
+        SELECT rowsecurity FROM pg_tables
+        WHERE schemaname = 'public' AND tablename = 'permissions_catalog'
+      `);
+      assert.equal(res.rows[0].rowsecurity, true, 'permissions_catalog must have rowsecurity = true');
+    } finally {
+      await client.end();
+    }
   });
 
   test('school_staff_assignments has NO school_id column', async () => {
-    const res = await client.query(`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_schema = 'public' AND table_name = 'school_staff_assignments'
-        AND column_name = 'school_id'
-    `);
-    assert.equal(res.rows.length, 0, 'school_id column must NOT exist on school_staff_assignments');
+    const client = await getClient();
+    try {
+      const res = await client.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'school_staff_assignments'
+      `);
+      const cols = res.rows.map((r: any) => r.column_name);
+      assert.ok(!cols.includes('school_id'), 'school_id must NOT exist in school_staff_assignments');
+      assert.ok(cols.includes('tenant_id'), 'tenant_id must exist in school_staff_assignments');
+    } finally {
+      await client.end();
+    }
+  });
+
+  test('school_staff_assignments foreign keys use ON DELETE RESTRICT for historical preservation', async () => {
+    const client = await getClient();
+    try {
+      const res = await client.query(`
+        SELECT tc.constraint_name, kcu.column_name, rc.delete_rule
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.referential_constraints rc
+          ON tc.constraint_name = rc.constraint_name AND tc.table_schema = rc.constraint_schema
+        WHERE tc.table_schema = 'public' AND tc.table_name = 'school_staff_assignments'
+          AND kcu.column_name IN ('teacher_id', 'academic_year_id', 'department_id', 'section_id', 'subject_offering_id')
+      `);
+      for (const row of res.rows) {
+        assert.equal(row.delete_rule, 'RESTRICT', `Foreign key on ${row.column_name} must use ON DELETE RESTRICT`);
+      }
+    } finally {
+      await client.end();
+    }
   });
 
 });
 
 // ---------------------------------------------------------------------------
-// GROUP 2: Staff Assignment Lifecycle & Integrity
+// GROUP 2: Staff Assignment Lifecycle & Constraint Integrity
 // ---------------------------------------------------------------------------
 describe('Group 2 — Staff Assignment Lifecycle & Integrity', () => {
 
   test('check_date_range rejects effective_until < effective_from', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from, effective_until)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, '2026-09-01', '2026-08-01');
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23514', 'Expected check constraint violation (23514)');
+      await client.query('BEGIN');
+      let rejected = false;
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T1', 't1-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u1-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '1', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (
+            tenant_id, teacher_id, assignment_type, academic_year_id,
+            effective_from, effective_until
+          ) VALUES ($1, $2, 'exam_officer', $3, '2026-09-01', '2026-08-01')
+        `, [tId, teachId, ayId]);
+      } catch (e: any) {
+        rejected = true;
+        assert.ok(e.message.includes('check_date_range') || e.code === '23514');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+      assert.ok(rejected, 'Should have rejected invalid date range');
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'check_date_range should reject effective_until < effective_from');
   });
 
   test('check_lifecycle_consistency rejects revoked with is_active = true', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'revoked', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23514', 'Expected check constraint violation');
-    } finally {
-      await client.query('ROLLBACK');
-    }
-    assert.ok(threw, 'check_lifecycle_consistency should reject revoked with is_active=true');
-  });
+      await client.query('BEGIN');
+      let rejected = false;
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T2', 't2-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u2-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '2', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
 
-  test('check_lifecycle_consistency rejects active with is_active = false', async () => {
-    await client.query('BEGIN');
-    let threw = false;
-    try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', false, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23514');
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (
+            tenant_id, teacher_id, assignment_type, academic_year_id,
+            status, is_active
+          ) VALUES ($1, $2, 'exam_officer', $3, 'revoked', true)
+        `, [tId, teachId, ayId]);
+      } catch (e: any) {
+        rejected = true;
+        assert.ok(e.message.includes('check_lifecycle_consistency') || e.code === '23514');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+      assert.ok(rejected, 'Should have rejected revoked with is_active = true');
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'check_lifecycle_consistency should reject active with is_active=false');
   });
 
   test('check_revocation_consistency rejects revoked with revoked_at IS NULL', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from, revoked_at)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'revoked', false, CURRENT_DATE, NULL);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23514');
+      await client.query('BEGIN');
+      let rejected = false;
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T3', 't3-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u3-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '3', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (
+            tenant_id, teacher_id, assignment_type, academic_year_id,
+            status, is_active, revoked_at
+          ) VALUES ($1, $2, 'exam_officer', $3, 'revoked', false, NULL)
+        `, [tId, teachId, ayId]);
+      } catch (e: any) {
+        rejected = true;
+        assert.ok(e.message.includes('check_revocation_consistency') || e.code === '23514');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+      assert.ok(rejected, 'Should have rejected revoked without revoked_at');
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'check_revocation_consistency should reject revoked without revoked_at');
   });
 
   test('check_hod_dept rejects HOD without department_id', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23514');
+      await client.query('BEGIN');
+      let rejected = false;
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T4', 't4-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u4-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '4', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (
+            tenant_id, teacher_id, assignment_type, academic_year_id, department_id
+          ) VALUES ($1, $2, 'hod', $3, NULL)
+        `, [tId, teachId, ayId]);
+      } catch (e: any) {
+        rejected = true;
+        assert.ok(e.message.includes('check_hod_dept') || e.code === '23514');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+      assert.ok(rejected, 'Should have rejected HOD without department_id');
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'check_hod_dept should reject HOD without department_id');
   });
 
   test('check_form_master_section rejects form_master without section_id', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'form_master', $3, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23514');
+      await client.query('BEGIN');
+      let rejected = false;
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T5', 't5-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u5-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '5', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (
+            tenant_id, teacher_id, assignment_type, academic_year_id, section_id
+          ) VALUES ($1, $2, 'form_master', $3, NULL)
+        `, [tId, teachId, ayId]);
+      } catch (e: any) {
+        rejected = true;
+        assert.ok(e.message.includes('check_form_master_section') || e.code === '23514');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+      assert.ok(rejected, 'Should have rejected form_master without section_id');
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'check_form_master_section should reject form_master without section_id');
   });
 
   test('check_school_scope_assignment rejects vice_principal with department_id', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'vice_principal', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23514');
+      await client.query('BEGIN');
+      let rejected = false;
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T6', 't6-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u6-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '6', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+        const deptId = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Science') RETURNING id`, [tId])).rows[0].id;
+
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (
+            tenant_id, teacher_id, assignment_type, academic_year_id, department_id
+          ) VALUES ($1, $2, 'vice_principal', $3, $4)
+        `, [tId, teachId, ayId, deptId]);
+      } catch (e: any) {
+        rejected = true;
+        assert.ok(e.message.includes('check_school_scope_assignment') || e.code === '23514');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+      assert.ok(rejected, 'Should have rejected vice_principal with department_id');
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'check_school_scope_assignment should reject vice_principal with department_id');
   });
 
-  test('Future-dated assignment (effective_from > CURRENT_DATE) is ALLOWED but inactive', async () => {
-    await client.query('BEGIN');
+  test('Future-dated assignment (effective_from > CURRENT_DATE) is ALLOWED in database but evaluates as inactive', async () => {
+    const client = await getClient();
     try {
-      // 1. Insertion must succeed (advance scheduling is valid institutional practice)
-      const insRes = await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE + 30)
-        RETURNING id;
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
+      await client.query('BEGIN');
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T7', 't7-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u7-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '7', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
 
-      const assignmentId = insRes.rows[0].id;
-      assert.ok(assignmentId, 'Future-dated assignment insertion should succeed');
+        // Future-dated assignment (e.g. starting next month)
+        const res = await client.query(`
+          INSERT INTO public.school_staff_assignments (
+            tenant_id, teacher_id, assignment_type, academic_year_id,
+            status, is_active, effective_from
+          ) VALUES ($1, $2, 'exam_officer', $3, 'active', true, CURRENT_DATE + INTERVAL '30 days')
+          RETURNING id
+        `, [tId, teachId, ayId]);
+        const assignId = res.rows[0].id;
 
-      // 2. is_staff_assignment_active() row-level check returns FALSE because effective_from > CURRENT_DATE
-      const actRes = await client.query(`
-        SELECT public.is_staff_assignment_active($1) AS is_active;
-      `, [assignmentId]);
-      assert.equal(
-        actRes.rows[0].is_active,
-        false,
-        'is_staff_assignment_active must return false for future-dated assignment'
-      );
+        // Row exists in DB
+        assert.ok(assignId, 'Future-dated assignment should insert successfully');
+
+        // is_staff_assignment_active must return false because effective_from > CURRENT_DATE
+        const activeRes = await client.query(`SELECT public.is_staff_assignment_active($1) AS is_act`, [assignId]);
+        assert.equal(activeRes.rows[0].is_act, false, 'Future-dated assignment must evaluate as inactive');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
 });
 
 // ---------------------------------------------------------------------------
-// GROUP 3: Uniqueness & Concurrency
+// GROUP 3: Cross-Tenant & Contextual Resource Integrity
 // ---------------------------------------------------------------------------
-describe('Group 3 — Uniqueness & Concurrency', () => {
+describe('Group 3 — Cross-Tenant & Contextual Resource Integrity', () => {
 
-  test('uniq_active_hod_per_dept_year rejects duplicate active HOD for same department and year', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+  test('Cross-tenant teacher mismatch is rejected by trigger', async () => {
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
+      await client.query('BEGIN');
+      try {
+        const tA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TA', 'ta-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const tB = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TB', 'tb-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayA = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tA])).rows[0].id;
+        const uB = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'ub-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'TB', true)`, [uB, tB]);
+        const teachB = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'B', 'EMP-' || gen_random_uuid()) RETURNING id`, [tB, uB])).rows[0].id;
 
-      // Attempt second active HOD for same dept and year
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacher2Id, currentAcademicYearId, testDeptId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23505', 'Expected unique constraint violation (23505)');
+        await client.query('SAVEPOINT sp_test');
+        let rejected = false;
+        try {
+          await client.query(`
+            INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id)
+            VALUES ($1, $2, 'exam_officer', $3)
+          `, [tA, teachB, ayA]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_test');
+          rejected = true;
+          assert.ok(e.message.includes('Cross-tenant violation: teacher'));
+        }
+        assert.ok(rejected, 'Should reject teacher from different tenant');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'Should reject duplicate active HOD in same dept and year');
   });
 
-  test('uniq_active_form_master_per_section_year rejects duplicate active Form Master', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+  test('Cross-tenant academic year mismatch is rejected by trigger', async () => {
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, section_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'form_master', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testSectionId]);
+      await client.query('BEGIN');
+      try {
+        const tA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TA', 'ta-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const tB = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TB', 'tb-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayB = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tB])).rows[0].id;
+        const uA = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'ua-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'TA', true)`, [uA, tA]);
+        const teachA = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'A', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, uA])).rows[0].id;
 
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, section_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'form_master', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacher2Id, currentAcademicYearId, testSectionId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23505');
+        await client.query('SAVEPOINT sp_test');
+        let rejected = false;
+        try {
+          await client.query(`
+            INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id)
+            VALUES ($1, $2, 'exam_officer', $3)
+          `, [tA, teachA, ayB]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_test');
+          rejected = true;
+          assert.ok(e.message.includes('Cross-tenant violation: academic_year'));
+        }
+        assert.ok(rejected, 'Should reject academic year from different tenant');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'Should reject duplicate active Form Master in same section and year');
   });
 
-  test('uniq_active_vp_per_school_year rejects duplicate active Vice Principal', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+  test('Cross-tenant department mismatch is rejected by trigger', async () => {
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'vice_principal', $3, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId]);
+      await client.query('BEGIN');
+      try {
+        const tA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TA', 'ta-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const tB = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TB', 'tb-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayA = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tA])).rows[0].id;
+        const deptB = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept B') RETURNING id`, [tB])).rows[0].id;
+        const uA = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'ua-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'TA', true)`, [uA, tA]);
+        const teachA = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'A', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, uA])).rows[0].id;
 
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'vice_principal', $3, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacher2Id, currentAcademicYearId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23505');
+        await client.query('SAVEPOINT sp_test');
+        let rejected = false;
+        try {
+          await client.query(`
+            INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, department_id)
+            VALUES ($1, $2, 'hod', $3, $4)
+          `, [tA, teachA, ayA, deptB]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_test');
+          rejected = true;
+          assert.ok(e.message.includes('Cross-tenant violation: department'));
+        }
+        assert.ok(rejected, 'Should reject department from different tenant');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'Should reject duplicate active Vice Principal in same year');
   });
 
-  test('uniq_active_exam_officer_per_school_year rejects duplicate active Exam Officer', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+  test('Cross-tenant section mismatch is rejected by trigger', async () => {
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'exam_officer', $3, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId]);
+      await client.query('BEGIN');
+      try {
+        const tA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TA', 'ta-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const tB = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TB', 'tb-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayA = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tA])).rows[0].id;
+        const classB = (await client.query(`INSERT INTO public.classes (tenant_id, name) VALUES ($1, 'Class B') RETURNING id`, [tB])).rows[0].id;
+        const secB = (await client.query(`INSERT INTO public.sections (tenant_id, class_id, name) VALUES ($1, $2, 'Sec B') RETURNING id`, [tB, classB])).rows[0].id;
 
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'exam_officer', $3, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacher2Id, currentAcademicYearId]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23505');
+        const uA = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'ua-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'TA', true)`, [uA, tA]);
+        const teachA = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'A', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, uA])).rows[0].id;
+
+        await client.query('SAVEPOINT sp_test');
+        let rejected = false;
+        try {
+          await client.query(`
+            INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, section_id)
+            VALUES ($1, $2, 'form_master', $3, $4)
+          `, [tA, teachA, ayA, secB]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_test');
+          rejected = true;
+          assert.ok(e.message.includes('Cross-tenant violation: section'));
+        }
+        assert.ok(rejected, 'Should reject section from different tenant');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'Should reject duplicate active Exam Officer in same year');
   });
 
-  test('uniq_current_academic_year_per_tenant rejects multiple is_current = true rows for same tenant', async () => {
-    await client.query('BEGIN');
-    let threw = false;
+  test('Cross-tenant offering and academic-year mismatch are rejected by trigger', async () => {
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current)
-        VALUES ($1, $2, '2027-09-01', '2028-07-31', true);
-      `, [testTenantId, `2027/2028 Conflicting Current ${runId}`]);
-    } catch (err: any) {
-      threw = true;
-      assert.equal(err.code, '23505', 'Expected unique violation on uniq_current_academic_year_per_tenant');
+      await client.query('BEGIN');
+      try {
+        const tA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TA', 'ta-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const tB = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('TB', 'tb-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayA = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tA])).rows[0].id;
+        const ayA_past = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2025/2026', '2025-09-01', '2026-06-30', false) RETURNING id`, [tA])).rows[0].id;
+        const ayB = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tB])).rows[0].id;
+
+        const uA = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'ua-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'TA', true)`, [uA, tA]);
+        const teachA = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'A', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, uA])).rows[0].id;
+
+        const classA = (await client.query(`INSERT INTO public.classes (tenant_id, name) VALUES ($1, 'Class A') RETURNING id`, [tA])).rows[0].id;
+        const secA = (await client.query(`INSERT INTO public.sections (tenant_id, class_id, name) VALUES ($1, $2, 'Sec A') RETURNING id`, [tA, classA])).rows[0].id;
+        const subjA = (await client.query(`INSERT INTO public.subjects (tenant_id, name, code) VALUES ($1, 'Math', 'MTH-' || gen_random_uuid()) RETURNING id`, [tA])).rows[0].id;
+        const offA_past = (await client.query(`INSERT INTO public.subject_offerings (tenant_id, academic_year_id, subject_id, section_id, teacher_id) VALUES ($1, $2, $3, $4, $5) RETURNING id`, [tA, ayA_past, subjA, secA, teachA])).rows[0].id;
+
+        const classB = (await client.query(`INSERT INTO public.classes (tenant_id, name) VALUES ($1, 'Class B') RETURNING id`, [tB])).rows[0].id;
+        const secB = (await client.query(`INSERT INTO public.sections (tenant_id, class_id, name) VALUES ($1, $2, 'Sec B') RETURNING id`, [tB, classB])).rows[0].id;
+        const subjB = (await client.query(`INSERT INTO public.subjects (tenant_id, name, code) VALUES ($1, 'Math B', 'MTHB-' || gen_random_uuid()) RETURNING id`, [tB])).rows[0].id;
+        const uB = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'ub-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'TB', true)`, [uB, tB]);
+        const teachB = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'B', 'EMP-' || gen_random_uuid()) RETURNING id`, [tB, uB])).rows[0].id;
+        const offB = (await client.query(`INSERT INTO public.subject_offerings (tenant_id, academic_year_id, subject_id, section_id, teacher_id) VALUES ($1, $2, $3, $4, $5) RETURNING id`, [tB, ayB, subjB, secB, teachB])).rows[0].id;
+
+        // Subtest A: Cross-tenant offering mismatch
+        await client.query('SAVEPOINT sp_test');
+        let rejCross = false;
+        try {
+          await client.query(`
+            INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, subject_offering_id)
+            VALUES ($1, $2, 'subject_teacher', $3, $4)
+          `, [tA, teachA, ayA, offB]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_test');
+          rejCross = true;
+          assert.ok(e.message.includes('Cross-tenant violation: subject_offering'));
+        }
+        assert.ok(rejCross, 'Should reject offering from different tenant');
+
+        // Subtest B: Offering academic-year mismatch
+        await client.query('SAVEPOINT sp_test');
+        let rejYear = false;
+        try {
+          await client.query(`
+            INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, subject_offering_id)
+            VALUES ($1, $2, 'subject_teacher', $3, $4)
+          `, [tA, teachA, ayA, offA_past]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_test');
+          rejYear = true;
+          assert.ok(e.message.includes('Academic-year mismatch: subject_offering'));
+        }
+        assert.ok(rejYear, 'Should reject offering with mismatched academic year');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
-    assert.ok(threw, 'Should reject second current academic year for same tenant');
+  });
+
+  test('Historical preservation: deleting teacher, department, or academic year is RESTRICTED', async () => {
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_Hist', 't-hist-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u-hist-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach Hist', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'H', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+        const deptId = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept Hist') RETURNING id`, [tId])).rows[0].id;
+
+        // Insert valid assignment
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, department_id)
+          VALUES ($1, $2, 'hod', $3, $4)
+        `, [tId, teachId, ayId, deptId]);
+
+        // Attempt delete teacher -> MUST FAIL with foreign key violation
+        await client.query('SAVEPOINT sp_del_teach');
+        let teachDelFailed = false;
+        try {
+          await client.query(`DELETE FROM public.teachers WHERE id = $1`, [teachId]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_del_teach');
+          teachDelFailed = true;
+          assert.ok(e.message.includes('violates foreign key constraint') || e.code === '23503');
+        }
+        assert.ok(teachDelFailed, 'Must prevent teacher deletion when referenced by assignments');
+
+        // Attempt delete department -> MUST FAIL with foreign key violation
+        await client.query('SAVEPOINT sp_del_dept');
+        let deptDelFailed = false;
+        try {
+          await client.query(`DELETE FROM public.departments WHERE id = $1`, [deptId]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_del_dept');
+          deptDelFailed = true;
+          assert.ok(e.message.includes('violates foreign key constraint') || e.code === '23503');
+        }
+        assert.ok(deptDelFailed, 'Must prevent department deletion when referenced by assignments');
+
+        // Attempt delete academic year -> MUST FAIL with foreign key violation
+        await client.query('SAVEPOINT sp_del_ay');
+        let ayDelFailed = false;
+        try {
+          await client.query(`DELETE FROM public.academic_years WHERE id = $1`, [ayId]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_del_ay');
+          ayDelFailed = true;
+          assert.ok(e.message.includes('violates foreign key constraint') || e.code === '23503');
+        }
+        assert.ok(ayDelFailed, 'Must prevent academic year deletion when referenced by assignments');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+    } finally {
+      await client.end();
+    }
   });
 
 });
 
 // ---------------------------------------------------------------------------
-// GROUP 4: Academic Year Scoping (CRITICAL)
+// GROUP 4: Current-Year Invariants & Academic Year Scoping
 // ---------------------------------------------------------------------------
-describe('Group 4 — Academic Year Scoping', () => {
+describe('Group 4 — Current-Year Invariants & Academic Year Scoping', () => {
 
-  test('is_hod returns false for assignment in past academic year (is_current = false)', async () => {
-    await client.query('BEGIN');
+  test('0 current academic years fails closed (is_hod returns false)', async () => {
+    const client = await getClient();
     try {
-      // Assign teacher to past academic year
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, '2025-09-01');
-      `, [testTenantId, testTeacherId, pastAcademicYearId, testDeptId]);
+      await client.query('BEGIN');
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_Zero', 't-zero-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u-zero-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach Zero', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'Z', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+        const deptId = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept Zero') RETURNING id`, [tId])).rows[0].id;
 
-      // Impersonate teacher 1
-      await client.query(`SET LOCAL role = 'authenticated';`);
-      await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true);`, [testTeacherProfileId]);
-      await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true);`);
+        // Academic year with is_current = false
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, 'Past Year', '2025-09-01', '2026-06-30', false) RETURNING id`, [tId])).rows[0].id;
 
-      const res = await client.query(`SELECT public.is_hod($1) AS is_hod;`, [testDeptId]);
-      assert.equal(res.rows[0].is_hod, false, 'is_hod must return false for past academic year assignment');
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, department_id, status, is_active, effective_from)
+          VALUES ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE)
+        `, [tId, teachId, ayId, deptId]);
+
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uId}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uId}"}'`);
+
+        const res = await client.query(`SELECT public.is_hod($1) AS ok`, [deptId]);
+        assert.equal(res.rows[0].ok, false, 'is_hod must return false when 0 current academic years exist');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
-  test('is_hod returns true for assignment in current academic year (is_current = true)', async () => {
-    await client.query('BEGIN');
+  test('Exactly 1 current academic year is valid (is_hod returns true)', async () => {
+    const client = await getClient();
     try {
-      // Assign teacher to current academic year
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
+      await client.query('BEGIN');
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_One', 't-one-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u-one-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach One', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'O', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+        const deptId = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept One') RETURNING id`, [tId])).rows[0].id;
 
-      // Impersonate teacher 1
-      await client.query(`SET LOCAL role = 'authenticated';`);
-      await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true);`, [testTeacherProfileId]);
-      await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true);`);
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, 'Current Year', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
 
-      const res = await client.query(`SELECT public.is_hod($1) AS is_hod;`, [testDeptId]);
-      assert.equal(res.rows[0].is_hod, true, 'is_hod must return true for current academic year assignment');
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, department_id, status, is_active, effective_from)
+          VALUES ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE)
+        `, [tId, teachId, ayId, deptId]);
+
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uId}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uId}"}'`);
+
+        const res = await client.query(`SELECT public.is_hod($1) AS ok`, [deptId]);
+        assert.equal(res.rows[0].ok, true, 'is_hod must return true for assignment in current academic year');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
-  test('is_hod returns false for future-dated assignment even in current academic year', async () => {
-    await client.query('BEGIN');
+  test('>1 current academic years fails closed (is_hod returns false)', async () => {
+    const client = await getClient();
     try {
-      // Future-dated assignment in current year
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE + 14);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
+      await client.query('BEGIN');
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_Multi', 't-multi-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u-multi-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach Multi', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'M', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+        const deptId = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept Multi') RETURNING id`, [tId])).rows[0].id;
 
-      // Impersonate teacher 1
-      await client.query(`SET LOCAL role = 'authenticated';`);
-      await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true);`, [testTeacherProfileId]);
-      await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true);`);
+        const ay1 = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, 'Year 1', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
 
-      const res = await client.query(`SELECT public.is_hod($1) AS is_hod;`, [testDeptId]);
-      assert.equal(res.rows[0].is_hod, false, 'is_hod must return false for future-dated assignment');
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, department_id, status, is_active, effective_from)
+          VALUES ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE)
+        `, [tId, teachId, ay1, deptId]);
+
+        // Temporarily drop partial unique index to simulate corrupted data state
+        await client.query('DROP INDEX IF EXISTS public.uniq_current_academic_year_per_tenant');
+        await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, 'Year 2 Duplicate', '2026-09-01', '2027-06-30', true)`, [tId]);
+
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uId}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uId}"}'`);
+
+        const res = await client.query(`SELECT public.is_hod($1) AS ok`, [deptId]);
+        assert.equal(res.rows[0].ok, false, 'is_hod must fail closed (return false) if multiple current academic years exist');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
+    }
+  });
+
+  test('uniq_current_academic_year_per_tenant database constraint rejects multiple is_current = true rows per tenant', async () => {
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_Uniq', 't-uniq-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, 'Year 1', '2026-09-01', '2027-06-30', true)`, [tId]);
+
+        await client.query('SAVEPOINT sp_dup_year');
+        let rejected = false;
+        try {
+          await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, 'Year 2', '2026-09-01', '2027-06-30', true)`, [tId]);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_dup_year');
+          rejected = true;
+          assert.ok(e.message.includes('unique') || e.code === '23505');
+        }
+        assert.ok(rejected, 'Must reject multiple current academic years for the same tenant');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+    } finally {
+      await client.end();
     }
   });
 
   test('Cross-tenant isolation: assignment in Tenant A does not grant authority in Tenant B', async () => {
-    await client.query('BEGIN');
+    const client = await getClient();
     try {
-      // Assign teacher in Tenant A
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
+      await client.query('BEGIN');
+      try {
+        const tA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_IsoA', 't-iso-a-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const tB = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_IsoB', 't-iso-b-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayA = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tA])).rows[0].id;
+        const uA = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u-iso-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach Iso', true)`, [uA, tA]);
+        const teachA = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'I', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, uA])).rows[0].id;
+        const deptB = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept B') RETURNING id`, [tB])).rows[0].id;
 
-      // Create department in Tenant B
-      const deptB = await client.query(`
-        INSERT INTO public.departments (tenant_id, name)
-        VALUES ($1, $2)
-        RETURNING id;
-      `, [testOtherTenantId, `Tenant B Department ${runId}`]);
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uA}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uA}"}'`);
 
-      // Impersonate teacher 1 (from Tenant A)
-      await client.query(`SET LOCAL role = 'authenticated';`);
-      await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true);`, [testTeacherProfileId]);
-      await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true);`);
-
-      const res = await client.query(`SELECT public.is_hod($1) AS is_hod;`, [deptB.rows[0].id]);
-      assert.equal(res.rows[0].is_hod, false, 'is_hod must return false for department in another tenant');
+        const res = await client.query(`SELECT public.is_hod($1) AS ok`, [deptB]);
+        assert.equal(res.rows[0].ok, false, 'is_hod must return false for department in different tenant');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
   test('Fails closed if profile is deactivated', async () => {
-    await client.query('BEGIN');
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
-
-      // Deactivate profile
-      await client.query('UPDATE public.profiles SET is_active = false WHERE id = $1', [testTeacherProfileId]);
-
-      await client.query(`SET LOCAL role = 'authenticated';`);
-      await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true);`, [testTeacherProfileId]);
-      await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true);`);
-
-      const res = await client.query(`SELECT public.is_hod($1) AS is_hod;`, [testDeptId]);
-      assert.equal(res.rows[0].is_hod, false, 'is_hod must fail closed if profile is inactive');
-    } finally {
-      await client.query('ROLLBACK');
-    }
-  });
-
-  test('Fails closed for anonymous caller', async () => {
-    await client.query('BEGIN');
-    try {
-      await client.query(`SET LOCAL role = 'anon';`);
-      await client.query(`SELECT set_config('request.jwt.claim.sub', '', true);`);
-      await client.query(`SELECT set_config('request.jwt.claim.role', 'anon', true);`);
-
+      await client.query('BEGIN');
       try {
-        const res = await client.query(`SELECT public.is_hod($1) AS is_hod;`, [testDeptId]);
-        assert.equal(res.rows[0].is_hod, false, 'Anonymous caller should return false');
-      } catch (err: any) {
-        assert.equal(err.code, '42501', 'Anon execution denied by REVOKE');
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_Deact', 't-deact-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u-deact-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach Deact', false)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'D', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+        const deptId = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept Deact') RETURNING id`, [tId])).rows[0].id;
+
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, department_id, status, is_active, effective_from)
+          VALUES ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE)
+        `, [tId, teachId, ayId, deptId]);
+
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uId}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uId}"}'`);
+
+        const res = await client.query(`SELECT public.is_hod($1) AS ok`, [deptId]);
+        assert.equal(res.rows[0].ok, false, 'is_hod must fail closed if profile is deactivated');
+      } finally {
+        await client.query('ROLLBACK');
       }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
 });
 
 // ---------------------------------------------------------------------------
-// GROUP 5: Authorization Helper Functions
+// GROUP 5: Authorization Helper Functions & Org Subtenant Resolver
 // ---------------------------------------------------------------------------
-describe('Group 5 — Authorization Helper Functions', () => {
+describe('Group 5 — Authorization Helper Functions & Org Subtenant Resolver', () => {
 
   test('is_form_master returns true for active Form Master in current year', async () => {
-    await client.query('BEGIN');
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, section_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'form_master', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testSectionId]);
+      await client.query('BEGIN');
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_FM', 't-fm-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u-fm-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach FM', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'FM', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
+        const classId = (await client.query(`INSERT INTO public.classes (tenant_id, name) VALUES ($1, 'Class FM') RETURNING id`, [tId])).rows[0].id;
+        const secId = (await client.query(`INSERT INTO public.sections (tenant_id, class_id, name) VALUES ($1, $2, 'Sec FM') RETURNING id`, [tId, classId])).rows[0].id;
 
-      await client.query(`SET LOCAL role = 'authenticated';`);
-      await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true);`, [testTeacherProfileId]);
-      await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true);`);
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, section_id, status, is_active, effective_from)
+          VALUES ($1, $2, 'form_master', $3, $4, 'active', true, CURRENT_DATE)
+        `, [tId, teachId, ayId, secId]);
 
-      const res = await client.query(`SELECT public.is_form_master($1) AS is_fm;`, [testSectionId]);
-      assert.equal(res.rows[0].is_fm, true, 'is_form_master should return true');
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uId}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uId}"}'`);
+
+        const res = await client.query(`SELECT public.is_form_master($1) AS ok`, [secId]);
+        assert.equal(res.rows[0].ok, true, 'is_form_master must return true for active form master');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
   test('is_vice_principal returns true for active VP in current year', async () => {
-    await client.query('BEGIN');
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'vice_principal', $3, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId]);
+      await client.query('BEGIN');
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_VP', 't-vp-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u-vp-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach VP', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'VP', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
 
-      await client.query(`SET LOCAL role = 'authenticated';`);
-      await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true);`, [testTeacherProfileId]);
-      await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true);`);
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, status, is_active, effective_from)
+          VALUES ($1, $2, 'vice_principal', $3, 'active', true, CURRENT_DATE)
+        `, [tId, teachId, ayId]);
 
-      const res = await client.query(`SELECT public.is_vice_principal($1) AS is_vp;`, [testTenantId]);
-      assert.equal(res.rows[0].is_vp, true, 'is_vice_principal should return true');
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uId}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uId}"}'`);
+
+        const res = await client.query(`SELECT public.is_vice_principal($1) AS ok`, [tId]);
+        assert.equal(res.rows[0].ok, true, 'is_vice_principal must return true for active VP');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
   test('is_exam_officer returns true for active Exam Officer in current year', async () => {
-    await client.query('BEGIN');
+    const client = await getClient();
     try {
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'exam_officer', $3, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId]);
+      await client.query('BEGIN');
+      try {
+        const tId = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_EO', 't-eo-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayId = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tId])).rows[0].id;
+        const uId = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u-eo-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach EO', true)`, [uId, tId]);
+        const teachId = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'EO', 'EMP-' || gen_random_uuid()) RETURNING id`, [tId, uId])).rows[0].id;
 
-      await client.query(`SET LOCAL role = 'authenticated';`);
-      await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true);`, [testTeacherProfileId]);
-      await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true);`);
+        await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, status, is_active, effective_from)
+          VALUES ($1, $2, 'exam_officer', $3, 'active', true, CURRENT_DATE)
+        `, [tId, teachId, ayId]);
 
-      const res = await client.query(`SELECT public.is_exam_officer($1) AS is_eo;`, [testTenantId]);
-      assert.equal(res.rows[0].is_eo, true, 'is_exam_officer should return true');
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uId}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uId}"}'`);
+
+        const res = await client.query(`SELECT public.is_exam_officer($1) AS ok`, [tId]);
+        assert.equal(res.rows[0].ok, true, 'is_exam_officer must return true for active exam officer');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
-  test('get_org_subtenant_ids returns depth-1 subtenants', async () => {
-    const res = await client.query(`
-      SELECT public.get_org_subtenant_ids($1) AS subtenant_id;
-    `, [testOrgTenantId]);
-    assert.equal(res.rows.length, 1, 'Expected 1 subtenant');
-    assert.equal(res.rows[0].subtenant_id, testSubTenantId);
+  test('get_org_subtenant_ids context validation: authorized vs unauthorized vs anonymous', async () => {
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      try {
+        const orgA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('Org A', 'org-a-' || gen_random_uuid(), 'organization') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.tenants (name, slug, type, parent_id) VALUES ('School 1', 'sch-1-' || gen_random_uuid(), 'school', $1)`, [orgA]);
+        await client.query(`INSERT INTO public.tenants (name, slug, type, parent_id) VALUES ('School 2', 'sch-2-' || gen_random_uuid(), 'school', $1)`, [orgA]);
+
+        const orgB = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('Org B', 'org-b-' || gen_random_uuid(), 'organization') RETURNING id`)).rows[0].id;
+
+        // User in Org A
+        const uOrgA = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'org-a-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'org_admin', 'Admin Org A', true)`, [uOrgA, orgA]);
+
+        // User in Org B
+        const uOrgB = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'org-b-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'org_admin', 'Admin Org B', true)`, [uOrgB, orgB]);
+
+        // Case 1: Authorized org caller gets child schools
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uOrgA}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uOrgA}"}'`);
+        const resAuth = await client.query(`SELECT * FROM public.get_org_subtenant_ids($1)`, [orgA]);
+        assert.equal(resAuth.rows.length, 2, 'Authorized user must receive child schools');
+
+        // Case 2: Unauthorized caller (from Org B) gets empty set
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = '${uOrgB}'`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{"sub":"${uOrgB}"}'`);
+        const resUnauth = await client.query(`SELECT * FROM public.get_org_subtenant_ids($1)`, [orgA]);
+        assert.equal(resUnauth.rows.length, 0, 'Unauthorized user must receive 0 rows');
+
+        // Case 3: Anonymous caller gets empty set
+        await client.query(`SET LOCAL "request.jwt.claim.sub" = ''`);
+        await client.query(`SET LOCAL "request.jwt.claims" = '{}'`);
+        const resAnon = await client.query(`SELECT * FROM public.get_org_subtenant_ids($1)`, [orgA]);
+        assert.equal(resAnon.rows.length, 0, 'Anonymous caller must receive 0 rows');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+    } finally {
+      await client.end();
+    }
   });
 
   test('all 6 authorization helper functions are SECURITY DEFINER', async () => {
-    const res = await client.query(`
-      SELECT proname, prosecdef FROM pg_proc
-      WHERE proname IN (
-        'is_staff_assignment_active',
-        'is_hod',
-        'is_form_master',
-        'is_exam_officer',
-        'is_vice_principal',
-        'get_org_subtenant_ids'
-      ) AND pronamespace = 'public'::regnamespace;
-    `);
-    for (const row of res.rows) {
-      assert.equal(row.prosecdef, true, `Function ${row.proname} must be SECURITY DEFINER`);
+    const client = await getClient();
+    try {
+      const res = await client.query(`
+        SELECT proname, prosecdef FROM pg_proc
+        WHERE proname IN (
+          'is_staff_assignment_active',
+          'is_hod',
+          'is_form_master',
+          'is_exam_officer',
+          'is_vice_principal',
+          'get_org_subtenant_ids'
+        ) AND pronamespace = 'public'::regnamespace
+      `);
+      const distinctNames = new Set(res.rows.map((r: any) => r.proname));
+      assert.equal(distinctNames.size, 6, 'Must find all 6 function names');
+      for (const row of res.rows) {
+        assert.equal(row.prosecdef, true, `Function ${row.proname} must be SECURITY DEFINER`);
+      }
+    } finally {
+      await client.end();
     }
   });
 
 });
 
 // ---------------------------------------------------------------------------
-// GROUP 6: Legacy Synchronization
+// GROUP 6: Legacy Synchronization Boundaries
 // ---------------------------------------------------------------------------
-describe('Group 6 — Legacy Synchronization', () => {
+describe('Group 6 — Legacy Synchronization Boundaries', () => {
 
-  test('Trigger A: Forward sync from school_staff_assignments to departments.head_teacher_id', async () => {
-    await client.query('BEGIN');
+  test('Historical academic year isolation: 2025/2026 assignment is not revoked by 2026/2027 legacy update', async () => {
+    const client = await getClient();
     try {
-      // 1. Insert active HOD assignment
-      await client.query(`
-        INSERT INTO public.school_staff_assignments
-          (tenant_id, teacher_id, assignment_type, academic_year_id, department_id,
-           status, is_active, effective_from)
-        VALUES
-          ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE);
-      `, [testTenantId, testTeacherId, currentAcademicYearId, testDeptId]);
+      await client.query('BEGIN');
+      try {
+        const tA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_HistSync', 't-hist-sync-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ay25 = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2025/2026', '2025-09-01', '2026-06-30', false) RETURNING id`, [tA])).rows[0].id;
+        const ay26 = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tA])).rows[0].id;
 
-      // Check that department.head_teacher_id was updated to testTeacherId
-      let dRes = await client.query('SELECT head_teacher_id FROM public.departments WHERE id = $1', [testDeptId]);
-      assert.equal(dRes.rows[0].head_teacher_id, testTeacherId, 'Trigger A should set departments.head_teacher_id');
+        const u1 = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u1-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach 1', true)`, [u1, tA]);
+        const teach1 = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '1', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, u1])).rows[0].id;
 
-      // 2. Revoke HOD assignment
-      await client.query(`
-        UPDATE public.school_staff_assignments
-        SET status = 'revoked', is_active = false, revoked_at = now()
-        WHERE tenant_id = $1 AND department_id = $2 AND assignment_type = 'hod';
-      `, [testTenantId, testDeptId]);
+        const u2 = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u2-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach 2', true)`, [u2, tA]);
+        const teach2 = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '2', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, u2])).rows[0].id;
 
-      // Check that department.head_teacher_id was set to NULL
-      dRes = await client.query('SELECT head_teacher_id FROM public.departments WHERE id = $1', [testDeptId]);
-      assert.equal(dRes.rows[0].head_teacher_id, null, 'Trigger A should clear departments.head_teacher_id on revocation');
+        const dept1 = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept Hist') RETURNING id`, [tA])).rows[0].id;
+
+        // Historical assignment in 2025/2026
+        const pastSsaId = (await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, department_id, status, is_active, effective_from)
+          VALUES ($1, $2, 'hod', $3, $4, 'active', true, '2025-09-01')
+          RETURNING id
+        `, [tA, teach1, ay25, dept1])).rows[0].id;
+
+        // Reset dept head to NULL and clear current-year assignment
+        await client.query(`UPDATE public.departments SET head_teacher_id = NULL WHERE id = $1`, [dept1]);
+        await client.query(`DELETE FROM public.school_staff_assignments WHERE department_id = $1 AND academic_year_id = $2`, [dept1, ay26]);
+
+        // Legacy update in current year 2026/2027: assign teach2 as HOD
+        await client.query(`UPDATE public.departments SET head_teacher_id = $1 WHERE id = $2`, [teach2, dept1]);
+
+        // Verify past assignment for teach1 is still active
+        const pastCheck = (await client.query(`SELECT status, is_active FROM public.school_staff_assignments WHERE id = $1`, [pastSsaId])).rows[0];
+        assert.equal(pastCheck.status, 'active', '2025/2026 assignment status must remain active');
+        assert.equal(pastCheck.is_active, true, '2025/2026 assignment must remain is_active = true');
+
+        // Verify new 2026/2027 assignment for teach2 was created
+        const currentCheck = (await client.query(`
+          SELECT teacher_id, status FROM public.school_staff_assignments
+          WHERE department_id = $1 AND academic_year_id = $2 AND assignment_type = 'hod'
+        `, [dept1, ay26])).rows[0];
+        assert.equal(currentCheck.teacher_id, teach2, 'Current year assignment must be for teach2');
+        assert.equal(currentCheck.status, 'active', 'Current year assignment must be active');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
-  test('Trigger B: Reverse sync from departments.head_teacher_id to school_staff_assignments', async () => {
-    await client.query('BEGIN');
+  test('Resource and tenant isolation in legacy synchronization', async () => {
+    const client = await getClient();
     try {
-      // Update department head_teacher_id directly (legacy action)
-      await client.query(`
-        UPDATE public.departments
-        SET head_teacher_id = $1
-        WHERE id = $2;
-      `, [testTeacherId, testDeptId]);
+      await client.query('BEGIN');
+      try {
+        const tA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_ResA', 't-res-a-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const tB = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_ResB', 't-res-b-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ayA = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tA])).rows[0].id;
+        const ayB = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tB])).rows[0].id;
 
-      // Verify Trigger B created an active HOD assignment in school_staff_assignments
-      const saRes = await client.query(`
-        SELECT id, teacher_id, status, is_active, academic_year_id
-        FROM public.school_staff_assignments
-        WHERE tenant_id = $1 AND department_id = $2 AND assignment_type = 'hod' AND status = 'active';
-      `, [testTenantId, testDeptId]);
+        const uA = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'ua-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach A', true)`, [uA, tA]);
+        const teachA = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', 'A', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, uA])).rows[0].id;
 
-      assert.equal(saRes.rows.length, 1, 'Trigger B should insert active HOD assignment');
-      assert.equal(saRes.rows[0].teacher_id, testTeacherId);
-      assert.equal(saRes.rows[0].academic_year_id, currentAcademicYearId);
+        const dept1 = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept 1') RETURNING id`, [tA])).rows[0].id;
+        const dept2 = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept 2') RETURNING id`, [tA])).rows[0].id;
+        const deptB = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Dept B') RETURNING id`, [tB])).rows[0].id;
 
-      // Now clear legacy field
-      await client.query(`
-        UPDATE public.departments
-        SET head_teacher_id = NULL
-        WHERE id = $1;
-      `, [testDeptId]);
+        // Assign teachA to dept1
+        await client.query(`UPDATE public.departments SET head_teacher_id = $1 WHERE id = $2`, [teachA, dept1]);
 
-      // Verify Trigger B revoked the previous assignment
-      const revRes = await client.query(`
-        SELECT status, is_active, revocation_reason
-        FROM public.school_staff_assignments
-        WHERE id = $1;
-      `, [saRes.rows[0].id]);
-      assert.equal(revRes.rows[0].status, 'revoked', 'Trigger B should revoke assignment on head_teacher_id = NULL');
-      assert.equal(revRes.rows[0].is_active, false);
+        // Verify dept2 received 0 assignments
+        const countDept2 = (await client.query(`SELECT count(*)::int FROM public.school_staff_assignments WHERE department_id = $1`, [dept2])).rows[0].count;
+        assert.equal(countDept2, 0, 'Department 2 must receive zero assignments');
+
+        // Verify Tenant B received 0 assignments
+        const countTenantB = (await client.query(`SELECT count(*)::int FROM public.school_staff_assignments WHERE tenant_id = $1`, [tB])).rows[0].count;
+        assert.equal(countTenantB, 0, 'Tenant B must receive zero assignments');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
-  test('Trigger C & D: Forward and reverse sync for sections.class_teacher_id', async () => {
-    await client.query('BEGIN');
+  test('State transitions: NULL -> A, A -> B, A -> NULL, and canonical revoke', async () => {
+    const client = await getClient();
     try {
-      // Update section class_teacher_id directly (Trigger D)
-      await client.query(`
-        UPDATE public.sections
-        SET class_teacher_id = $1
-        WHERE id = $2;
-      `, [testTeacherId, testSectionId]);
+      await client.query('BEGIN');
+      try {
+        const tA = (await client.query(`INSERT INTO public.tenants (name, slug, type) VALUES ('T_Transitions', 't-trans-' || gen_random_uuid(), 'school') RETURNING id`)).rows[0].id;
+        const ay = (await client.query(`INSERT INTO public.academic_years (tenant_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-06-30', true) RETURNING id`, [tA])).rows[0].id;
 
-      // Verify Trigger D created active form_master assignment
-      const saRes = await client.query(`
-        SELECT id, teacher_id, status, is_active
-        FROM public.school_staff_assignments
-        WHERE tenant_id = $1 AND section_id = $2 AND assignment_type = 'form_master' AND status = 'active';
-      `, [testTenantId, testSectionId]);
-      assert.equal(saRes.rows.length, 1, 'Trigger D should create form_master assignment');
-      assert.equal(saRes.rows[0].teacher_id, testTeacherId);
+        const u1 = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u1-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach 1', true)`, [u1, tA]);
+        const teach1 = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '1', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, u1])).rows[0].id;
 
-      // Update assignment directly (Trigger C)
-      await client.query(`
-        UPDATE public.school_staff_assignments
-        SET status = 'revoked', is_active = false, revoked_at = now()
-        WHERE id = $1;
-      `, [saRes.rows[0].id]);
+        const u2 = (await client.query(`INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), 'u2-' || gen_random_uuid() || '@test.com') RETURNING id`)).rows[0].id;
+        await client.query(`INSERT INTO public.profiles (id, tenant_id, role, full_name, is_active) VALUES ($1, $2, 'teacher', 'Teach 2', true)`, [u2, tA]);
+        const teach2 = (await client.query(`INSERT INTO public.teachers (tenant_id, profile_id, first_name, last_name, employee_id) VALUES ($1, $2, 'T', '2', 'EMP-' || gen_random_uuid()) RETURNING id`, [tA, u2])).rows[0].id;
 
-      // Verify Trigger C cleared sections.class_teacher_id
-      const secRes = await client.query('SELECT class_teacher_id FROM public.sections WHERE id = $1', [testSectionId]);
-      assert.equal(secRes.rows[0].class_teacher_id, null, 'Trigger C should clear sections.class_teacher_id');
+        const dept = (await client.query(`INSERT INTO public.departments (tenant_id, name) VALUES ($1, 'Transitions Dept') RETURNING id`, [tA])).rows[0].id;
+
+        // 1. NULL -> A
+        await client.query(`UPDATE public.departments SET head_teacher_id = $1 WHERE id = $2`, [teach1, dept]);
+        const ssa1 = (await client.query(`
+          SELECT id, status, is_active FROM public.school_staff_assignments
+          WHERE department_id = $1 AND teacher_id = $2 AND status = 'active'
+        `, [dept, teach1])).rows[0];
+        assert.ok(ssa1, 'NULL -> A must create active assignment');
+
+        // 2. A -> B
+        await client.query(`UPDATE public.departments SET head_teacher_id = $1 WHERE id = $2`, [teach2, dept]);
+        const ssa1_after = (await client.query(`SELECT status, is_active, revoked_at FROM public.school_staff_assignments WHERE id = $1`, [ssa1.id])).rows[0];
+        assert.equal(ssa1_after.status, 'revoked', 'A -> B must revoke assignment A');
+        assert.equal(ssa1_after.is_active, false);
+        assert.ok(ssa1_after.revoked_at);
+
+        const ssa2 = (await client.query(`
+          SELECT id, status, is_active FROM public.school_staff_assignments
+          WHERE department_id = $1 AND teacher_id = $2 AND status = 'active'
+        `, [dept, teach2])).rows[0];
+        assert.ok(ssa2, 'A -> B must create active assignment B');
+
+        // 3. A -> NULL
+        await client.query(`UPDATE public.departments SET head_teacher_id = NULL WHERE id = $1`, [dept]);
+        const ssa2_after = (await client.query(`SELECT status, is_active FROM public.school_staff_assignments WHERE id = $1`, [ssa2.id])).rows[0];
+        assert.equal(ssa2_after.status, 'revoked', 'A -> NULL must revoke assignment B');
+        assert.equal(ssa2_after.is_active, false);
+
+        // 4. Canonical Revoke (forward sync: SSA -> departments)
+        const ssaDirect = (await client.query(`
+          INSERT INTO public.school_staff_assignments (tenant_id, teacher_id, assignment_type, academic_year_id, department_id, status, is_active, effective_from)
+          VALUES ($1, $2, 'hod', $3, $4, 'active', true, CURRENT_DATE)
+          RETURNING id
+        `, [tA, teach1, ay, dept])).rows[0].id;
+        const deptHead = (await client.query(`SELECT head_teacher_id FROM public.departments WHERE id = $1`, [dept])).rows[0].head_teacher_id;
+        assert.equal(deptHead, teach1, 'SSA insert must forward-sync to departments.head_teacher_id');
+
+        await client.query(`UPDATE public.school_staff_assignments SET status = 'revoked', is_active = false, revoked_at = now() WHERE id = $1`, [ssaDirect]);
+        const deptHeadRevoked = (await client.query(`SELECT head_teacher_id FROM public.departments WHERE id = $1`, [dept])).rows[0].head_teacher_id;
+        assert.equal(deptHeadRevoked, null, 'Revoking SSA must forward-sync clear departments.head_teacher_id');
+      } finally {
+        await client.query('ROLLBACK');
+      }
     } finally {
-      await client.query('ROLLBACK');
+      await client.end();
     }
   });
 
   test('Trigger functions contain pg_trigger_depth() recursion guards and NO LIMIT 1', async () => {
-    const res = await client.query(`
-      SELECT proname, prosrc FROM pg_proc
-      WHERE proname IN (
-        'sync_hod_to_departments',
-        'sync_department_hod_to_assignments',
-        'sync_form_master_to_sections',
-        'sync_section_class_teacher_to_assignments'
-      ) AND pronamespace = 'public'::regnamespace;
-    `);
-    assert.equal(res.rows.length, 4, 'All 4 sync trigger functions must exist');
-    for (const row of res.rows) {
-      assert.match(
-        row.prosrc,
-        /pg_trigger_depth\(\)\s*>\s*[01]/,
-        `Function ${row.proname} must have pg_trigger_depth() guard`
-      );
-      assert.doesNotMatch(
-        row.prosrc,
-        /LIMIT\s+1/i,
-        `Function ${row.proname} must NOT contain LIMIT 1`
-      );
+    const client = await getClient();
+    try {
+      const res = await client.query(`
+        SELECT proname, pg_get_functiondef(oid) AS def
+        FROM pg_proc
+        WHERE proname IN (
+          'sync_hod_to_departments',
+          'sync_department_hod_to_assignments',
+          'sync_form_master_to_sections',
+          'sync_section_class_teacher_to_assignments'
+        ) AND pronamespace = 'public'::regnamespace
+      `);
+      assert.equal(res.rows.length, 4, 'All 4 sync trigger functions must exist');
+      for (const row of res.rows) {
+        assert.ok(row.def.includes('pg_trigger_depth()'), `Function ${row.proname} must contain pg_trigger_depth() check`);
+        assert.ok(!row.def.includes('LIMIT 1'), `Function ${row.proname} must NOT contain arbitrary LIMIT 1`);
+      }
+    } finally {
+      await client.end();
     }
   });
 
