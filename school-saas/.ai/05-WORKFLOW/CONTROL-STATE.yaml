@@ -9,9 +9,10 @@ engineering_memory: .ai/
 active_task:
   id: TASK-0007-PHASE-3B
   parent_task: TASK-0007
-  status: IMPLEMENTED
-  sub_status: PENDING_INDEPENDENT_SUPERVISORY_REVIEW
+  status: SUPERVISORY_APPROVED
+  sub_status: MERGE_AUTHORIZED_PENDING_HUMAN_PROJECT_OWNER
   branch: ai-eos/task-0007-phase-3b-api-authorization-integration
+  commit: fa16b8a
   resource_resolver: src/lib/auth/resource-resolver.ts
   api_guard: src/lib/auth/api-guard.ts
   integration_test_suite: tests/auth/api-canonical-integration.test.ts
@@ -32,10 +33,18 @@ active_task:
   authority: chatgpt
   target: gemini
   phase_3b_authorized: true
-  supervisory_merge_authorized: false
+  supervisory_merge_authorized: true
   human_merge_decision: PENDING
+  production_release_authorized: false
+  phase_3c_status: BLOCKED_PENDING_ARCHITECTURAL_CHARTER
+  deferred_operations:
+    - "DELETE /api/exam-office/dashboard (requires atomic exams.sessions.delete permission)"
+    - "/api/exam-office/communications GET & POST (GAP-3B-01, requires communications charter)"
+  open_data_integrity_issues:
+    - "REC-0010: CASS synthetic assessment score generation"
   authorized_at: "2026-09-07"
   implemented_at: "2026-09-07"
+  approved_at: "2026-09-07"
 last_completed_task:
   id: TASK-0007-PHASE-3A
   status: SUPERVISORY_APPROVED
