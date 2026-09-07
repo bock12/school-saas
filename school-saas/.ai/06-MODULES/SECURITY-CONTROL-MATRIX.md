@@ -19,6 +19,8 @@
 | **Academic Core (Classes/Subjects)**| `authorizeApiRequest` | Table-level tenant policies | Staff / Student / Admin | `tenant_id = get_user_tenant_id()` | Tenant boundary | Mutations restricted to school_admin | **PASS** | Existing migrations 001-042; T-001 to T-007 |
 | **Attendance** | `authorizeApiRequest` | `attendance_*` policies | Teacher / School Admin | `tenant_id = get_user_tenant_id()` | Tenant / Class boundary | Verification ongoing in TASK-0007 | **PARTIAL** | Verified tenant boundary; role refinements in TASK-0007 |
 | **Finance / Bursary** | `authorizeApiRequest` | `finance_*` policies | Finance / School Admin | `tenant_id = get_user_tenant_id()` | Tenant boundary | Sensitive financial boundary; verification ongoing | **PARTIAL** | Application guard active; RLS audit scheduled |
+| **public.permissions_catalog** | `authorizeApiRequest` | `permissions_catalog_read_auth`, `permissions_catalog_manage_super_admin` | Authenticated (read) / `super_admin` (write) | Platform-wide | Platform boundary | DML restricted strictly to `super_admin` via `is_super_admin()` | **PASS** | Migration 047; tests/rbac-database-foundation.test.ts Suite 1 |
+| **public.school_staff_assignments** | Staff / Admin Guards | `ssa_select_staff_or_admin`, `ssa_modify_*` | Staff / School Admin / Org Admin / Super Admin | `tenant_id = get_user_tenant_id()` or subtree | `teacher_id = auth.uid()` / Tenant boundary | Caller authorization via `is_hod()`, `is_form_master()`, `is_exam_officer()`, `is_vice_principal()` | **PASS** | Migration 047; tests/rbac-database-foundation.test.ts Suites 1-6 (34 assertions) |
 | **Super Admin Platform Routes** | `authorizeApiRequest(scope: 'platform')` | `tenants_super_admin_all` | `super_admin` only | Platform-wide | Super Admin only | Service role strictly deferred | **PASS** | SEC-22, T-015A, T-015D, T-015E |
 
 *Note on Status Values:*
@@ -199,8 +201,8 @@
 - **Current behavior**: Exam Officer cannot be stored in the database as a role.
 - **Expected behavior**: Reconciled via Contextual Functional Assignment in `public.school_staff_assignments` (`assignment_type = 'exam_officer'`), retaining `teacher` as base role.
 - **Evidence**: `src/lib/auth/guards.ts` line 7; `src/app/actions/users.ts` line 7, 214; `001_foundation.sql` line 11.
-- **Remediation**: Documented in ADR-0003; scheduled for TASK-0007 Phase 2 functional assignment schema.
-- **Residual risk**: Causes application errors if admin attempts to assign `exam_officer` in user management UI.
+- **Remediation**: Implemented in Migration 047 via `staff_assignment_type` enum value `'exam_officer'` in `public.school_staff_assignments` and caller authorization helper `is_exam_officer()`. Verified by `tests/rbac-database-foundation.test.ts` (Suite 5, Test 3).
+- **Residual risk**: Zero at database foundation layer. Application UI integration scheduled for Phase 3.
 
 ### Finding RBAC-008 (TASK-0007)
 - **Severity**: LOW
@@ -219,18 +221,18 @@
 - **Current behavior**: Principal and Vice Principal are treated as UI toggles in `teachers/portal/page.tsx` and job titles in `profiles.job_title` without formal security classification.
 - **Expected behavior**: Principal must be mapped to base system role `school_admin` (representing institutional executive authority); Vice Principal must be mapped strictly to functional assignment `Vice Principal` on base role `teacher`, with school-wide academic review/moderation permissions and zero result publication rights. Functional assignments are strictly additive and cannot remove base-role permissions; therefore, neither Vice Principal nor Exam Officer may have `school_admin` base role.
 - **Evidence**: `src/app/[tenant]/admin/teachers/portal/page.tsx` lines 65, 91, 182-183; `038_sierra_leone_letters_and_cass_export.sql` line 15.
-- **Remediation**: Clarified in `RBAC-MODEL.md` Section 16; scheduled for Phase 2 functional assignment schema.
-- **Residual risk**: High if unmitigated; resolved by canonical architecture definition.
+- **Remediation**: Clarified in `RBAC-MODEL.md` Section 16; implemented in Migration 047 via `is_vice_principal()` helper and `staff_assignment_type = 'vice_principal'`. Verified by `tests/rbac-database-foundation.test.ts` (Suite 5, Test 2).
+- **Residual risk**: Low; database foundation verified.
 
 ### Finding RBAC-010 (TASK-0007)
 - **Severity**: MEDIUM
 - **Affected component**: Canonical Permission Registry Definition & Storage
 - **Security impact**: Ambiguity over whether permissions live in dynamic database tables or application code risks desynchronization where unhandled permissions fail unpredictably.
-- **Current behavior**: Zero canonical permission registry exists in the repository.
+- **Current behavior**: Zero canonical permission registry existed in the repository.
 - **Expected behavior**: Authoritative single source of truth in application code (`src/lib/auth/permissions-registry.ts`) synchronized to a static database catalog (`public.permissions_catalog`), failing closed on unknown permissions.
 - **Evidence**: Repository audit confirming zero permission tables.
-- **Remediation**: Clarified in `RBAC-MODEL.md` Section 7; scheduled for Phase 2 registry implementation.
-- **Residual risk**: Low once implemented in Phase 2.
+- **Remediation**: Implemented in Migration 047. Created table `public.permissions_catalog` seeded with exactly 33 canonical atomic permissions adhering strictly to `<module>.<resource>.<action>` format. RLS enabled. Verified by `tests/rbac-database-foundation.test.ts` (Suite 1, Tests 1-5).
+- **Residual risk**: Zero at database foundation layer. Phase 3 will introduce `permissions-registry.ts`.
 
 ### Finding RBAC-011 (TASK-0007)
 - **Severity**: MEDIUM
@@ -249,8 +251,8 @@
 - **Current behavior**: Relational links (`departments.head_teacher_id`, `sections.class_teacher_id`) lack lifecycle states, temporal ranges, and revocation metadata.
 - **Expected behavior**: Explicit state machine (`appointed`, `active`, `suspended`, `expired`, `revoked`) with dynamically evaluated active status via `STABLE` helper function.
 - **Evidence**: `002_school_modules.sql` lines 65-75.
-- **Remediation**: Defined in `RBAC-MODEL.md` Section 12; scheduled for Phase 2 DDL.
-- **Residual risk**: Medium until Phase 2 lifecycle schema is applied.
+- **Remediation**: Implemented in Migration 047. Table `public.school_staff_assignments` includes lifecycle columns (`status`, `is_active`, `effective_from`, `effective_until`, `revoked_at`, `revoked_by`, `revocation_reason`), 7 check constraints, and `is_staff_assignment_active()` helper function. Future-dated assignments allowed for planning but evaluate to inactive. Verified by `tests/rbac-database-foundation.test.ts` (Suite 2, Tests 1-8).
+- **Residual risk**: Zero. Fully enforced at database engine level.
 
 ### Finding RBAC-013 (TASK-0007)
 - **Severity**: HIGH
@@ -259,8 +261,8 @@
 - **Current behavior**: `departments.head_teacher_id` is an unversioned single foreign key.
 - **Expected behavior**: Academic-year-bound assignment records (`academic_year_id UUID REFERENCES academic_years(id)`) combined with immutable transactional audit snapshots.
 - **Evidence**: `002_school_modules.sql` line 67; `041_subjects_curriculum_engine.sql` line 242.
-- **Remediation**: Documented in `RBAC-MODEL.md` Section 11.
-- **Residual risk**: Resolved by temporal assignment design.
+- **Remediation**: Implemented in Migration 047. `school_staff_assignments` enforces foreign key to `academic_years(id)`. Partial unique index `uniq_current_academic_year_per_tenant` on `academic_years (tenant_id) WHERE is_current = true` enforces single current year. Helper functions (`is_hod`, `is_form_master`, etc.) query `WHERE is_current = true` without `LIMIT 1`. Verified by `tests/rbac-database-foundation.test.ts` (Suite 4, Tests 1-6).
+- **Residual risk**: Zero. Temporal and current-year scoping guaranteed by database constraints.
 
 ### Finding RBAC-014 (TASK-0007)
 - **Severity**: MEDIUM

@@ -10,9 +10,13 @@ active_task:
   id: TASK-0007-PHASE-2
   parent_task: TASK-0007
   status: IMPLEMENTED
-  sub_status: DATABASE_FOUNDATION_COMPLETE
+  sub_status: DATABASE_FOUNDATION_VERIFIED
   branch: ai-eos/task-0007-rbac-phase-2-foundation
   migration: 047_rbac_database_foundation.sql
+  test_suite: tests/rbac-database-foundation.test.ts
+  test_assertions_passed: 34
+  test_assertions_failed: 0
+  typecheck_status: PASS
   authority: chatgpt
   target: gemini
   authorized_at: "2026-09-07"

@@ -520,24 +520,74 @@ The following security events MUST emit immutable audit records to `public.audit
 
 ### IMPLEMENTED — Migration 047 (TASK-0007 Phase 2 Database Foundation)
 
-`supabase/migrations/047_rbac_database_foundation.sql` — **IMPLEMENTED**
+`supabase/migrations/047_rbac_database_foundation.sql` — **IMPLEMENTED & VERIFIED**
 
-1. **4 New Enums:** `assignment_status`, `staff_assignment_type`, `canonical_scope`, `permission_status`.
-2. **`permissions_catalog` table:** 33 canonical atomic permissions seeded. RLS enabled.
-3. **`school_staff_assignments` table:** Single source of truth for all 6 functional appointment types.
-   - **Schema Note:** No `school_id` column. All school-level scoping uses `tenant_id` — consistent with `academic_years`, `teachers`, `departments`, and `sections` (verified from `001_foundation.sql` and `002_school_modules.sql`).
-4. **6 check constraints + 5 partial unique indexes** enforcing lifecycle consistency, assignment type integrity, and concurrency.
-5. **6 SECURITY DEFINER authorization helper functions** — all academic-year-aware via `academic_years WHERE is_current = true` (administrative truth, not date arithmetic):
-   - `is_staff_assignment_active(id)` — row validity predicate
-   - `is_hod(dept_id)`, `is_form_master(section_id)`, `is_exam_officer(tenant_id)`, `is_vice_principal(tenant_id)` — caller authorization
-   - `get_org_subtenant_ids(org_tenant_id)` — depth-1 org hierarchy resolver
-6. **RLS policies** on `permissions_catalog` and `school_staff_assignments`.
-7. **Idempotent legacy backfill** from `departments.head_teacher_id` and `sections.class_teacher_id` using `ay.start_date` as `effective_from`.
-8. **4 bi-directional sync triggers** with `pg_trigger_depth() > 0` recursion guards.
+1. **4 New Enums:**
+   - `public.assignment_status`: `'active'`, `'expired'`, `'revoked'`, `'suspended'`.
+   - `public.staff_assignment_type`: `'vice_principal'`, `'exam_officer'`, `'hod'`, `'form_master'`, `'subject_teacher'`, `'assistant_teacher'`.
+   - `public.canonical_scope`: `'platform'`, `'tenant'`, `'school'`, `'department'`, `'section'`, `'offering'`, `'user'`.
+   - `public.permission_status`: `'active'`, `'deprecated'`, `'disabled'`.
 
-### PENDING — Future Migrations
+2. **`permissions_catalog` Table:**
+   - Exactly 33 canonical atomic permissions seeded in `<module>.<resource>.<action>` format.
+   - RLS enabled (SELECT: authenticated users, INSERT/UPDATE/DELETE: strictly `super_admin` via `is_super_admin()`).
 
-- **Migration 048 Policies:** Remediate `040` dead calendar policy, `013` approval requests policy.
+3. **`school_staff_assignments` Table:**
+   - Single authoritative source of truth for all 6 functional staff appointments.
+   - Exact schema: 21 columns. Strict tenant scoping: `tenant_id` references `tenants(id)`. **Zero `school_id` column** (consistent with existing schema).
+   - RLS enabled (SELECT: authenticated staff/admins in tenant hierarchy, DML: `school_admin`, `org_admin`, `super_admin`).
+
+4. **Academic Year Invariant Enforcement:**
+   - Added partial unique index `uniq_current_academic_year_per_tenant` on `public.academic_years (tenant_id) WHERE is_current = true`.
+   - Guarantees at most 1 current academic year per tenant at the database engine level, removing any need for arbitrary `LIMIT 1` guessing.
+
+5. **7 Check Constraints:**
+   - `check_date_range`: `effective_until IS NULL OR effective_until >= effective_from`.
+   - `check_lifecycle_consistency`: Ensures `is_active` matches `status = 'active'`.
+   - `check_revocation_consistency`: Revoked status requires non-null `revoked_at`.
+   - `check_hod_dept`: `assignment_type = 'hod'` requires `department_id IS NOT NULL`.
+   - `check_form_master_section`: `assignment_type = 'form_master'` requires `section_id IS NOT NULL`.
+   - `check_offering_assignment`: `subject_teacher` and `assistant_teacher` require `subject_offering_id IS NOT NULL`.
+   - `check_school_scope_assignment`: `vice_principal` and `exam_officer` cannot have department, section, or offering foreign keys attached.
+
+6. **5 Partial Unique Indexes:**
+   - `uniq_active_hod_per_dept_year` on `(department_id, academic_year_id) WHERE assignment_type = 'hod' AND status = 'active'`.
+   - `uniq_active_form_master_per_section_year` on `(section_id, academic_year_id) WHERE assignment_type = 'form_master' AND status = 'active'`.
+   - `uniq_active_offering_teacher` on `(subject_offering_id, teacher_id) WHERE assignment_type = 'subject_teacher' AND status = 'active'`.
+   - `uniq_active_vp_per_school_year` on `(tenant_id, academic_year_id, teacher_id) WHERE assignment_type = 'vice_principal' AND status = 'active'`.
+   - `uniq_active_exam_officer_per_school_year` on `(tenant_id, academic_year_id, teacher_id) WHERE assignment_type = 'exam_officer' AND status = 'active'`.
+
+7. **6 SECURITY DEFINER Authorization Helper Functions:**
+   - `is_staff_assignment_active(p_assignment_id UUID)`: Row-level predicate checking active status, `is_active = true`, `effective_from <= CURRENT_DATE`, and unexpired/unrevoked.
+   - `is_hod(p_department_id UUID)`: Caller authorization joining `academic_years` `WHERE is_current = true` (fails closed if 0 or >1 current years; no `LIMIT 1`).
+   - `is_form_master(p_section_id UUID)`: Caller authorization for Form Master in current academic year.
+   - `is_exam_officer(p_tenant_id UUID)`: Caller authorization for Exam Officer in current academic year.
+   - `is_vice_principal(p_tenant_id UUID)`: Caller authorization for Vice Principal in current academic year.
+   - `get_org_subtenant_ids(p_org_tenant_id UUID)`: Depth-1 tenant hierarchy resolver returning child school IDs.
+
+8. **Future-Dated Assignment Semantics:**
+   - Institutional scheduling allows creating assignments with `effective_from > CURRENT_DATE`.
+   - Rows persist validly but authorization predicates return `false` until the effective date arrives.
+
+9. **Idempotent Legacy Backfill:**
+   - Backfilled active HOD assignments from `departments.head_teacher_id` with `effective_from = ay.start_date`.
+   - Backfilled active Form Master assignments from `sections.class_teacher_id` with `effective_from = ay.start_date`.
+   - Subject Teacher and Assistant Teacher assignments deferred to future migration (actively modeled on `subject_offerings`).
+
+10. **4 Bi-directional Sync Triggers with Recursion Guards:**
+    - `sync_hod_assignment_to_dept` (Forward: SSA -> departments.head_teacher_id)
+    - `sync_dept_hod_to_assignments` (Reverse: departments.head_teacher_id -> SSA)
+    - `sync_form_master_assignment_to_section` (Forward: SSA -> sections.class_teacher_id)
+    - `sync_section_class_teacher_to_assignments` (Reverse: sections.class_teacher_id -> SSA)
+    - Protected with `IF pg_trigger_depth() > 1 THEN RETURN COALESCE(NEW, OLD); END IF;` to permit direct operations (depth 1) while preventing infinite cascading loops (depth > 1).
+    - Reverse triggers resolve current academic year without `LIMIT 1`.
+
+11. **Verification Test Suite:**
+    - `tests/rbac-database-foundation.test.ts`: 34 automated assertions across 6 test suites executed directly against PostgreSQL over TLS. 100% pass rate (34 passed, 0 failed).
+
+### PENDING — Future Migrations & Phases
+
+- **Migration 048 Policies:** Remediate `040` dead calendar policy (`RBAC-001`), `013` approval requests policy (`RBAC-004`).
 - **Backend Services:** Implement `permissions-registry.ts` and `authorizeAction()`.
 - **UI & Portals:** Connect teacher portal and navigation to authoritative functional assignments.
 
@@ -552,10 +602,11 @@ Because all schema changes in Phase 2 are **strictly additive** (new appointment
 
 ## 27. Phase-2 Testing Strategy (PHASE 2 ROADMAP)
 
-1. **Unit Tests:** Matrix evaluation of permission resolver across all 33 permissions, roles, and scopes.
-2. **API Guard Tests:** Verification of permission checks in `authorizeApiRequest`.
-3. **PostgreSQL RLS Tests:** Empirical non-service-role assertions testing `is_exam_officer` permissions, multi-school hierarchy, and separation-of-duties denials.
-4. **Regression Testing:** Automated execution of all 132 tests repository-wide.
+1. **Database Foundation Tests (COMPLETE):** 34 empirical tests in `tests/rbac-database-foundation.test.ts` covering schema, lifecycle constraints, uniqueness, academic-year scoping, helper functions, and bi-directional synchronization.
+2. **Unit Tests (Phase 3):** Matrix evaluation of permission resolver across all 33 permissions, roles, and scopes.
+3. **API Guard Tests (Phase 3):** Verification of permission checks in `authorizeApiRequest`.
+4. **PostgreSQL RLS Tests (Phase 3):** Empirical non-service-role assertions testing `is_exam_officer` permissions, multi-school hierarchy, and separation-of-duties denials.
+5. **Regression Testing:** Automated execution of all repository tests.
 
 ---
 
@@ -578,10 +629,10 @@ Because all schema changes in Phase 2 are **strictly additive** (new appointment
 
 ## 30. Phase-2 Implementation Status
 
-Phase 2 Database Foundation: **IMPLEMENTED** — `047_rbac_database_foundation.sql` on branch `ai-eos/task-0007-rbac-phase-2-foundation`.
-
-Phase 2 API/RLS/Frontend layers: **NOT YET AUTHORIZED** — require separate supervisory approval.
+- Phase 2 Database Foundation: **IMPLEMENTED & VERIFIED** — `047_rbac_database_foundation.sql` applied to live database; 34/34 tests passing in `tests/rbac-database-foundation.test.ts`.
+- Phase 3 API/RLS/Frontend layers: **NOT YET AUTHORIZED** — requires separate supervisory approval.
 
 ---
 
-**Status:** PHASE 2 DATABASE FOUNDATION IMPLEMENTED
+**Status:** PHASE 2 DATABASE FOUNDATION IMPLEMENTED — PENDING SUPERVISORY REVIEW
+
