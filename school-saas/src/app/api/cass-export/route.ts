@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const format = searchParams.get('format'); // 'csv' | 'json'
 
     const auth = await authorizeApiRequest(req, {
-      roles: ['exam_officer', 'school_admin', 'org_admin', 'super_admin'],
+      permission: 'exams.cass.export',
       scope: 'tenant',
       requestedTenantSlug,
     });
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
       body;
 
     const auth = await authorizeApiRequest(req, {
-      roles: ['exam_officer', 'school_admin', 'org_admin', 'super_admin'],
+      permission: 'exams.cass.export',
       scope: 'tenant',
       requestedTenantSlug: tenantSlug || undefined,
     });

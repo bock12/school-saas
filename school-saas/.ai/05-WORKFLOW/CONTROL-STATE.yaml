@@ -7,52 +7,56 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-0007-PHASE-3A
+  id: TASK-0007-PHASE-3B
   parent_task: TASK-0007
-  status: SUPERVISORY_APPROVED
-  sub_status: AWAITING_HUMAN_MERGE_OR_PHASE_3B_TASK
-  branch: ai-eos/task-0007-phase-3a-canonical-authorization-engine
-  commit: d38490b
-  engine_test_suite: tests/auth/authorization-engine.test.ts
-  contract_test_suite: tests/auth/authorization-contract.test.ts
-  resolver_test_suite: tests/auth/authorization-context-resolver.test.ts
-  auth_assertions_passed: 61
-  auth_assertions_failed: 0
-  db_assertions_passed: 86
-  db_assertions_failed: 0
-  app_tests_passed: 132
-  app_tests_failed: 0
+  status: IMPLEMENTED
+  sub_status: PENDING_INDEPENDENT_SUPERVISORY_REVIEW
+  branch: ai-eos/task-0007-phase-3b-api-authorization-integration
+  resource_resolver: src/lib/auth/resource-resolver.ts
+  api_guard: src/lib/auth/api-guard.ts
+  integration_test_suite: tests/auth/api-canonical-integration.test.ts
+  integration_assertions_passed: 28
+  integration_assertions_failed: 0
+  containment_assertions_passed: 22
+  containment_assertions_failed: 0
+  engine_assertions_passed: 61
+  engine_assertions_failed: 0
+  credential_assertions_passed: 39
+  credential_assertions_failed: 0
+  api_guard_unit_passed: 15
+  api_guard_unit_failed: 0
+  api_rls_passed: 6
+  api_rls_failed: 0
   typecheck_status: PASS
   build_status: PASS
   authority: chatgpt
   target: gemini
-  supervisory_merge_authorized: true
+  phase_3b_authorized: true
+  supervisory_merge_authorized: false
   human_merge_decision: PENDING
-  phase_3b_authorized: false
   authorized_at: "2026-09-07"
   implemented_at: "2026-09-07"
-  approved_at: "2026-09-07"
 last_completed_task:
-  id: TASK-0007-PHASE-2
-  status: COMPLETED
-  branch: ai-eos/task-0007-rbac-phase-2-foundation
+  id: TASK-0007-PHASE-3A
+  status: SUPERVISORY_APPROVED
+  commit: d38490b
+  branch: ai-eos/task-0007-phase-3a-canonical-authorization-engine
 last_instruction:
-  id: TASK-0007-PHASE-3A-DIRECTIVE
+  id: TASK-0007-PHASE-3B-SUPERVISORY-APPROVAL
   from: chatgpt
   to: gemini
   type: SUPERVISORY_APPROVAL
-  task_id: TASK-0007
+  task_id: TASK-0007-PHASE-3B
   status: APPROVED
 last_response:
-  id: MSG-0020
+  id: MSG-0021
   from: gemini
   to: chatgpt
   type: IMPLEMENTATION_REPORT
-  task_id: TASK-0007-PHASE-3A
+  task_id: TASK-0007-PHASE-3B
   status: PENDING_SUPERVISORY_REVIEW
   merge_authorized: false
-  phase_3b_authorized: false
-  in_response_to: TASK-0007-PHASE-3A-DIRECTIVE
+  in_response_to: TASK-0007-PHASE-3B-SUPERVISORY-APPROVAL
 
 pending:
   recommendations:

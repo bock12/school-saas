@@ -714,5 +714,96 @@ The following 7 mandatory architectural gates must be satisfied by the upcoming 
    The API authorization engine must not replace or weaken database RLS; RLS remains an independent layer of defense in depth.
 7. **Gate 3B-07 — Negative-Space API Testing:**
    For every migrated endpoint, automated tests must demonstrate default-deny across the negative space (wrong tenant, wrong department, wrong assignment, expired/suspended assignment, forged client parameters).
+8. **Gate 3B-08 — Request-Scoped Lazy Admin Client Access:**
+   The privileged admin client must be accessed strictly through a request-scoped lazy getter closure that verifies authorization has passed before providing an instance. Module-level privileged client instantiation is strictly prohibited.
+
+---
+
+## 33. Phase 3B Implementation: Canonical API Authorization Integration & Trusted Resource Resolution
+
+### 1. Architecture & Execution Pipeline
+Phase 3B integrates the frozen Phase 3A canonical authorization engine (`d38490b`) directly into Next.js route handlers and the centralized API guard (`src/lib/auth/api-guard.ts`).
+
+```text
+Untrusted Request
+      ↓
+Canonical Authorization Context (resolveAuthorizationContext)
+      ↓
+Authoritative Resource Facts (resource-resolver.ts via DB)
+      ↓
+TrustedResourceTarget (Symbol branded)
+      ↓
+Canonical Permission (PERMISSIONS_CATALOG)
+      ↓
+Canonical Scope (platform, organization, school, department, class, offering, self)
+      ↓
+Authorization Decision (evaluateAuthorization - pure deterministic)
+      ↓
+Request-Scoped Lazy Admin Client (Gate 3B-08 closure)
+      ↓
+Business Operation (Route Handler logic)
+      ↓
+RLS (Independent PostgreSQL defense in depth)
+```
+
+### 2. Authoritative Resource Resolver (`src/lib/auth/resource-resolver.ts`)
+- **Symbol Branding Boundary:** Resources resolved from the database are stamped with a private symbol brand `TRUSTED_TARGET_BRAND = Symbol('TrustedResourceTarget')`.
+- **Runtime Type Guard:** `isTrustedResourceTarget(target)` guarantees that raw client dictionaries or unverified objects cannot be passed into canonical evaluation.
+- **Pure Fact Resolution:** The resolver queries authoritative database tables (`tenants`, `exam_sessions`, `exam_results_approval`, `subject_offerings`) and returns factual resource metadata (`tenantId`, `organizationId`, `departmentId`, `sectionId`, `subjectOfferingId`, `submitterId`, `stage`) without executing authorization logic or making role-based decisions.
+- **Typed Error Hierarchy:**
+  - `ResourceNotFoundError` (HTTP 404)
+  - `CrossTenantResourceMismatchError` (HTTP 403)
+  - `ResourceResolutionError` (HTTP 400)
+
+### 3. Modernized API Guard (`src/lib/auth/api-guard.ts`)
+- **Gate 3B-08 Compliant:** Request-scoped lazy accessor `adminClient: () => any` ensures `createAdminClient()` cannot be invoked or accessed prior to authorization checks completing successfully. Throws `SecurityError` on premature access. Zero module-level mutable state.
+- **Canonical Context Hydration:** Obtains authoritative context via `resolveAuthorizationContext({ supabaseClient, userId })`.
+- **Pure Evaluation Dispatch:** Calls `evaluateAuthorization(authContext, permission, target)` and normalizes canonical denial codes (`PERMISSION_NOT_GRANTED` -> `INSUFFICIENT_ROLE`, `CROSS_TENANT_DENIED` -> `CROSS_TENANT_DENIED`).
+- **Org-Admin Reach Preservation:** Evaluates `permission.canonicalScope` against the resource while honoring `organizationSubtenantIds` for org-admin reach (Scope ≠ Reach).
+
+### 4. Approved Implementation Cohort (Cohort 1)
+| Route | Method | Canonical Permission | Target Resolution | Status |
+|---|---|---|---|---|
+| `/api/admin/exams` | `GET` | `exams.sessions.manage` | School tenant target | 🟢 Migrated |
+| `/api/admin/exams` | `PATCH` | `exams.sessions.manage` | `exam_session` (authoritative DB lookup) | 🟢 Migrated |
+| `/api/exam-office/dashboard` | `GET` | `exams.sessions.manage` | School tenant target | 🟢 Migrated |
+| `/api/exam-office/dashboard` | `POST` | `exams.sessions.manage` | School tenant target | 🟢 Migrated |
+| `/api/exam-office/dashboard` | `PATCH` | `exams.sessions.manage` | `exam_session` (authoritative DB lookup) | 🟢 Migrated |
+| `/api/cass-export` | `GET` | `exams.cass.export` | School tenant target | 🟢 Migrated |
+| `/api/cass-export` | `POST` | `exams.cass.export` | School tenant target | 🟢 Migrated |
+
+### 5. Explicit Deferrals & Exclusions (Supervisory Mandate)
+1. **`DELETE /api/exam-office/dashboard`:**
+   - **Status:** 🔴 DEFERRED from Phase 3B.
+   - **Rationale:** `exams.sessions.manage` in the Phase 3A catalog includes `exam_officer`, while destructive exam session deletion must remain executive-only (`super_admin`, `org_admin`, `school_admin`). Adding atomic permission `exams.sessions.delete` is a material Phase 3A RBAC catalog amendment not authorized under Phase 3B.
+   - **Interim Containment:** Retains legacy administrative check `roles: ['school_admin', 'org_admin', 'super_admin']`.
+2. **`/api/exam-office/communications` (GET & POST):**
+   - **Status:** 🔴 DEFERRED from Phase 3B.
+   - **Rationale:** Identified as `GAP-3B-01: Institutional & Examination Communications`. Communications permissions (`communications.broadcast.manage`, `exams.communications.send`) do not exist in the frozen Phase 3A catalog. Route deferred to dedicated Communications Authorization task.
+3. **CASS Synthetic Score Generation (`REC-0010`):**
+   - **Status:** PRESERVED AS INDEPENDENT ISSUE. Phase 3B secures API access via `exams.cass.export`; it does not certify synthetic assessment data semantics.
+4. **PostgreSQL RLS:**
+   - **Status:** UNCHANGED (0 migrations, 0 RLS modifications).
+
+### 6. Frozen Phase 3A Integrity Verification
+- `src/lib/auth/permissions-registry.ts`: 0 lines changed (diff verified empty).
+- `src/lib/auth/authorization-engine.ts`: 0 lines changed (diff verified empty).
+- `src/lib/auth/authorization-context-resolver.ts`: 0 lines changed (diff verified empty).
+
+### 7. Test Verification & Empirical Results
+- **Dedicated Route Integration Suite (`tests/auth/api-canonical-integration.test.ts`):** 28/28 assertions pass (100%).
+  - RR-01..RR-05: Resource resolver fact retrieval, 404 on missing, and symbol branding boundary.
+  - AC-01..AC-02: Gate 3B-08 lazy admin client enforcement (throws before allow, succeeds request-scoped after).
+  - FORGE-01: Supervisory Mandate 12 invariant: client-forged `tenantId`, `stage`, and `submitterId` do not influence decision.
+  - ORG-01..ORG-02: Org-admin reach across child schools vs foreign tenant denial.
+  - ASSIGN-01..ASSIGN-04: Functional assignment lifecycle (active, expired, suspended, ordinary teacher containment).
+  - ROUTE-01..ROUTE-08: Real route handler invocations across `/api/admin/exams`, `/api/exam-office/dashboard`, and `/api/cass-export`.
+- **Existing Privileged API Containment (`tests/security/privileged-api-containment.test.ts`):** 22/22 assertions pass (100%).
+- **Existing API Guard Unit Tests (`tests/auth/api-guard.test.ts`):** 15/15 assertions pass (100%).
+- **Phase 3A Core Suites (`tests/auth/authorization-*.test.ts`):** 61/61 assertions pass (100%).
+- **Credential & API-RLS Suites:** 45/45 assertions pass (100%).
+- **Static Verification:** `npx tsc --noEmit` exits with code 0 (0 errors).
+- **Production Build:** `npm run build` exits with code 0 (all routes compiled and statically optimized).
+
 
 
