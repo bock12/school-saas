@@ -9,13 +9,14 @@ engineering_memory: .ai/
 active_task:
   id: TASK-0007-PHASE-3A
   parent_task: TASK-0007
-  status: IMPLEMENTATION_COMPLETE
-  sub_status: PENDING_SUPERVISORY_REVIEW
+  status: SUPERVISORY_APPROVED
+  sub_status: AWAITING_HUMAN_MERGE_OR_PHASE_3B_TASK
   branch: ai-eos/task-0007-phase-3a-canonical-authorization-engine
+  commit: d38490b
   engine_test_suite: tests/auth/authorization-engine.test.ts
   contract_test_suite: tests/auth/authorization-contract.test.ts
   resolver_test_suite: tests/auth/authorization-context-resolver.test.ts
-  auth_assertions_passed: 59
+  auth_assertions_passed: 61
   auth_assertions_failed: 0
   db_assertions_passed: 86
   db_assertions_failed: 0
@@ -25,10 +26,12 @@ active_task:
   build_status: PASS
   authority: chatgpt
   target: gemini
-  merge_authorized: false
+  supervisory_merge_authorized: true
+  human_merge_decision: PENDING
   phase_3b_authorized: false
   authorized_at: "2026-09-07"
   implemented_at: "2026-09-07"
+  approved_at: "2026-09-07"
 last_completed_task:
   id: TASK-0007-PHASE-2
   status: COMPLETED

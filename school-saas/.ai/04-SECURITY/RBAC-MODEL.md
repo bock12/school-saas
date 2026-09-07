@@ -686,9 +686,33 @@ Because all schema changes in Phase 2 are **strictly additive** (new appointment
 
 ---
 
-**Status:** TASK-0007 PHASE 3A — IMPLEMENTATION COMPLETE
-**Supervisory State:** PENDING SUPERVISORY REVIEW
-**Merge Authority:** MERGE NOT AUTHORIZED
-**Phase 3B–3E Authority:** NOT AUTHORIZED PENDING SUPERVISORY APPROVAL
+### Phase 3A Governance Verdict
+- **Status:** TASK-0007 PHASE 3A — SUPERVISORY APPROVED
+- **Verified Commit:** `d38490b`
+- **Supervisory Verdict:** 🟢 APPROVED (ChatGPT Chief Software Architect)
+- **Supervisory Merge Authority:** GRANTED (Subject to Human Project Owner final merge authority)
+- **Phase 3B Status:** BLOCKED (Pending separate task authorization and specification)
+
+---
+
+## 32. Phase 3B Mandatory Architectural Gates (PRE-AUTHORIZATION SPECIFICATION)
+
+The following 7 mandatory architectural gates must be satisfied by the upcoming Phase 3B implementation:
+
+1. **Gate 3B-01 — Resource Resolution:**
+   Every protected resource access must follow the strict pipeline:
+   `untrusted identifier -> authoritative DB lookup -> tenant/resource relationship validation -> TrustedResourceTarget -> authorization -> operation`.
+2. **Gate 3B-02 — No Client-Controlled Authorization Attributes:**
+   Never trust client-supplied `tenantId`, `organizationId`, `schoolId`, `departmentId`, `sectionId`, `offeringId`, `ownerId`, `submitterId`, `stage`, role, permission, or scope as authoritative authorization facts.
+3. **Gate 3B-03 — No `hasCapability()` Enforcement:**
+   Server/API authorization must use `authorize()` or `can()` with a trusted target. `hasCapability()` is strictly forbidden as a server authorization decision primitive.
+4. **Gate 3B-04 — Canonical Context Hydration:**
+   API routes must obtain authorization context from `resolveAuthorizationContext()` rather than recreating ad-hoc role, tenant, or assignment checks locally.
+5. **Gate 3B-05 — No Authorization Duplication:**
+   Systematically eliminate hardcoded checks (e.g. `if (user.role === 'admin')`) in favor of canonical authorization decisions.
+6. **Gate 3B-06 — Independent RLS Defense:**
+   The API authorization engine must not replace or weaken database RLS; RLS remains an independent layer of defense in depth.
+7. **Gate 3B-07 — Negative-Space API Testing:**
+   For every migrated endpoint, automated tests must demonstrate default-deny across the negative space (wrong tenant, wrong department, wrong assignment, expired/suspended assignment, forged client parameters).
 
 

@@ -2880,11 +2880,22 @@ In accordance with Phase 3A execution rules, the following migrations were delib
 
 ```text
 TASK: TASK-0007 Phase 3A — Canonical Authorization Engine
-STATUS: Implementation Complete — Pending Supervisory Review
+STATUS: SUPERVISORY APPROVED (Commit d38490b)
 BRANCH: ai-eos/task-0007-phase-3a-canonical-authorization-engine
-MERGE: NOT AUTHORIZED
-PHASE 3B–3E: NOT AUTHORIZED PENDING SUPERVISORY REVIEW
+SUPERVISORY MERGE: GRANTED (Subject to Human Project Owner final decision)
+PHASE 3B STATUS: BLOCKED (Pending separate task authorization)
 ```
+
+### 9. Phase 3B Mandatory Architectural Gates Recorded
+
+The following 7 mandatory architectural gates have been established by the supervisor for Phase 3B:
+1. **Gate 3B-01 (Resource Resolution):** Strict pipeline `untrusted identifier -> DB lookup -> relationship validation -> TrustedResourceTarget -> authorization -> operation`.
+2. **Gate 3B-02 (No Client Attributes):** Never trust client-supplied tenant, structural, submitter, stage, or role parameters.
+3. **Gate 3B-03 (No `hasCapability()`):** Server/API authorization must strictly use `authorize()` or `can()`.
+4. **Gate 3B-04 (Canonical Context):** Context must be hydrated from `resolveAuthorizationContext()`.
+5. **Gate 3B-05 (No Duplication):** Eliminate ad-hoc role conditionals in route handlers.
+6. **Gate 3B-06 (Independent RLS):** Maintain database RLS as an independent layer of defense in depth.
+7. **Gate 3B-07 (Negative-Space Testing):** Explicitly test default-deny across wrong tenants, wrong departments, wrong assignments, and forged attributes.
 
 
 
