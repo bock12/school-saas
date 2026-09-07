@@ -7,46 +7,49 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-0007-PHASE-2
+  id: TASK-0007-PHASE-3A
   parent_task: TASK-0007
-  status: IMPLEMENTATION_CORRECTIONS_COMPLETE
-  sub_status: SECURITY_CORRECTIONS_VERIFIED
-  branch: ai-eos/task-0007-rbac-phase-2-foundation
-  migration: 047_rbac_database_foundation.sql
-  test_suite: tests/rbac-database-foundation.test.ts
-  test_assertions_passed: 36
-  test_assertions_failed: 0
+  status: IMPLEMENTATION_COMPLETE
+  sub_status: PENDING_SUPERVISORY_REVIEW
+  branch: ai-eos/task-0007-phase-3a-canonical-authorization-engine
+  engine_test_suite: tests/auth/authorization-engine.test.ts
+  contract_test_suite: tests/auth/authorization-contract.test.ts
+  resolver_test_suite: tests/auth/authorization-context-resolver.test.ts
+  auth_assertions_passed: 59
+  auth_assertions_failed: 0
+  db_assertions_passed: 86
+  db_assertions_failed: 0
   app_tests_passed: 132
   app_tests_failed: 0
   typecheck_status: PASS
+  build_status: PASS
   authority: chatgpt
   target: gemini
   merge_authorized: false
-  phase_3_authorized: false
+  phase_3b_authorized: false
   authorized_at: "2026-09-07"
   implemented_at: "2026-09-07"
 last_completed_task:
-  id: TASK-0007-PHASE-1
+  id: TASK-0007-PHASE-2
   status: COMPLETED
-  phase_1_corrections_applied: 13
-  branch: ai-eos/task-0007-rbac-architecture
+  branch: ai-eos/task-0007-rbac-phase-2-foundation
 last_instruction:
-  id: TASK-0007-PHASE-2-CORRECTIONS
+  id: TASK-0007-PHASE-3A-DIRECTIVE
   from: chatgpt
   to: gemini
-  type: CHANGES_REQUESTED
+  type: SUPERVISORY_APPROVAL
   task_id: TASK-0007
-  status: CORRECTIONS_REQUESTED
+  status: APPROVED
 last_response:
-  id: MSG-0019
+  id: MSG-0020
   from: gemini
   to: chatgpt
   type: IMPLEMENTATION_REPORT
-  task_id: TASK-0007-PHASE-2
+  task_id: TASK-0007-PHASE-3A
   status: PENDING_SUPERVISORY_REVIEW
   merge_authorized: false
-  phase_3_authorized: false
-  in_response_to: TASK-0007-PHASE-2-CORRECTIONS
+  phase_3b_authorized: false
+  in_response_to: TASK-0007-PHASE-3A-DIRECTIVE
 
 pending:
   recommendations:

@@ -2692,10 +2692,179 @@ Executed test suite `tests/rbac-database-foundation.test.ts` via `node --conditi
 
 ```text
 TASK-0007 PHASE 2 — IMPLEMENTATION CORRECTIONS COMPLETE
-PENDING SUPERVISORY REVIEW
-MERGE NOT AUTHORIZED
-PHASE 3 NOT AUTHORIZED
+SUPERVISORY REVIEW: APPROVED
+MERGE: NOT AUTHORIZED
 ```
+
+---
+
+## TASK-0007 Phase 3A — Canonical Authorization Engine
+
+**Date:** 2026-09-07  
+**Status:** Implementation Complete — Pending Supervisory Review  
+**Branch:** `ai-eos/task-0007-phase-3a-canonical-authorization-engine`  
+**Implementer:** Gemini / Antigravity (Implementation Engineer)  
+**Supervisory Authority:** ChatGPT (Chief Software Architect) / Human Project Owner  
+
+---
+
+### 1. Summary
+
+Implemented the server-side, default-deny **Canonical Authorization Engine** for SchoolSaaS. The engine establishes the single authoritative authorization chain:
+$$\text{Authenticated Identity} \longrightarrow \text{Tenant Membership} \longrightarrow \text{Base System Role} \longrightarrow \text{Functional Assignment} \longrightarrow \text{Permission} \longrightarrow \text{Resource Scope} \longrightarrow \text{Authorization Decision}$$
+
+All 15 supervisory review corrections and 6 mandatory guardrails have been implemented and validated:
+1. **Explicit Permission Matrices:** Declared in `BASE_ROLE_PERMISSIONS` and `FUNCTIONAL_ASSIGNMENT_PERMISSIONS` with zero implicit grants.
+2. **Immutable Canonical Scopes:** Declared per permission in `PERMISSIONS_CATALOG.allowedScopes`. Callers cannot select or override permission scopes.
+3. **Pure Deterministic Evaluator:** `evaluateAuthorization()` in `src/lib/auth/authorization-engine.ts` is 100% side-effect-free, requiring zero database or network dependencies.
+4. **Server-Side Trusted Context:** `resolveAuthorizationContext()` in `src/lib/auth/authorization-context-resolver.ts` securely queries Supabase authenticated identity, active profile, academic year, assignments, and parent linkages.
+5. **Academic-Year Invariant:** Strictly enforces 0 current years $\to$ fail closed; 1 current year $\to$ authoritative; $>1$ current years $\to$ fail closed (zero `LIMIT 1`).
+6. **Canonical Hierarchy Reuse:** Direct invocation of database function `get_org_subtenant_ids()` for `org_admin` reaching child schools without client-side tree calculation.
+7. **Relationship-Aware Parent Scope:** Verified child links resolved from `public.student_parents`.
+8. **Separation of Duties (SoD):** Independent enforcement of self-moderation denial (`submitterId === actorId`), self-approval denial, exclusive executive approval/publishing restriction (`school_admin`), and assistant teacher draft stage constraint.
+9. **Clear API Distinctions:** `authorize()` (enforces and throws `AuthorizationError`), `can()` (non-throwing boolean), and `hasCapability()` (abstract capability check, non-authoritative for resources).
+10. **Matrix-Driven Contract Tests:** Automated positive grants and negative space verification across all 33 permissions, 6 base roles, and 6 assignments.
+
+---
+
+### 2. Files Changed
+
+#### New Core Engine Files
+- `src/lib/auth/permissions-registry.ts`: Authoritative static catalog of 33 canonical permissions, 6 base roles, 6 functional assignments, 7 canonical scopes, and explicit entitlement matrices.
+- `src/lib/auth/authorization-engine.ts`: Pure evaluator, decision contracts, error classes, and enforcement APIs (`authorize`, `can`, `hasCapability`).
+- `src/lib/auth/authorization-context-resolver.ts`: Server-side database adapter resolving trusted context, academic-year invariants, and hierarchy.
+
+#### New Test Files
+- `tests/auth/authorization-engine.test.ts`: 35 unit test assertions covering identity, base roles, assignment lifecycle, scopes, multi-assignment isolation, SoD, and APIs.
+- `tests/auth/authorization-contract.test.ts`: 16 matrix-driven suites testing positive grants and negative space across the entire matrix.
+- `tests/auth/authorization-context-resolver.test.ts`: 8 assertions verifying context resolution, academic-year fail-closed behavior, and org hierarchy.
+
+#### Updated Governance & Architectural Documents
+- `.ai/04-SECURITY/RBAC-MODEL.md`: Updated with Section 31 documenting the Canonical Authorization Engine architecture, decision contracts, and status.
+- `.ai/05-WORKFLOW/CONTROL-STATE.yaml`: Updated active task state to Phase 3A Implementation Complete.
+- `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`: Appended this comprehensive Phase 3A report.
+
+---
+
+### 3. Architecture & Evaluation Algorithm
+
+The engine evaluates authorization through a deterministic 8-step precedence order (default-deny):
+
+```text
+1. Authentication Check:
+   Verify actorId is present and non-empty.
+   NO → DENY (UNAUTHENTICATED)
+
+2. Account Status Check:
+   Verify context.isActive === true.
+   NO → DENY (ACCOUNT_INACTIVE)
+
+3. Canonical Permission Check:
+   Verify permission exists in the 33-item canonical catalog.
+   NO → DENY (UNKNOWN_PERMISSION)
+
+4. Tenant Boundary Check:
+   - Platform permissions require super_admin.
+   - Non-platform permissions require valid resource target tenantId.
+   - Target tenantId must match actor tenantId (or be in organizationSubtenantIds for org_admin).
+   MISMATCH → DENY (CROSS_TENANT_DENIED / TENANT_CONTEXT_MISSING)
+
+5. Collect Active Grants:
+   - Base Role Grants: intrinsic permissions from BASE_ROLE_PERMISSIONS.
+   - Functional Assignment Grants: additive permissions from FUNCTIONAL_ASSIGNMENT_PERMISSIONS
+     filtered by:
+       assignment.status === 'active'
+       assignment.isActive === true
+       assignment.effectiveFrom <= evaluationDate (fails closed if future)
+       assignment.effectiveUntil >= evaluationDate (fails closed if expired)
+       assignment.tenantId === target.tenantId
+   NO GRANTS → DENY (PERMISSION_NOT_GRANTED)
+
+6. Resource Scope Containment Check:
+   Match active grants against target resource attributes:
+   - 'platform'     → matches platform operations
+   - 'organization' → matches actor org or child schools
+   - 'school'       → matches target tenantId
+   - 'department'   → matches target departmentId
+   - 'class'        → matches target sectionId / classId
+   - 'offering'     → matches target subjectOfferingId / offeringId
+   - 'self'         → student: matches actorId; parent: in verifiedChildStudentIds
+   NO COVERING GRANT → DENY (OUT_OF_SCOPE / SELF_SCOPE_MISMATCH)
+
+7. Separation of Duties (SoD) & Workflow Constraints:
+   - exams.results.moderate: submitterId === actorId → DENY (SOD_SELF_MODERATION_BLOCKED)
+   - exams.results.approve:  submitterId === actorId → DENY (SOD_SELF_APPROVAL_BLOCKED)
+   - assistant_teacher entry: target.stage !== 'draft' → DENY (SOD_STAGE_RESTRICTION)
+   VIOLATION DETECTED → DENY
+
+8. All Checks Passed:
+   RETURN ALLOW (AUTHORIZED)
+```
+
+---
+
+### 4. Security Controls & Guardrails
+
+1. **Tenant Isolation:** A grant from School A cannot authorize a resource in School B. Cross-tenant requests fail closed immediately.
+2. **Scope Containment:** Department and Class are parallel branches under School. A teacher holding HOD in Physics cannot access Chemistry resources or unrelated class registers.
+3. **Assignment Lifecycle & Temporal Bounds:** Future-dated appointments (`effectiveFrom > today`) and expired appointments (`effectiveUntil < today`) evaluate as inactive and fail closed.
+4. **Separation of Duties:** `exams.results.approve` and `exams.results.publish` are restricted exclusively to `school_admin` (Principal) and `org_admin`. Vice Principals, Exam Officers, and Teachers are strictly prohibited from approving or publishing exam results.
+5. **No Client Tampering:** Untrusted request bodies or URL parameters attempting to assert elevated roles, spoof tenant IDs, or manipulate assignment IDs are completely ignored; only server-resolved security contexts are accepted.
+6. **No Insecure Bypasses:** Zero reliance on email addresses, zero localStorage bypasses, and zero client-side role evaluation.
+
+---
+
+### 5. Test Results
+
+| Test Suite | Assertions / Tests | Result | Execution Time |
+|---|---|---|---|
+| `tests/auth/authorization-engine.test.ts` | 35 assertions (8 suites) | **100% PASS** (35 passed, 0 failed) | ~1.5s |
+| `tests/auth/authorization-contract.test.ts` | 16 matrix suites | **100% PASS** (16 passed, 0 failed) | ~1.6s |
+| `tests/auth/authorization-context-resolver.test.ts` | 8 assertions (5 suites) | **100% PASS** (8 passed, 0 failed) | ~4.2s |
+| `tests/rbac-database-foundation.test.ts` | 86 assertions (6 suites) | **100% PASS** (86 passed, 0 failed) | ~143s |
+| Full Repository Suite (`npm test`) | 132 assertions (41 suites) | **100% PASS** (132 passed, 0 failed) | ~47s |
+| TypeScript Strict Check (`npx tsc --noEmit`) | Complete Codebase | **100% PASS** (0 errors) | ~25s |
+| Next.js Production Build (`npm run build`) | All Pages & Routes | **100% PASS** (0 errors) | ~4.0min |
+
+**Total Phase 3A Assertions Verified:** 59 new auth engine assertions + 86 DB foundation assertions + 132 app regression assertions = **277 automated tests passing with 0 failures**.
+
+---
+
+### 6. Findings (Section 20 Compliance)
+
+- **Critical:** None.
+- **High:** None.
+- **Medium:** None.
+- **Low:** None.
+- **Informational (Inventory of Existing Checks):**
+  - `src/lib/auth/guards.ts`: `profile.role === 'super_admin'` is canonical for platform entry; `TenantRole` including `'exam_officer'` is a legacy typing defect to be migrated in Phase 3B.
+  - `src/lib/auth/api-guard.ts`: Coarse `profile.role` check is a migration candidate for Phase 3B API integration.
+  - `src/app/actions/users.ts`: `AppRole` containing `'exam_officer'` is a legacy typing defect to be aligned in Phase 3B.
+  - `localStorage`: Verified to be strictly used for cookie consent and theme switching; zero authorization relevance.
+  - `user_metadata.role`: Present only in OAuth callback onboarding; not trusted by the canonical engine.
+
+---
+
+### 7. Deferred Items (Strict Phase Boundaries Preserved)
+
+In accordance with Phase 3A execution rules, the following migrations were deliberately deferred:
+- **Phase 3B:** Route handler & API guard integration (`authorizeApiRequest()` migration to use canonical engine).
+- **Phase 3C:** PostgreSQL RLS policy integration (`has_permission()` SQL function consuming `permissions_catalog`).
+- **Phase 3D:** Frontend navigation, permission hooks (`usePermissions()`), and UI controls.
+- **Phase 3E:** Final end-to-end security regression and separation-of-duties audit.
+
+---
+
+### 8. Final Status & Governance
+
+```text
+TASK: TASK-0007 Phase 3A — Canonical Authorization Engine
+STATUS: Implementation Complete — Pending Supervisory Review
+BRANCH: ai-eos/task-0007-phase-3a-canonical-authorization-engine
+MERGE: NOT AUTHORIZED
+PHASE 3B–3E: NOT AUTHORIZED PENDING SUPERVISORY REVIEW
+```
+
 
 
 
