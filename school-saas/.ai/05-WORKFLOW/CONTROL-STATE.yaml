@@ -7,50 +7,16 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-0007-PHASE-3C-COHORT-2
+  id: TASK-0007-PHASE-3C-COHORT-4
   parent_task: TASK-0007
-  status: SUPERVISORY_APPROVED_MERGE_AUTHORIZED
-  approval_verdict: "APPROVED — MERGE AUTHORIZED"
-  implementation_commit: 8df0775
-  branch: ai-eos/task-0007-phase-3c-cohort-2-admissions-api
-  base_commit: ffc1064
-  merge_qualification:
-    cohort_2_merge: "AUTHORIZED (enter PR/merge gate; do not merge manually outside PR process)"
-    enrollment_production_authorization: "BLOCKED (Cohort 4 database boundary remediation required)"
-    production_release: "NOT AUTHORIZED"
-  deliverables:
-    - src/lib/auth/resource-resolver.ts
-    - src/lib/auth/api-guard.ts
-    - src/lib/admissions/admission-history.ts
-    - src/lib/admissions/applicant-patch.ts
-    - src/app/api/admissions/route.ts
-    - src/app/api/admissions/[id]/route.ts
-    - src/app/api/admissions/[id]/evaluate/route.ts
-    - src/app/api/admissions/[id]/place/route.ts
-    - src/app/api/admissions/[id]/approve/route.ts
-    - src/app/api/admissions/[id]/reject/route.ts
-    - src/app/api/admissions/[id]/letter/route.ts
-    - src/app/api/admissions/[id]/enroll/route.ts
-    - tests/security/privileged-api-containment.test.ts
-    - tests/security/api-rls-integration.test.ts
-    - tests/auth/admissions-canonical-api.test.ts
-    - package.json
-  permission_catalog_count: 39
-  command_endpoints_created:
-    - POST /api/admissions/[id]/evaluate -> admissions.applicants.evaluate
-    - POST /api/admissions/[id]/place -> admissions.applicants.place
-    - POST /api/admissions/[id]/approve -> admissions.applicants.approve
-    - POST /api/admissions/[id]/reject -> admissions.applicants.approve
-    - POST /api/admissions/[id]/letter -> admissions.letters.dispatch
-    - POST /api/admissions/[id]/enroll -> admissions.applicants.enroll
+  status: AWAITING_SUPERVISORY_SPECIFICATION
+  title: "Admissions Enrollment RPC Database Security Boundary Remediation"
+  branch: null
+  target_migration: 048_admissions_enrollment_security.sql
   enrollment_rpc_security_hold:
-    status: COHORT_4_BLOCKING_DEPENDENCY
+    status: COHORT_4_TARGET
     migration_required: 048_admissions_enrollment_security.sql
-    details: Direct PostgREST RPC enroll_applicant execution remains open to authenticated role at DB layer until Cohort 4.
-  api_routes_modified: true
-  database_migrations_modified: false
-  rpc_functions_modified: false
-  rls_policies_modified: false
+    details: Remediate public.enroll_applicant SECURITY DEFINER execute privileges, derive actor from auth.uid(), enforce tenant authorization, and add students.applicant_id uniqueness constraint.
   open_data_integrity_issues:
     - "REC-0010: CASS synthetic assessment score generation"
   deferred_operations:
@@ -59,18 +25,19 @@ active_task:
     - "Communications APIs (/api/exam-office/communications GET & POST, GAP-3B-01)"
     - "Super-admin leads"
     - "Frontend authorization migration"
-  authorized_at: "2026-09-08"
-  completed_at: "2026-09-08"
+  authorized_at: null
+  completed_at: null
 last_completed_task:
-  id: TASK-0007-PHASE-3C-COHORT-1
-  status: SUPERVISORY_APPROVED
-  commit: ffc1064
-  branch: ai-eos/task-0007-phase-3c-cohort-1-permission-extension
+  id: TASK-0007-PHASE-3C-COHORT-2
+  status: MERGED_ON_MAIN
+  commit: a0bfd90
+  pr_number: 18
+  branch: ai-eos/task-0007-phase-3c-cohort-2-admissions-api
 previous_completed_task:
-  id: TASK-0007-PHASE-3B
-  status: SUPERVISORY_APPROVED
-  commit: fa16b8a
-  branch: ai-eos/task-0007-phase-3b-api-authorization-integration
+  id: TASK-0007-PHASE-3C-COHORT-1
+  status: MERGED_ON_MAIN
+  commit: 10cba03
+  branch: ai-eos/task-0007-phase-3c-cohort-1-permission-extension
 last_instruction:
   id: TASK-0007-PHASE-3B-SUPERVISORY-APPROVAL
   from: chatgpt
