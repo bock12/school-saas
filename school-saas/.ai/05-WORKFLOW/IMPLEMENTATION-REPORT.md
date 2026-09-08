@@ -3085,6 +3085,135 @@ TASK ID: TASK-0007-PHASE-3C-A
 STATUS: ARCHITECTURE READY — AWAITING SUPERVISORY APPROVAL
 ```
 
+---
+
+# TASK-0007 Phase 3C Implementation Cohort 1 — Canonical Authorization Extension Report
+
+**Task:** TASK-0007 Phase 3C Implementation Cohort 1  
+**Status:** IMPLEMENTED — AWAITING SUPERVISORY REVIEW  
+**Implementation Agent:** Gemini / Antigravity  
+**Supervisory Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Final Authority:** Human Project Owner  
+**Date:** 2026-09-08  
+
+---
+
+## 1. Repository State
+
+```text
+branch: ai-eos/task-0007-phase-3c-cohort-1-permission-extension
+base commit: 08bb6b6
+working tree: clean (after commit)
+```
+
+---
+
+## 2. Files Changed
+
+Only the permitted authorization and governance files were modified:
+
+1. `src/lib/auth/permissions-registry.ts` (Canonical catalog and entitlement matrices extended from 33 to 39 permissions)
+2. `tests/auth/authorization-contract.test.ts` (Catalog count invariant and Phase 3C Cohort 1 demarcation tests added)
+3. `tests/auth/authorization-engine.test.ts` (Phase 3C Cohort 1 scope containment, org reach, and negative space unit tests added)
+4. `.ai/05-WORKFLOW/CONTROL-STATE.yaml` (Governance active task update)
+5. `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` (This implementation report)
+
+**Explicitly Verified Not Modified:**
+- ZERO API routes modified (`/api/admissions`, `/api/academics/ai/lesson-plan`, etc. untouched)
+- ZERO database migrations modified (no SQL changes)
+- ZERO database RPC functions modified (`enroll_applicant` untouched)
+- ZERO PostgreSQL RLS policies modified
+- ZERO frontend authorization files modified
+- ZERO resource resolvers modified
+
+---
+
+## 3. Permission Catalog Confirmation
+
+```text
+Frozen Phase 3A permissions:  33
+Phase 3C-A approved additions: 6
+---------------------------------
+Total canonical permissions:  39
+```
+
+Empirically verified via `npx tsx -e "import { CANONICAL_PERMISSIONS } from './src/lib/auth/permissions-registry'; assert.equal(CANONICAL_PERMISSIONS.length, 39);"`:
+1. `admissions.applicants.manage` (Scope: `school`)
+2. `admissions.applicants.evaluate` (Scope: `school`)
+3. `admissions.applicants.place` (Scope: `school`)
+4. `admissions.letters.dispatch` (Scope: `school`)
+5. `admissions.applicants.enroll` (Scope: `school`)
+6. `curriculum.lesson_plan.generate` (Scope: `offering`)
+
+---
+
+## 4. Matrix Verification Summary
+
+| Permission | Canonical Scope | Base Roles Allowed | Functional Assignments Allowed | Negative Space Enforced |
+|---|---|---|---|---|
+| `admissions.applicants.manage` | `school` | `super_admin`, `org_admin`, `school_admin` | None | Denied to `teacher`, `student`, `parent`, and all staff assignments (including `exam_officer`) |
+| `admissions.applicants.evaluate` | `school` | `super_admin`, `org_admin`, `school_admin` | `exam_officer` (`school`) | Denied to base `teacher`, `student`, `parent`, `hod`, `form_master`, `subject_teacher`, `asst_teacher` |
+| `admissions.applicants.place` | `school` | `super_admin`, `org_admin`, `school_admin` | `exam_officer` (`school`) | Denied to base `teacher`, `student`, `parent`, `hod`, `form_master`, `subject_teacher`, `asst_teacher` |
+| `admissions.letters.dispatch` | `school` | `super_admin`, `org_admin`, `school_admin` | None | Denied to `teacher`, `student`, `parent`, and all staff assignments (including `exam_officer`) |
+| `admissions.applicants.enroll` | `school` | `super_admin`, `org_admin`, `school_admin` | None | Denied to `teacher`, `student`, `parent`, and all staff assignments (including `exam_officer`) |
+| `curriculum.lesson_plan.generate` | `offering` | `super_admin`, `org_admin`, `school_admin` | `subject_teacher` (`offering`), `hod` (`department`) | Denied to base `teacher`, `student`, `parent`, `exam_officer`, `vp`, `form_master`, `asst_teacher` |
+
+### Scope & Reach Verification:
+- **`org_admin` Reach:** Evaluated against child schools in server-resolved subtree (`organizationSubtenantIds`). Child school in subtree yields `ALLOW`. Foreign school yields `CROSS_TENANT_DENIED` (`403`).
+- **`hod` Department Scope:** Evaluated against assigned `departmentId`. Target offering in assigned department yields `ALLOW`. Target offering in foreign department yields `OUT_OF_SCOPE` (`403`).
+- **`subject_teacher` Offering Scope:** Evaluated against assigned `subjectOfferingId`. Target assigned offering yields `ALLOW`. Target unassigned offering yields `OUT_OF_SCOPE` (`403`).
+- **Separation of Duties:** `exam_officer` receives ONLY `evaluate` and `place`; strictly denied `manage`, `letters.dispatch`, and `enroll`.
+
+---
+
+## 5. Validation Results
+
+### Test Suite (`npm test`)
+- **Total Tests:** 231 (10 new unit & contract tests added, 221 existing tests preserved)
+- **Suites:** 21
+- **Pass:** 231
+- **Fail:** 0
+- **Duration:** 76.0s
+
+### TypeScript Typecheck (`npx tsc --noEmit`)
+- **Exit Code:** 0 (clean, zero errors)
+
+### Next.js Production Build (`npm run build`)
+- **Exit Code:** 0
+- **Status:** Compiled successfully in 116s (Turbopack, 39 static routes generated)
+
+---
+
+## 6. Architectural Compliance Checklist
+
+- [x] No new roles introduced (base role enum remains exactly 6 roles: `super_admin`, `org_admin`, `school_admin`, `teacher`, `student`, `parent`).
+- [x] No new scopes introduced (scopes remain exactly: `platform`, `organization`, `school`, `department`, `class`, `offering`, `self`).
+- [x] No client-controlled trust (authorization operates purely on server-hydrated `TrustedSecurityContext` and `ResourceTarget`).
+- [x] Zero API route changes.
+- [x] Zero database migration or RLS policy changes.
+- [x] Zero enrollment RPC or execution changes.
+- [x] Zero AI route or client changes.
+- [x] Phase 3A canonical authorization engine mechanics 100% frozen.
+- [x] Phase 3B Cohort 1 API authorization endpoints 100% regression verified.
+
+---
+
+## 7. Findings & Residual Concerns
+
+- **`REC-0010` (Open):** CASS synthetic assessment score generation issue remains open and unaffected by this cohort.
+- **Admissions DELETE (Deferred):** Explicitly preserved outside this cohort.
+- **Exam-Session DELETE (Deferred):** Explicitly preserved outside this cohort.
+- **Communications APIs (Deferred):** Explicitly preserved outside this cohort.
+
+---
+
+## 8. Required Final Status
+
+```text
+IMPLEMENTED — AWAITING SUPERVISORY REVIEW
+```
+
+
 
 
 

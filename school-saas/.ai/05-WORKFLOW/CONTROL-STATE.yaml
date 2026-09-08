@@ -7,31 +7,29 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-0007-PHASE-3C-A
+  id: TASK-0007-PHASE-3C-COHORT-1
   parent_task: TASK-0007
-  status: ARCHITECTURE_SPECIFICATION
-  sub_status: ARCHITECTURE_READY_AWAITING_SUPERVISORY_APPROVAL
-  branch: ai-eos/task-0007-phase-3c-a-permission-architecture
-  base_commit: e4d673e
+  status: IMPLEMENTED_AWAITING_SUPERVISORY_REVIEW
+  branch: ai-eos/task-0007-phase-3c-cohort-1-permission-extension
+  base_commit: 08bb6b6
   deliverables:
-    - .ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-PERMISSION-ARCHITECTURE.md
-    - .ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-API-CHARTER.md
-    - .ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-DB-SECURITY-DESIGN.md
-  proposed_permissions:
-    - admissions.applicants.manage
-    - admissions.applicants.evaluate
-    - admissions.applicants.place
-    - admissions.letters.dispatch
-    - admissions.applicants.enroll
-    - curriculum.lesson_plan.generate
+    - src/lib/auth/permissions-registry.ts
+    - tests/auth/authorization-contract.test.ts
+    - tests/auth/authorization-engine.test.ts
   permission_catalog_count:
     baseline_frozen_phase_3a: 33
-    proposed_additions: 6
+    approved_extensions_phase_3c: 6
     resulting_catalog: 39
-  frozen_files_intact: true
-  application_code_modified: false
+  files_modified:
+    - src/lib/auth/permissions-registry.ts
+    - tests/auth/authorization-contract.test.ts
+    - tests/auth/authorization-engine.test.ts
+    - .ai/05-WORKFLOW/CONTROL-STATE.yaml
+    - .ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md
+  api_routes_modified: false
   database_migrations_modified: false
-  phase_3a_files_modified: false
+  rpc_functions_modified: false
+  rls_policies_modified: false
   open_data_integrity_issues:
     - "REC-0010: CASS synthetic assessment score generation"
   deferred_operations:
@@ -40,18 +38,18 @@ active_task:
     - "Communications APIs (/api/exam-office/communications GET & POST, GAP-3B-01)"
     - "Super-admin leads"
     - "Frontend authorization migration"
-  authorized_at: "2026-09-07"
-  specification_completed_at: "2026-09-07"
+  authorized_at: "2026-09-08"
+  completed_at: "2026-09-08"
 last_completed_task:
+  id: TASK-0007-PHASE-3C-A
+  status: SUPERVISORY_APPROVED
+  commit: 08bb6b6
+  branch: ai-eos/task-0007-phase-3c-a-permission-architecture
+previous_completed_task:
   id: TASK-0007-PHASE-3B
   status: SUPERVISORY_APPROVED
   commit: fa16b8a
   branch: ai-eos/task-0007-phase-3b-api-authorization-integration
-previous_completed_task:
-  id: TASK-0007-PHASE-3A
-  status: SUPERVISORY_APPROVED
-  commit: d38490b
-  branch: ai-eos/task-0007-phase-3a-canonical-authorization-engine
 last_instruction:
   id: TASK-0007-PHASE-3B-SUPERVISORY-APPROVAL
   from: chatgpt
