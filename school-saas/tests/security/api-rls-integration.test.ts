@@ -163,7 +163,10 @@ test('TASK-0006: API + RLS Integration Verification', async (t) => {
     const res = await admissionsGET(req);
     assert.equal(res.status, 403, 'Cross-tenant request must return 403 Forbidden');
     const body = await res.json();
-    assert.equal(body.code, 'TENANT_ACCESS_DENIED');
+    assert.ok(
+      body.code === 'CROSS_TENANT_DENIED' || body.code === 'TENANT_ACCESS_DENIED',
+      `Expected cross-tenant denial code, got: ${body.code}`
+    );
   });
 
   // 3. Unauthorized role -> HTTP 403 Forbidden

@@ -271,4 +271,237 @@ describe('Canonical Authorization Contract — Matrix-Driven Verification', () =
       }
     });
   });
+
+  // --------------------------------------------------------------------------
+  // 4. PHASE 3C COHORT 1: 39-PERMISSION CANONICAL EXTENSION & DEMARCATION
+  // --------------------------------------------------------------------------
+  describe('Group 4 — Phase 3C Cohort 1 Catalog & Demarcation Invariants', () => {
+    const PHASE_3A_PERMISSIONS: CanonicalPermission[] = [
+      'admissions.applicants.view',
+      'admissions.applicants.create',
+      'admissions.applicants.approve',
+      'students.records.view',
+      'students.records.manage',
+      'students.welfare.manage',
+      'attendance.sessions.mark',
+      'attendance.sessions.approve',
+      'attendance.records.view',
+      'curriculum.version.create',
+      'curriculum.version.review',
+      'curriculum.version.approve',
+      'curriculum.version.publish',
+      'curriculum.coverage.log',
+      'exams.sessions.manage',
+      'exams.schedules.manage',
+      'exams.results.enter',
+      'exams.results.moderate',
+      'exams.results.approve',
+      'exams.results.publish',
+      'exams.results.view',
+      'exams.malpractice.manage',
+      'exams.appeals.submit',
+      'exams.appeals.resolve',
+      'exams.cass.export',
+      'finance.invoices.view',
+      'finance.invoices.manage',
+      'finance.waivers.approve',
+      'staff.directory.view',
+      'staff.allocations.manage',
+      'staff.accounts.manage',
+      'platform.tenants.manage',
+      'platform.billing.manage',
+    ];
+
+    const PHASE_3C_NEW_PERMISSIONS: CanonicalPermission[] = [
+      'admissions.applicants.manage',
+      'admissions.applicants.evaluate',
+      'admissions.applicants.place',
+      'admissions.letters.dispatch',
+      'admissions.applicants.enroll',
+      'curriculum.lesson_plan.generate',
+    ];
+
+    test('canonical catalog contains exactly 39 permissions (33 Phase 3A + 6 Phase 3C-A)', () => {
+      assert.equal(
+        CANONICAL_PERMISSIONS.length,
+        39,
+        `Expected exactly 39 canonical permissions, but found ${CANONICAL_PERMISSIONS.length}`
+      );
+      assert.equal(PHASE_3A_PERMISSIONS.length, 33);
+      assert.equal(PHASE_3C_NEW_PERMISSIONS.length, 6);
+
+      // Verify every Phase 3A permission is present
+      for (const p3aPerm of PHASE_3A_PERMISSIONS) {
+        assert.ok(
+          CANONICAL_PERMISSIONS.includes(p3aPerm),
+          `Missing frozen Phase 3A permission: ${p3aPerm}`
+        );
+      }
+
+      // Verify every Phase 3C new permission is present
+      for (const newPerm of PHASE_3C_NEW_PERMISSIONS) {
+        assert.ok(
+          CANONICAL_PERMISSIONS.includes(newPerm),
+          `Missing Phase 3C permission: ${newPerm}`
+        );
+      }
+    });
+
+    test('admissions.applicants.manage, letters.dispatch, applicants.enroll are executive-only (held by super/org/school_admin; denied to teacher/student/parent and all staff assignments)', () => {
+      const executivePerms: CanonicalPermission[] = [
+        'admissions.applicants.manage',
+        'admissions.letters.dispatch',
+        'admissions.applicants.enroll',
+      ];
+
+      // Base roles allowed
+      for (const role of ['super_admin', 'org_admin', 'school_admin'] as BaseRole[]) {
+        const grants = getBaseRoleGrants(role);
+        for (const perm of executivePerms) {
+          assert.ok(
+            grants.some((g) => g.permission === perm),
+            `Administrative role [${role}] MUST hold ${perm}`
+          );
+        }
+      }
+
+      // Base roles denied
+      for (const role of ['teacher', 'student', 'parent'] as BaseRole[]) {
+        const grants = getBaseRoleGrants(role);
+        for (const perm of executivePerms) {
+          assert.equal(
+            grants.some((g) => g.permission === perm),
+            false,
+            `Non-administrative role [${role}] must NEVER hold ${perm}`
+          );
+        }
+      }
+
+      // Staff assignments denied (CRITICAL: exam_officer must NOT receive these)
+      for (const asg of STAFF_ASSIGNMENT_TYPES) {
+        const grants = getAssignmentGrants(asg);
+        for (const perm of executivePerms) {
+          assert.equal(
+            grants.some((g) => g.permission === perm),
+            false,
+            `Staff assignment [${asg}] must NEVER receive ${perm}`
+          );
+        }
+      }
+    });
+
+    test('admissions.applicants.evaluate and admissions.applicants.place are held by exam_officer and executive admins; denied to other staff and unassigned roles', () => {
+      const evalAndPlacePerms: CanonicalPermission[] = [
+        'admissions.applicants.evaluate',
+        'admissions.applicants.place',
+      ];
+
+      // Exam Officer receives both
+      const eoGrants = getAssignmentGrants('exam_officer');
+      for (const perm of evalAndPlacePerms) {
+        assert.ok(
+          eoGrants.some((g) => g.permission === perm && g.scope === 'school'),
+          `exam_officer MUST hold ${perm} at school scope`
+        );
+      }
+
+      // Executive admins receive both
+      for (const role of ['super_admin', 'org_admin', 'school_admin'] as BaseRole[]) {
+        const grants = getBaseRoleGrants(role);
+        for (const perm of evalAndPlacePerms) {
+          assert.ok(
+            grants.some((g) => g.permission === perm),
+            `Admin role [${role}] MUST hold ${perm}`
+          );
+        }
+      }
+
+      // Other staff assignments strictly denied
+      const otherStaffAssignments: StaffAssignmentType[] = [
+        'vice_principal',
+        'hod',
+        'form_master',
+        'subject_teacher',
+        'assistant_teacher',
+      ];
+      for (const asg of otherStaffAssignments) {
+        const grants = getAssignmentGrants(asg);
+        for (const perm of evalAndPlacePerms) {
+          assert.equal(
+            grants.some((g) => g.permission === perm),
+            false,
+            `Staff assignment [${asg}] must NEVER receive ${perm}`
+          );
+        }
+      }
+
+      // Non-admin base roles denied
+      for (const role of ['teacher', 'student', 'parent'] as BaseRole[]) {
+        const grants = getBaseRoleGrants(role);
+        for (const perm of evalAndPlacePerms) {
+          assert.equal(
+            grants.some((g) => g.permission === perm),
+            false,
+            `Base role [${role}] must NEVER receive ${perm}`
+          );
+        }
+      }
+    });
+
+    test('curriculum.lesson_plan.generate is held by subject_teacher (offering), hod (department), and executive admins; denied to base teacher, exam_officer, form_master, vp, student, parent', () => {
+      // subject_teacher holds at offering scope
+      const stGrants = getAssignmentGrants('subject_teacher');
+      assert.ok(
+        stGrants.some(
+          (g) => g.permission === 'curriculum.lesson_plan.generate' && g.scope === 'offering'
+        ),
+        'subject_teacher MUST hold curriculum.lesson_plan.generate at offering scope'
+      );
+
+      // hod holds at department scope
+      const hodGrants = getAssignmentGrants('hod');
+      assert.ok(
+        hodGrants.some(
+          (g) => g.permission === 'curriculum.lesson_plan.generate' && g.scope === 'department'
+        ),
+        'hod MUST hold curriculum.lesson_plan.generate at department scope'
+      );
+
+      // Executive admins hold
+      for (const role of ['super_admin', 'org_admin', 'school_admin'] as BaseRole[]) {
+        const grants = getBaseRoleGrants(role);
+        assert.ok(
+          grants.some((g) => g.permission === 'curriculum.lesson_plan.generate'),
+          `Admin role [${role}] MUST hold curriculum.lesson_plan.generate`
+        );
+      }
+
+      // Denied staff assignments
+      const deniedAssignments: StaffAssignmentType[] = [
+        'exam_officer',
+        'vice_principal',
+        'form_master',
+        'assistant_teacher',
+      ];
+      for (const asg of deniedAssignments) {
+        const grants = getAssignmentGrants(asg);
+        assert.equal(
+          grants.some((g) => g.permission === 'curriculum.lesson_plan.generate'),
+          false,
+          `Staff assignment [${asg}] must NEVER receive curriculum.lesson_plan.generate`
+        );
+      }
+
+      // Denied base roles
+      for (const role of ['teacher', 'student', 'parent'] as BaseRole[]) {
+        const grants = getBaseRoleGrants(role);
+        assert.equal(
+          grants.some((g) => g.permission === 'curriculum.lesson_plan.generate'),
+          false,
+          `Base role [${role}] must NEVER receive curriculum.lesson_plan.generate`
+        );
+      }
+    });
+  });
 });
+

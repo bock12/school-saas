@@ -3015,6 +3015,364 @@ MERGE STATUS: BLOCKED (Awaiting supervisory review & Human Project Owner merge d
 ```
 Gemini has completed implementation, testing, static verification, production build, diff audit, and governance documentation. Execution is now halted for independent supervisory verification.
 
+---
+
+## TASK-0007-PHASE-3C-A — Permission Gap Architecture & Authorization Charter
+
+**Date:** 2026-09-07  
+**Task ID:** TASK-0007-PHASE-3C-A  
+**Stage:** Architecture & Specification Only (No Code / Migration Changes)  
+**Status:** ARCHITECTURE READY — AWAITING SUPERVISORY APPROVAL  
+**Branch:** `ai-eos/task-0007-phase-3c-a-permission-architecture`  
+**Base Commit:** `e4d673e`  
+**Implementer:** Gemini / Antigravity (Implementation Engineer)  
+**Supervisory Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Final Authority:** Human Project Owner  
+
+### 1. Executive Summary & Final Security Corrections Resolution
+
+Following the supervisory review of TASK-0007 Phase 3C-A ("CHANGES REQUESTED — FINAL SECURITY CORRECTION"), the architecture was finalized with complete trust boundary rigor:
+1. **Correction of the `p_actor_id` Trust Model:** Explicitly established that `p_actor_id` is **not identity proof**. It is trusted only when supplied by a server-only execution boundary after cryptographic session authentication and canonical authorization have already established the human actor.
+2. **Complete Unidirectional Trust Boundary:** Formalized the 8-stage pipeline from client session to audit persistence, explicitly prohibiting `client → p_actor_id`, `client → service_role`, `client → enrollment RPC`, and `client → arbitrary actor UUID`.
+3. **Decoupling Transport from Identity:** Enforced the strict distinction between `service_role` (database transport privilege only; never represents the human user), `admissions.applicants.enroll` (business authorization), and `auth.uid()` (human actor identity).
+4. **Server Command Trust Invariant:** The server command schema accepts NO actor ID parameter; actor identity is derived strictly from `auth.uid()`, preventing client-controlled audit forging.
+5. **Multi-Layer Direct RPC Threat Model:** Established that revoking PostgREST `EXECUTE` privileges is only one security layer; full defense-in-depth combines authentication, canonical authorization, trusted resource resolution, and server-only privileged execution.
+6. **Enrollment Idempotency & Database Uniqueness Constraint Prerequisite:** Detailed the full transaction flow with row locking (`FOR UPDATE`), re-reading state, and deterministic returns for already enrolled applicants. Formally identified the addition of `students.applicant_id UUID UNIQUE REFERENCES applicants(id)` as a mandatory implementation prerequisite for defense-in-depth.
+7. **Minimum Enrollment Audit Record:** Formally defined the audit record (`actor_id`, `tenant_id`, `applicant_id`, `result`, `timestamp`), ensuring the client can never select or override the audit actor.
+
+### 2. Architecture Deliverables Produced & Revised
+
+1. **Permission Architecture & Catalog Delta Specification (Final Security Revision):**  
+   `.ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-PERMISSION-ARCHITECTURE.md`
+   - Formalizes org-admin school-scope subtree reach rule.
+   - Documents AI domain ownership justification (Option A canonical: `curriculum.lesson_plan.generate`).
+   - Decomposes admissions into 5 dedicated capabilities: `admissions.applicants.manage`, `evaluate`, `place`, `letters.dispatch`, and `enroll`.
+   - Delivers the final consolidated decision matrix covering all 12 core capabilities.
+   - Preserves permission catalog count: 33 frozen + 6 proposed additions = 39 implementation-target permissions (`delete` deferred).
+
+2. **Operation-Oriented API Charter & Security Specification (Final Security Revision):**  
+   `.ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-API-CHARTER.md`
+   - Pure command-oriented endpoint architecture across all admissions and academic AI operations.
+   - Details letter dispatch rules: state preconditions (`Offer`/`Allocation`), resending policies, provider retries, server-controlled timestamps, and idempotency.
+   - Details complete enrollment lifecycle chain: state preconditions (`stage = 'Offer'`, `status = 'active'`, `docs_verified = true`), concurrency row-locking, and atomic rollback.
+   - Details AI zero side-effect guarantee (zero calls, zero tokens, zero usage logs on failure).
+   - Expands security test contract across Organization Isolation, Enrollment Boundaries, AI Side Effects, and Letter Dispatch.
+
+3. **Database Security Boundary Design & `enroll_applicant` Remediation (Final Security Revision):**  
+   `.ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-DB-SECURITY-DESIGN.md`
+   - Exhaustive 18-point dissection of `public.enroll_applicant`.
+   - Precise 10-point trust boundary specification reconciling service-role transport with human `auth.uid()` actor identity.
+   - Formal direct RPC threat model and multi-layer defense explanation.
+   - Comprehensive 9-point database security model.
+   - Hardened remediation SQL migration specification including `students.applicant_id UUID UNIQUE` constraint prerequisite:
+     - `REVOKE ALL ON FUNCTION public.enroll_applicant FROM PUBLIC, anon, authenticated;`
+     - `GRANT EXECUTE ON FUNCTION public.enroll_applicant TO service_role;`
+     - Enforces caller verification and concurrency locking (`SELECT ... FOR UPDATE`).
+
+### 3. Verification & Invariant Audit
+
+- **Application Files Changed:** `0` (Zero application code modified).
+- **Database Migrations Changed:** `0` (Zero migration files modified).
+- **Phase 3A Files Changed:** `0` (Zero lines changed against `d38490b` / `e4d673e`).
+- **Phase 3B Files Changed:** `0` (Zero lines changed against `fa16b8a` / `e4d673e`).
+- **TypeScript Static Verification (`npx tsc --noEmit`):** `100% PASS (0 errors)`.
+- **Automated Test Suite (`npm test`):** `221 / 221 tests passing across 19 suites`.
+
+### 4. Governance Status
+
+```text
+TASK ID: TASK-0007-PHASE-3C-A
+STATUS: ARCHITECTURE READY — AWAITING SUPERVISORY APPROVAL
+```
+
+---
+
+# TASK-0007 Phase 3C Implementation Cohort 1 — Canonical Authorization Extension Report
+
+**Task:** TASK-0007 Phase 3C Implementation Cohort 1  
+**Status:** IMPLEMENTED — AWAITING SUPERVISORY REVIEW  
+**Implementation Agent:** Gemini / Antigravity  
+**Supervisory Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Final Authority:** Human Project Owner  
+**Date:** 2026-09-08  
+
+---
+
+## 1. Repository State
+
+```text
+branch: ai-eos/task-0007-phase-3c-cohort-1-permission-extension
+base commit: 08bb6b6
+working tree: clean (after commit)
+```
+
+---
+
+## 2. Files Changed
+
+Only the permitted authorization and governance files were modified:
+
+1. `src/lib/auth/permissions-registry.ts` (Canonical catalog and entitlement matrices extended from 33 to 39 permissions)
+2. `tests/auth/authorization-contract.test.ts` (Catalog count invariant and Phase 3C Cohort 1 demarcation tests added)
+3. `tests/auth/authorization-engine.test.ts` (Phase 3C Cohort 1 scope containment, org reach, and negative space unit tests added)
+4. `.ai/05-WORKFLOW/CONTROL-STATE.yaml` (Governance active task update)
+5. `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` (This implementation report)
+
+**Explicitly Verified Not Modified:**
+- ZERO API routes modified (`/api/admissions`, `/api/academics/ai/lesson-plan`, etc. untouched)
+- ZERO database migrations modified (no SQL changes)
+- ZERO database RPC functions modified (`enroll_applicant` untouched)
+- ZERO PostgreSQL RLS policies modified
+- ZERO frontend authorization files modified
+- ZERO resource resolvers modified
+
+---
+
+## 3. Permission Catalog Confirmation
+
+```text
+Frozen Phase 3A permissions:  33
+Phase 3C-A approved additions: 6
+---------------------------------
+Total canonical permissions:  39
+```
+
+Empirically verified via `npx tsx -e "import { CANONICAL_PERMISSIONS } from './src/lib/auth/permissions-registry'; assert.equal(CANONICAL_PERMISSIONS.length, 39);"`:
+1. `admissions.applicants.manage` (Scope: `school`)
+2. `admissions.applicants.evaluate` (Scope: `school`)
+3. `admissions.applicants.place` (Scope: `school`)
+4. `admissions.letters.dispatch` (Scope: `school`)
+5. `admissions.applicants.enroll` (Scope: `school`)
+6. `curriculum.lesson_plan.generate` (Scope: `offering`)
+
+---
+
+## 4. Matrix Verification Summary
+
+| Permission | Canonical Scope | Base Roles Allowed | Functional Assignments Allowed | Negative Space Enforced |
+|---|---|---|---|---|
+| `admissions.applicants.manage` | `school` | `super_admin`, `org_admin`, `school_admin` | None | Denied to `teacher`, `student`, `parent`, and all staff assignments (including `exam_officer`) |
+| `admissions.applicants.evaluate` | `school` | `super_admin`, `org_admin`, `school_admin` | `exam_officer` (`school`) | Denied to base `teacher`, `student`, `parent`, `hod`, `form_master`, `subject_teacher`, `asst_teacher` |
+| `admissions.applicants.place` | `school` | `super_admin`, `org_admin`, `school_admin` | `exam_officer` (`school`) | Denied to base `teacher`, `student`, `parent`, `hod`, `form_master`, `subject_teacher`, `asst_teacher` |
+| `admissions.letters.dispatch` | `school` | `super_admin`, `org_admin`, `school_admin` | None | Denied to `teacher`, `student`, `parent`, and all staff assignments (including `exam_officer`) |
+| `admissions.applicants.enroll` | `school` | `super_admin`, `org_admin`, `school_admin` | None | Denied to `teacher`, `student`, `parent`, and all staff assignments (including `exam_officer`) |
+| `curriculum.lesson_plan.generate` | `offering` | `super_admin`, `org_admin`, `school_admin` | `subject_teacher` (`offering`), `hod` (`department`) | Denied to base `teacher`, `student`, `parent`, `exam_officer`, `vp`, `form_master`, `asst_teacher` |
+
+### Scope & Reach Verification:
+- **`org_admin` Reach:** Evaluated against child schools in server-resolved subtree (`organizationSubtenantIds`). Child school in subtree yields `ALLOW`. Foreign school yields `CROSS_TENANT_DENIED` (`403`).
+- **`hod` Department Scope:** Evaluated against assigned `departmentId`. Target offering in assigned department yields `ALLOW`. Target offering in foreign department yields `OUT_OF_SCOPE` (`403`).
+- **`subject_teacher` Offering Scope:** Evaluated against assigned `subjectOfferingId`. Target assigned offering yields `ALLOW`. Target unassigned offering yields `OUT_OF_SCOPE` (`403`).
+- **Separation of Duties:** `exam_officer` receives ONLY `evaluate` and `place`; strictly denied `manage`, `letters.dispatch`, and `enroll`.
+
+---
+
+## 5. Validation Results
+
+### Test Suite (`npm test`)
+- **Total Tests:** 231 (10 new unit & contract tests added, 221 existing tests preserved)
+- **Suites:** 21
+- **Pass:** 231
+- **Fail:** 0
+- **Duration:** 76.0s
+
+### TypeScript Typecheck (`npx tsc --noEmit`)
+- **Exit Code:** 0 (clean, zero errors)
+
+### Next.js Production Build (`npm run build`)
+- **Exit Code:** 0
+- **Status:** Compiled successfully in 116s (Turbopack, 39 static routes generated)
+
+---
+
+## 6. Architectural Compliance Checklist
+
+- [x] No new roles introduced (base role enum remains exactly 6 roles: `super_admin`, `org_admin`, `school_admin`, `teacher`, `student`, `parent`).
+- [x] No new scopes introduced (scopes remain exactly: `platform`, `organization`, `school`, `department`, `class`, `offering`, `self`).
+- [x] No client-controlled trust (authorization operates purely on server-hydrated `TrustedSecurityContext` and `ResourceTarget`).
+- [x] Zero API route changes.
+- [x] Zero database migration or RLS policy changes.
+- [x] Zero enrollment RPC or execution changes.
+- [x] Zero AI route or client changes.
+- [x] Phase 3A canonical authorization engine mechanics 100% frozen.
+- [x] Phase 3B Cohort 1 API authorization endpoints 100% regression verified.
+
+---
+
+## 7. Findings & Residual Concerns
+
+- **`REC-0010` (Open):** CASS synthetic assessment score generation issue remains open and unaffected by this cohort.
+- **Admissions DELETE (Deferred):** Explicitly preserved outside this cohort.
+- **Exam-Session DELETE (Deferred):** Explicitly preserved outside this cohort.
+- **Communications APIs (Deferred):** Explicitly preserved outside this cohort.
+
+---
+
+## 8. Required Final Status
+
+```text
+IMPLEMENTED — AWAITING SUPERVISORY REVIEW
+```
+
+---
+
+## TASK-0007 Phase 3C Cohort 2 — Admissions API Authorization Integration
+**Date:** 2026-09-08  
+**Status:** IMPLEMENTED — AWAITING SUPERVISORY REVIEW  
+**Implementer:** Gemini / Antigravity (Implementation Engineer & Technical Contributor)  
+**Supervisor / Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Final Authority:** Human Project Owner  
+
+### 1. Executive Summary
+In accordance with the supervisory directive for TASK-0007 Phase 3C Cohort 2, Gemini has executed the architectural transition of the Admissions API from legacy coarse role checks to command-oriented, canonical 39-permission authorization. Dedicated command endpoints were established for all lifecycle operations, generic PATCH was strictly narrowed to demographic maintenance with explicit 400 rejection of lifecycle mutations, authoritative applicant resource resolution was integrated, an audit history trail was wired into `public.admission_history`, and the direct `enroll_applicant` PostgREST RPC exposure was documented as a production-blocking dependency for Phase 3C Cohort 4.
+
+### 2. Branch & Commit Metadata
+- **Branch:** `ai-eos/task-0007-phase-3c-cohort-2-admissions-api`
+- **Base Commit:** `ffc1064` (TASK-0007 Phase 3C Cohort 1 implementation)
+- **Status:** `IMPLEMENTED — AWAITING SUPERVISORY REVIEW`
+
+### 3. Exact Changed & Created Files
+```text
+Modified files (7):
+- .ai/05-WORKFLOW/CONTROL-STATE.yaml
+- .ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md
+- package.json
+- src/app/api/admissions/route.ts
+- src/lib/auth/api-guard.ts
+- src/lib/auth/resource-resolver.ts
+- tests/security/api-rls-integration.test.ts
+- tests/security/privileged-api-containment.test.ts
+
+Created files (9):
+- src/lib/admissions/admission-history.ts
+- src/lib/admissions/applicant-patch.ts
+- src/app/api/admissions/[id]/route.ts
+- src/app/api/admissions/[id]/evaluate/route.ts
+- src/app/api/admissions/[id]/place/route.ts
+- src/app/api/admissions/[id]/approve/route.ts
+- src/app/api/admissions/[id]/reject/route.ts
+- src/app/api/admissions/[id]/letter/route.ts
+- src/app/api/admissions/[id]/enroll/route.ts
+- tests/auth/admissions-canonical-api.test.ts
+```
+
+### 4. Endpoint → Canonical Permission Matrix
+
+| Endpoint | Method | Canonical Permission | Allowed Roles / Reach | Negative Space (Explicitly Denied) |
+|---|---|---|---|---|
+| `/api/admissions` | `GET` | `admissions.applicants.view` | `school_admin`, `org_admin` (org subtree), `exam_officer` (functional assignment), `super_admin` | `teacher` alone, cross-tenant users |
+| `/api/admissions` | `POST` | `admissions.applicants.create` | `school_admin`, `org_admin` (org subtree), `super_admin` | `teacher`, `exam_officer`, cross-tenant users |
+| `/api/admissions` | `PATCH` | `admissions.applicants.manage` | `school_admin`, `org_admin` (org subtree), `super_admin` | `exam_officer`, `teacher`, cross-tenant users, lifecycle field mutations |
+| `/api/admissions/[id]` | `PATCH` | `admissions.applicants.manage` | `school_admin`, `org_admin` (org subtree), `super_admin` | `exam_officer`, `teacher`, cross-tenant users, lifecycle field mutations |
+| `/api/admissions` | `DELETE` | `DEFERRED_ADMIN_DELETE` | `school_admin`, `org_admin`, `super_admin` | `exam_officer`, `teacher` (deferred per charter) |
+| `/api/admissions/[id]/evaluate` | `POST` | `admissions.applicants.evaluate` | `exam_officer` (assignment), `school_admin`, `org_admin`, `super_admin` | `teacher` alone, foreign applicants |
+| `/api/admissions/[id]/place` | `POST` | `admissions.applicants.place` | `exam_officer` (assignment), `school_admin`, `org_admin`, `super_admin` | `teacher` alone, foreign applicants |
+| `/api/admissions/[id]/approve` | `POST` | `admissions.applicants.approve` | `school_admin`, `org_admin` (subtree), `super_admin` | `exam_officer` (DENIED), `teacher`, foreign school |
+| `/api/admissions/[id]/reject` | `POST` | `admissions.applicants.approve` | `school_admin`, `org_admin` (subtree), `super_admin` | `exam_officer` (DENIED), `teacher`, foreign school |
+| `/api/admissions/[id]/letter` | `POST` | `admissions.letters.dispatch` | `school_admin`, `org_admin` (subtree), `super_admin` | `exam_officer` (DENIED), `teacher`, foreign school |
+| `/api/admissions/[id]/enroll` | `POST` | `admissions.applicants.enroll` | `school_admin`, `org_admin` (subtree), `super_admin` | `exam_officer` (DENIED), `teacher`, foreign school |
+
+### 5. Resource-Resolution Design
+- **Resolver function:** `resolveTrustedApplicantTarget(supabase, applicantId)` in `src/lib/auth/resource-resolver.ts`.
+- **Architectural separation:**
+  - Resource Resolver reports database truth: `{ tenantId, stage, applicantId, status, [TRUSTED_TARGET_BRAND]: true }`.
+  - Authorization Engine evaluates: permission, actor roles, functional assignments, tenant reach (`organizationSubtenantIds` for `org_admin`), producing `ALLOW` or `DENY` (`CROSS_TENANT_DENIED`, `INSUFFICIENT_ROLE`).
+  - Command Validator evaluates lifecycle state: legal stage transitions and status conditions.
+  - Mutation: executes via lazy `adminClient` instantiated strictly after authorization passes.
+- **Fail-closed guarantees:** Missing applicant throws 404 `ResourceNotFoundError`; malformed ID throws 400 `ResourceResolutionError`; cross-tenant target yields 403 `CROSS_TENANT_DENIED`.
+
+### 6. PATCH Demographic Allowlist & Lifecycle Rejection
+- **Immutable Identifier Rejection:** Attempts to mutate `id`, `tenant_id`, `tenantId`, or `tenantSlug` return 400 `INVALID_REQUEST`.
+- **Lifecycle & Command Mutation Rejection:** Attempts to mutate any lifecycle or command field via generic PATCH are strictly rejected with 400 `INVALID_REQUEST` and the message:
+  `Mutation of lifecycle field '${field}' is prohibited on PATCH. Use dedicated command endpoints.`
+  Rejected fields include: `stage`, `status`, `targetStream`, `target_stream`, `stream`, `interviewScore`, `interview_score`, `assessmentScore`, `assessment_score`, `docsVerified`, `docs_verified`, `admissionLetterSent`, `admission_letter_sent`, `admissionLetterSentAt`, `admission_letter_sent_at`, `streamAutoPlaced`, `stream_auto_placed`, `streamPlacedAt`, `stream_placed_at`, `streamPlacedBy`, `stream_placed_by`, `rejectionReason`, `rejection_reason`, `enrollmentDate`, `enrollment_date`, `studentId`, `student_id`.
+- **Allowed Demographic Fields:** `firstName`/`first_name`, `lastName`/`last_name`, `dob`, `gender`, `bloodGroup`/`blood_group`, `nin`, `email`, `phone`, `address`, `city`, `parentName`/`parent_name`, `parentPhone`/`parent_phone`, `parentEmail`/`parent_email`, `parentRelation`/`parent_relation`, `previousSchool`/`previous_school`, `targetGrade`/`target_grade`, `nationalIndexNo`/`national_index_no`.
+
+### 7. Lifecycle Validations
+- **Evaluate:** Requires applicant `status !== 'rejected'` and `stage IN ('Application', 'Assessment', 'Interview')`.
+- **Place:** Requires active status; sets `target_stream`, clears `stream_auto_placed = false`, records `stream_placed_by` with server-derived actor ID.
+- **Approve:** Requires active status and `stage IN ('Application', 'Assessment', 'Interview')`; advances stage to `'Offer'`, sets `docs_verified = true`.
+- **Reject:** Requires non-empty `rejectionReason`, active status, and `stage !== 'Allocation'`; sets `status = 'rejected'`.
+- **Letter:** Requires active status and `stage IN ('Offer', 'Allocation')`; marks `admission_letter_sent = true`, `admission_letter_sent_at = now`.
+- **Enroll:** Requires active status and `stage === 'Offer'`; invokes RPC passing server-derived actor ID.
+
+### 8. Audit History Trail
+- Implemented via `recordAdmissionHistory` in `src/lib/admissions/admission-history.ts`.
+- Every command inserts an authoritative entry into `public.admission_history`:
+  - `tenant_id`: authoritative institution ID
+  - `applicant_id`: authoritative applicant ID
+  - `from_stage`: previous lifecycle stage
+  - `to_stage`: new lifecycle stage
+  - `comment`: descriptive operation audit log
+  - `created_by`: server-verified actor ID (`auth.user.id`)
+  - `created_at`: authoritative timestamp
+
+### 9. Enrollment RPC Residual Security Risk & Cohort 4 Blocker
+- **API Boundary Protection:** `POST /api/admissions/[id]/enroll` establishes complete application-layer authorization, verifies `stage === 'Offer'`, and derives `p_admin_id` from the authenticated session.
+- **Database Boundary Exposure (Documented Residual Risk):**
+  `public.enroll_applicant` in `017_enroll_applicant_rpc.sql` remains defined with `SECURITY DEFINER` and without `REVOKE EXECUTE FROM public, authenticated`. An authenticated user can bypass the API layer and call the RPC directly via PostgREST.
+- **Production Blocking Dependency:**
+  Production authorization of enrollment remains **BLOCKED** until Phase 3C Cohort 4 deploys database migration `048_admissions_enrollment_security.sql` to revoke execute from authenticated clients and restrict execution strictly to the server execution boundary.
+
+### 10. Verification Results
+- **Automated Tests (`npm test`):**
+  - Total Tests: 265
+  - Test Suites: 21
+  - Pass: 265
+  - Fail: 0
+  - Duration: 172.0s
+  - Includes 33 comprehensive route-level and unit tests in `tests/auth/admissions-canonical-api.test.ts` (expanded from 26 with explicit negative-space mutation containment, cross-tenant coverage across all 6 commands, and exam score rejection).
+- **TypeScript Compilation (`npx tsc --noEmit`):**
+  - Exit Code: 0 (clean, zero errors)
+- **Production Build (`npm run build`):**
+  - Exit Code: 0 (compiled and optimized successfully with Turbopack, dynamic endpoints generated for all 6 command routes and dynamic PATCH route)
+- **Working Tree:** Clean.
+
+### 11. Supervisory Reverification & Substantiation Addendum
+In response to supervisory review (`CHANGES REQUESTED — NOT YET APPROVED FOR MERGE`), the implementation was substantiated and reverified across all 10 supervisory items:
+
+1. **Actual Route-Handler Execution in Tests:**
+   Tests in `tests/auth/admissions-canonical-api.test.ts` import the actual Next.js route handlers (`evaluatePOST`, `placePOST`, `approvePOST`, `rejectPOST`, `letterPOST`, `enrollPOST`, `admissionsPATCH`, `admissionsIdPATCH`). Every test constructs a real `NextRequest` and executes the handler end-to-end through the complete pipeline.
+2. **Strict Pipeline Ordering & Lazy Privileged Client:**
+   Every handler strictly enforces:
+   `request -> authenticate -> trusted context -> resolveTrustedApplicantTarget -> canonical permission evaluation -> lifecycle/input validation -> lazy adminClient mutation -> recordAdmissionHistory`.
+   No privileged client is created or executed before authorization and lifecycle validation succeed.
+3. **`admission_history` Schema & Failure Semantics:**
+   `src/lib/admissions/admission-history.ts` exactly aligns with `015_admission_applicants.sql` schema (`tenant_id`, `applicant_id`, `from_stage`, `to_stage`, `comment`, `created_by`, `created_at`). Mutation happens *before* history insertion: if mutation fails, an exception is thrown and `recordAdmissionHistory` is never reached, guaranteeing that no misleading success record can ever exist.
+4. **Lifecycle Semantics Alignment:**
+   Commands faithfully mirror admissions domain stages (`Application` -> `Assessment` -> `Interview` -> `Offer` -> `Allocation`). Added lifecycle guard on `place` route preventing stream modification on already allocated students. `approve` validates pre-offer stage and advances to `Offer`. `enroll` strictly requires `Offer` stage.
+5. **PATCH Allowlist Tripartite Classification:**
+   `src/lib/admissions/applicant-patch.ts` explicitly classifies fields into:
+   - *Record Maintenance:* General demographics, contact info, and guardian details.
+   - *Official / National Identity Data:* `nin` (National Civil ID) and `nationalIndexNo` / `national_index_no` (WAEC exam candidate index number). Allowed on PATCH to rectify clerical typos, but distinguished from routine demographics.
+   - *Workflow & Evaluation State:* Prohibited on PATCH (`stage`, `status`, `target_stream`, `npse_aggregate`, `bece_aggregate`, `interview_score`, `assessment_score`, `docs_verified`, etc.).
+6. **Cross-Tenant Protection Across All Commands:**
+   Every command endpoint (`evaluate`, `place`, `approve`, `reject`, `letter`, `enroll`, and `PATCH`) possesses dedicated cross-tenant negative test cases verifying `403 CROSS_TENANT_DENIED`.
+7. **Negative-Path Mutation Containment:**
+   All negative-path tests across the suite explicitly assert `env.getAdminQueries().length === 0` and `env.getRpcCalls().length === 0`, proving that unauthorized callers can never reach privileged mutation.
+8. **Documented Residual Enrollment DB Risk (Cohort 4 Blocker):**
+   Explicitly recorded in route code comments, test assertions (`CMD-ENROLL-04`), and governance artifacts that `public.enroll_applicant` remains directly callable by authenticated users at the database level. Production authorization of enrollment remains **BLOCKED** until Cohort 4 deploys `048_admissions_enrollment_security.sql`.
+9. **Zero Changes Outside Cohort 2 Scope:**
+   No database migrations, RLS policies, or Phase 3A frozen files were modified.
+10. **Evidence & Quality Gates:**
+    265/265 tests PASS (21 suites, 0 failures), `tsc --noEmit` clean, production build clean.
+
+### 12. Supervisory Verdict & Final Merge Gate
+```text
+SUPERVISORY VERDICT: ✅ APPROVED — MERGE AUTHORIZED
+Implementation Commit: 8df0775
+Branch: ai-eos/task-0007-phase-3c-cohort-2-admissions-api
+Cohort 2 Merge: AUTHORIZED (Approved to enter PR/merge gate; no manual merge outside PR process)
+Enrollment Production Authorization: BLOCKED (Production blocker until Cohort 4 deploys 048_admissions_enrollment_security.sql)
+Production Release: NOT AUTHORIZED
+Next Milestone: Phase 3C Cohort 4 — Enrollment RPC Security Remediation
+```
+
+
+
+
+
+
+
 
 
 

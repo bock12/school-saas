@@ -937,4 +937,244 @@ describe('Canonical Authorization Engine — Core Unit Tests', () => {
       );
     });
   });
+
+  // --------------------------------------------------------------------------
+  // 11. PHASE 3C COHORT 1: SCOPE, REACH & EXECUTION INVARIANTS
+  // --------------------------------------------------------------------------
+  describe('Group 11 — Phase 3C Cohort 1 Execution & Scope Invariants', () => {
+    test('curriculum.lesson_plan.generate: subject teacher allowed on assigned offering, denied on unassigned offering', () => {
+      const teacherCtx = createTestSecurityContext({
+        actorId: 'usr-sub-teacher-1',
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [
+          {
+            id: 'asg-st-1',
+            assignmentType: 'subject_teacher',
+            tenantId: 'ten-school-1',
+            academicYearId: 'ay-2026',
+            subjectOfferingId: 'off-math-101',
+            status: 'active',
+            isActive: true,
+            effectiveFrom: '2026-09-01',
+          },
+        ],
+      });
+
+      // Target assigned offering -> ALLOW
+      const assignedTarget: ResourceTarget = {
+        tenantId: 'ten-school-1',
+        subjectOfferingId: 'off-math-101',
+      };
+      const allowedDecision = evaluateAuthorization(
+        teacherCtx,
+        'curriculum.lesson_plan.generate',
+        assignedTarget
+      );
+      assert.equal(allowedDecision.allowed, true);
+      assert.equal(allowedDecision.decision, 'ALLOW');
+      assert.equal(allowedDecision.code, 'AUTHORIZED');
+
+      // Target foreign offering -> DENY (OUT_OF_SCOPE)
+      const foreignOfferingTarget: ResourceTarget = {
+        tenantId: 'ten-school-1',
+        subjectOfferingId: 'off-history-202',
+      };
+      const deniedDecision = evaluateAuthorization(
+        teacherCtx,
+        'curriculum.lesson_plan.generate',
+        foreignOfferingTarget
+      );
+      assert.equal(deniedDecision.allowed, false);
+      assert.equal(deniedDecision.decision, 'DENY');
+      assert.equal(deniedDecision.code, 'OUT_OF_SCOPE');
+    });
+
+    test('curriculum.lesson_plan.generate: HOD allowed on department offerings, denied on foreign departments', () => {
+      const hodCtx = createTestSecurityContext({
+        actorId: 'usr-hod-math',
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [
+          {
+            id: 'asg-hod-math',
+            assignmentType: 'hod',
+            tenantId: 'ten-school-1',
+            academicYearId: 'ay-2026',
+            departmentId: 'dept-sciences',
+            status: 'active',
+            isActive: true,
+            effectiveFrom: '2026-09-01',
+          },
+        ],
+      });
+
+      // Target in assigned department -> ALLOW
+      const deptTarget: ResourceTarget = {
+        tenantId: 'ten-school-1',
+        departmentId: 'dept-sciences',
+        subjectOfferingId: 'off-chem-101',
+      };
+      const allowedDecision = evaluateAuthorization(
+        hodCtx,
+        'curriculum.lesson_plan.generate',
+        deptTarget
+      );
+      assert.equal(allowedDecision.allowed, true);
+      assert.equal(allowedDecision.decision, 'ALLOW');
+
+      // Target in foreign department -> DENY (OUT_OF_SCOPE)
+      const foreignDeptTarget: ResourceTarget = {
+        tenantId: 'ten-school-1',
+        departmentId: 'dept-humanities',
+        subjectOfferingId: 'off-history-101',
+      };
+      const deniedDecision = evaluateAuthorization(
+        hodCtx,
+        'curriculum.lesson_plan.generate',
+        foreignDeptTarget
+      );
+      assert.equal(deniedDecision.allowed, false);
+      assert.equal(deniedDecision.decision, 'DENY');
+      assert.equal(deniedDecision.code, 'OUT_OF_SCOPE');
+    });
+
+    test('curriculum.lesson_plan.generate: base teacher alone is denied', () => {
+      const baseTeacherCtx = createTestSecurityContext({
+        actorId: 'usr-teacher-unassigned',
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [],
+      });
+      const target: ResourceTarget = {
+        tenantId: 'ten-school-1',
+        subjectOfferingId: 'off-math-101',
+      };
+      const decision = evaluateAuthorization(
+        baseTeacherCtx,
+        'curriculum.lesson_plan.generate',
+        target
+      );
+      assert.equal(decision.allowed, false);
+      assert.equal(decision.code, 'PERMISSION_NOT_GRANTED');
+    });
+
+    test('admissions permissions: org_admin restricted to child school subtree, denied on foreign schools', () => {
+      const orgAdminCtx = createTestSecurityContext({
+        actorId: 'usr-org-admin',
+        baseRole: 'org_admin',
+        tenantId: 'org-network-1',
+        organizationSubtenantIds: ['school-child-a', 'school-child-b'],
+      });
+
+      const schoolScopedPerms = [
+        'admissions.applicants.manage',
+        'admissions.applicants.evaluate',
+        'admissions.applicants.place',
+        'admissions.letters.dispatch',
+        'admissions.applicants.enroll',
+      ];
+
+      for (const perm of schoolScopedPerms) {
+        // Child school in subtree -> ALLOW
+        const childTarget: ResourceTarget = { tenantId: 'school-child-a' };
+        const allowedDecision = evaluateAuthorization(orgAdminCtx, perm, childTarget);
+        assert.equal(
+          allowedDecision.allowed,
+          true,
+          `org_admin MUST be allowed ${perm} in child school`
+        );
+
+        // Foreign school not in subtree -> DENY (CROSS_TENANT_DENIED)
+        const foreignTarget: ResourceTarget = { tenantId: 'school-foreign-x' };
+        const deniedDecision = evaluateAuthorization(orgAdminCtx, perm, foreignTarget);
+        assert.equal(
+          deniedDecision.allowed,
+          false,
+          `org_admin MUST be denied ${perm} in foreign school`
+        );
+        assert.equal(deniedDecision.code, 'CROSS_TENANT_DENIED');
+      }
+    });
+
+    test('admissions permissions: exam_officer allowed evaluate and place; denied manage, letters.dispatch, enroll', () => {
+      const eoCtx = createTestSecurityContext({
+        actorId: 'usr-exam-officer',
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [
+          {
+            id: 'asg-eo-1',
+            assignmentType: 'exam_officer',
+            tenantId: 'ten-school-1',
+            academicYearId: 'ay-2026',
+            status: 'active',
+            isActive: true,
+            effectiveFrom: '2026-09-01',
+          },
+        ],
+      });
+
+      const target: ResourceTarget = { tenantId: 'ten-school-1' };
+
+      // evaluate -> ALLOW
+      const evalDecision = evaluateAuthorization(eoCtx, 'admissions.applicants.evaluate', target);
+      assert.equal(evalDecision.allowed, true);
+      assert.equal(evalDecision.decision, 'ALLOW');
+
+      // place -> ALLOW
+      const placeDecision = evaluateAuthorization(eoCtx, 'admissions.applicants.place', target);
+      assert.equal(placeDecision.allowed, true);
+      assert.equal(placeDecision.decision, 'ALLOW');
+
+      // manage -> DENY
+      const manageDecision = evaluateAuthorization(eoCtx, 'admissions.applicants.manage', target);
+      assert.equal(manageDecision.allowed, false);
+      assert.equal(manageDecision.code, 'PERMISSION_NOT_GRANTED');
+
+      // letters.dispatch -> DENY
+      const dispatchDecision = evaluateAuthorization(eoCtx, 'admissions.letters.dispatch', target);
+      assert.equal(dispatchDecision.allowed, false);
+      assert.equal(dispatchDecision.code, 'PERMISSION_NOT_GRANTED');
+
+      // enroll -> DENY
+      const enrollDecision = evaluateAuthorization(eoCtx, 'admissions.applicants.enroll', target);
+      assert.equal(enrollDecision.allowed, false);
+      assert.equal(enrollDecision.code, 'PERMISSION_NOT_GRANTED');
+    });
+
+    test('admissions permissions: school_admin allowed on own school, denied cross-tenant', () => {
+      const schoolAdminCtx = createTestSecurityContext({
+        actorId: 'usr-school-admin',
+        baseRole: 'school_admin',
+        tenantId: 'ten-school-1',
+      });
+
+      const ownTarget: ResourceTarget = { tenantId: 'ten-school-1' };
+      const foreignTarget: ResourceTarget = { tenantId: 'ten-school-2' };
+
+      const permissionsToTest = [
+        'admissions.applicants.manage',
+        'admissions.applicants.evaluate',
+        'admissions.applicants.place',
+        'admissions.letters.dispatch',
+        'admissions.applicants.enroll',
+        'curriculum.lesson_plan.generate',
+      ];
+
+      for (const perm of permissionsToTest) {
+        assert.equal(
+          can(schoolAdminCtx, perm, ownTarget),
+          true,
+          `school_admin MUST be allowed ${perm} in own school`
+        );
+        assert.equal(
+          can(schoolAdminCtx, perm, foreignTarget),
+          false,
+          `school_admin MUST be denied ${perm} in foreign school`
+        );
+      }
+    });
+  });
 });
+
