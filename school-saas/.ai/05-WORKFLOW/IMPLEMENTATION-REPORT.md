@@ -3213,6 +3213,126 @@ Empirically verified via `npx tsx -e "import { CANONICAL_PERMISSIONS } from './s
 IMPLEMENTED — AWAITING SUPERVISORY REVIEW
 ```
 
+---
+
+## TASK-0007 Phase 3C Cohort 2 — Admissions API Authorization Integration
+**Date:** 2026-09-08  
+**Status:** IMPLEMENTED — AWAITING SUPERVISORY REVIEW  
+**Implementer:** Gemini / Antigravity (Implementation Engineer & Technical Contributor)  
+**Supervisor / Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
+**Final Authority:** Human Project Owner  
+
+### 1. Executive Summary
+In accordance with the supervisory directive for TASK-0007 Phase 3C Cohort 2, Gemini has executed the architectural transition of the Admissions API from legacy coarse role checks to command-oriented, canonical 39-permission authorization. Dedicated command endpoints were established for all lifecycle operations, generic PATCH was strictly narrowed to demographic maintenance with explicit 400 rejection of lifecycle mutations, authoritative applicant resource resolution was integrated, an audit history trail was wired into `public.admission_history`, and the direct `enroll_applicant` PostgREST RPC exposure was documented as a production-blocking dependency for Phase 3C Cohort 4.
+
+### 2. Branch & Commit Metadata
+- **Branch:** `ai-eos/task-0007-phase-3c-cohort-2-admissions-api`
+- **Base Commit:** `ffc1064` (TASK-0007 Phase 3C Cohort 1 implementation)
+- **Status:** `IMPLEMENTED — AWAITING SUPERVISORY REVIEW`
+
+### 3. Exact Changed & Created Files
+```text
+Modified files (7):
+- .ai/05-WORKFLOW/CONTROL-STATE.yaml
+- .ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md
+- package.json
+- src/app/api/admissions/route.ts
+- src/lib/auth/api-guard.ts
+- src/lib/auth/resource-resolver.ts
+- tests/security/api-rls-integration.test.ts
+- tests/security/privileged-api-containment.test.ts
+
+Created files (9):
+- src/lib/admissions/admission-history.ts
+- src/lib/admissions/applicant-patch.ts
+- src/app/api/admissions/[id]/route.ts
+- src/app/api/admissions/[id]/evaluate/route.ts
+- src/app/api/admissions/[id]/place/route.ts
+- src/app/api/admissions/[id]/approve/route.ts
+- src/app/api/admissions/[id]/reject/route.ts
+- src/app/api/admissions/[id]/letter/route.ts
+- src/app/api/admissions/[id]/enroll/route.ts
+- tests/auth/admissions-canonical-api.test.ts
+```
+
+### 4. Endpoint → Canonical Permission Matrix
+
+| Endpoint | Method | Canonical Permission | Allowed Roles / Reach | Negative Space (Explicitly Denied) |
+|---|---|---|---|---|
+| `/api/admissions` | `GET` | `admissions.applicants.view` | `school_admin`, `org_admin` (org subtree), `exam_officer` (functional assignment), `super_admin` | `teacher` alone, cross-tenant users |
+| `/api/admissions` | `POST` | `admissions.applicants.create` | `school_admin`, `org_admin` (org subtree), `super_admin` | `teacher`, `exam_officer`, cross-tenant users |
+| `/api/admissions` | `PATCH` | `admissions.applicants.manage` | `school_admin`, `org_admin` (org subtree), `super_admin` | `exam_officer`, `teacher`, cross-tenant users, lifecycle field mutations |
+| `/api/admissions/[id]` | `PATCH` | `admissions.applicants.manage` | `school_admin`, `org_admin` (org subtree), `super_admin` | `exam_officer`, `teacher`, cross-tenant users, lifecycle field mutations |
+| `/api/admissions` | `DELETE` | `DEFERRED_ADMIN_DELETE` | `school_admin`, `org_admin`, `super_admin` | `exam_officer`, `teacher` (deferred per charter) |
+| `/api/admissions/[id]/evaluate` | `POST` | `admissions.applicants.evaluate` | `exam_officer` (assignment), `school_admin`, `org_admin`, `super_admin` | `teacher` alone, foreign applicants |
+| `/api/admissions/[id]/place` | `POST` | `admissions.applicants.place` | `exam_officer` (assignment), `school_admin`, `org_admin`, `super_admin` | `teacher` alone, foreign applicants |
+| `/api/admissions/[id]/approve` | `POST` | `admissions.applicants.approve` | `school_admin`, `org_admin` (subtree), `super_admin` | `exam_officer` (DENIED), `teacher`, foreign school |
+| `/api/admissions/[id]/reject` | `POST` | `admissions.applicants.approve` | `school_admin`, `org_admin` (subtree), `super_admin` | `exam_officer` (DENIED), `teacher`, foreign school |
+| `/api/admissions/[id]/letter` | `POST` | `admissions.letters.dispatch` | `school_admin`, `org_admin` (subtree), `super_admin` | `exam_officer` (DENIED), `teacher`, foreign school |
+| `/api/admissions/[id]/enroll` | `POST` | `admissions.applicants.enroll` | `school_admin`, `org_admin` (subtree), `super_admin` | `exam_officer` (DENIED), `teacher`, foreign school |
+
+### 5. Resource-Resolution Design
+- **Resolver function:** `resolveTrustedApplicantTarget(supabase, applicantId)` in `src/lib/auth/resource-resolver.ts`.
+- **Architectural separation:**
+  - Resource Resolver reports database truth: `{ tenantId, stage, applicantId, status, [TRUSTED_TARGET_BRAND]: true }`.
+  - Authorization Engine evaluates: permission, actor roles, functional assignments, tenant reach (`organizationSubtenantIds` for `org_admin`), producing `ALLOW` or `DENY` (`CROSS_TENANT_DENIED`, `INSUFFICIENT_ROLE`).
+  - Command Validator evaluates lifecycle state: legal stage transitions and status conditions.
+  - Mutation: executes via lazy `adminClient` instantiated strictly after authorization passes.
+- **Fail-closed guarantees:** Missing applicant throws 404 `ResourceNotFoundError`; malformed ID throws 400 `ResourceResolutionError`; cross-tenant target yields 403 `CROSS_TENANT_DENIED`.
+
+### 6. PATCH Demographic Allowlist & Lifecycle Rejection
+- **Immutable Identifier Rejection:** Attempts to mutate `id`, `tenant_id`, `tenantId`, or `tenantSlug` return 400 `INVALID_REQUEST`.
+- **Lifecycle & Command Mutation Rejection:** Attempts to mutate any lifecycle or command field via generic PATCH are strictly rejected with 400 `INVALID_REQUEST` and the message:
+  `Mutation of lifecycle field '${field}' is prohibited on PATCH. Use dedicated command endpoints.`
+  Rejected fields include: `stage`, `status`, `targetStream`, `target_stream`, `stream`, `interviewScore`, `interview_score`, `assessmentScore`, `assessment_score`, `docsVerified`, `docs_verified`, `admissionLetterSent`, `admission_letter_sent`, `admissionLetterSentAt`, `admission_letter_sent_at`, `streamAutoPlaced`, `stream_auto_placed`, `streamPlacedAt`, `stream_placed_at`, `streamPlacedBy`, `stream_placed_by`, `rejectionReason`, `rejection_reason`, `enrollmentDate`, `enrollment_date`, `studentId`, `student_id`.
+- **Allowed Demographic Fields:** `firstName`/`first_name`, `lastName`/`last_name`, `dob`, `gender`, `bloodGroup`/`blood_group`, `nin`, `email`, `phone`, `address`, `city`, `parentName`/`parent_name`, `parentPhone`/`parent_phone`, `parentEmail`/`parent_email`, `parentRelation`/`parent_relation`, `previousSchool`/`previous_school`, `targetGrade`/`target_grade`, `nationalIndexNo`/`national_index_no`.
+
+### 7. Lifecycle Validations
+- **Evaluate:** Requires applicant `status !== 'rejected'` and `stage IN ('Application', 'Assessment', 'Interview')`.
+- **Place:** Requires active status; sets `target_stream`, clears `stream_auto_placed = false`, records `stream_placed_by` with server-derived actor ID.
+- **Approve:** Requires active status and `stage IN ('Application', 'Assessment', 'Interview')`; advances stage to `'Offer'`, sets `docs_verified = true`.
+- **Reject:** Requires non-empty `rejectionReason`, active status, and `stage !== 'Allocation'`; sets `status = 'rejected'`.
+- **Letter:** Requires active status and `stage IN ('Offer', 'Allocation')`; marks `admission_letter_sent = true`, `admission_letter_sent_at = now`.
+- **Enroll:** Requires active status and `stage === 'Offer'`; invokes RPC passing server-derived actor ID.
+
+### 8. Audit History Trail
+- Implemented via `recordAdmissionHistory` in `src/lib/admissions/admission-history.ts`.
+- Every command inserts an authoritative entry into `public.admission_history`:
+  - `tenant_id`: authoritative institution ID
+  - `applicant_id`: authoritative applicant ID
+  - `from_stage`: previous lifecycle stage
+  - `to_stage`: new lifecycle stage
+  - `comment`: descriptive operation audit log
+  - `created_by`: server-verified actor ID (`auth.user.id`)
+  - `created_at`: authoritative timestamp
+
+### 9. Enrollment RPC Residual Security Risk & Cohort 4 Blocker
+- **API Boundary Protection:** `POST /api/admissions/[id]/enroll` establishes complete application-layer authorization, verifies `stage === 'Offer'`, and derives `p_admin_id` from the authenticated session.
+- **Database Boundary Exposure (Documented Residual Risk):**
+  `public.enroll_applicant` in `017_enroll_applicant_rpc.sql` remains defined with `SECURITY DEFINER` and without `REVOKE EXECUTE FROM public, authenticated`. An authenticated user can bypass the API layer and call the RPC directly via PostgREST.
+- **Production Blocking Dependency:**
+  Production authorization of enrollment remains **BLOCKED** until Phase 3C Cohort 4 deploys database migration `048_admissions_enrollment_security.sql` to revoke execute from authenticated clients and restrict execution strictly to the server execution boundary.
+
+### 10. Verification Results
+- **Automated Tests (`npm test`):**
+  - Total Tests: 258
+  - Test Suites: 21
+  - Pass: 258
+  - Fail: 0
+  - Duration: 213.0s
+  - Includes 26 new comprehensive route-level and unit tests in `tests/auth/admissions-canonical-api.test.ts`.
+- **TypeScript Compilation (`npx tsc --noEmit`):**
+  - Exit Code: 0 (clean, zero errors)
+- **Production Build (`npm run build`):**
+  - Exit Code: 0 (compiled and optimized successfully with Turbopack, dynamic endpoints generated for all 6 command routes and dynamic PATCH route)
+- **Working Tree:** Clean, no uncommitted or untracked changes outside deliverables.
+
+### 11. Final Status
+```text
+IMPLEMENTED — AWAITING SUPERVISORY REVIEW
+```
+
+
 
 
 

@@ -12,6 +12,7 @@ import { resolveAuthorizationContext } from './authorization-context-resolver';
 import {
   resolveTrustedResourceTarget,
   isTrustedResourceTarget,
+  TrustedResourceTarget,
   ResourceNotFoundError,
   CrossTenantResourceMismatchError,
   ResourceResolutionError,
@@ -121,6 +122,7 @@ export type ApiAuthorizationSuccess = {
   adminClient: () => any;
   authContext?: TrustedSecurityContext;
   decision?: AuthorizationDecision;
+  target?: TrustedResourceTarget | ResourceTarget;
 };
 
 export type ApiAuthorizationFailure = {
@@ -236,6 +238,7 @@ export async function authorizeApiRequest(
   let authContext: TrustedSecurityContext | undefined;
   let decision: AuthorizationDecision | undefined;
   let resolvedTenantId: string | null = null;
+  let target: TrustedResourceTarget | ResourceTarget | undefined;
 
   if (permission) {
     // 3a. Hydrate canonical authorization context
@@ -301,7 +304,6 @@ export async function authorizeApiRequest(
     }
 
     // 3b. Resolve authoritative resource target
-    let target: ResourceTarget;
 
     if (resolveResource) {
       try {
@@ -500,5 +502,6 @@ export async function authorizeApiRequest(
     adminClient: requestScopedAdminGetter,
     authContext,
     decision,
+    target,
   };
 }

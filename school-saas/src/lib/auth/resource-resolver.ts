@@ -9,6 +9,8 @@ export const TRUSTED_TARGET_BRAND = Symbol('TrustedResourceTarget');
 
 export type TrustedResourceTarget = ResourceTarget & {
   readonly [TRUSTED_TARGET_BRAND]: true;
+  readonly applicantId?: string;
+  readonly status?: string;
 };
 
 /**
@@ -58,7 +60,7 @@ export class ResourceResolutionError extends Error {
 // Internal Fact Construction Factory
 // ---------------------------------------------------------------------------
 
-function createTrustedTarget(target: ResourceTarget): TrustedResourceTarget {
+function createTrustedTarget(target: ResourceTarget & Record<string, unknown>): TrustedResourceTarget {
   return Object.freeze({
     ...target,
     [TRUSTED_TARGET_BRAND]: true as const,
@@ -200,11 +202,46 @@ export async function resolveTrustedSubjectOfferingTarget(
   });
 }
 
+/**
+ * Resolves authoritative applicant facts from public.applicants.
+ * Does NOT perform authorization or lifecycle validation; reports database truth.
+ */
+export async function resolveTrustedApplicantTarget(
+  supabase: SupabaseClient,
+  applicantId: string
+): Promise<TrustedResourceTarget> {
+  if (!applicantId || typeof applicantId !== 'string') {
+    throw new ResourceResolutionError('Applicant ID must be a non-empty string.');
+  }
+
+  const { data: applicant, error } = await supabase
+    .from('applicants')
+    .select('id, tenant_id, stage, status')
+    .eq('id', applicantId)
+    .maybeSingle();
+
+  if (error) {
+    throw new ResourceResolutionError(`Database error resolving applicant: ${error.message}`);
+  }
+
+  if (!applicant) {
+    throw new ResourceNotFoundError('applicant', applicantId);
+  }
+
+  return createTrustedTarget({
+    tenantId: applicant.tenant_id,
+    stage: applicant.stage || undefined,
+    applicantId: applicant.id,
+    status: applicant.status || undefined,
+  });
+}
+
 export type SupportedResourceType =
   | 'tenant'
   | 'exam_session'
   | 'exam_approval'
-  | 'subject_offering';
+  | 'subject_offering'
+  | 'applicant';
 
 /**
  * Unified dispatcher to resolve an authoritative TrustedResourceTarget
@@ -223,7 +260,10 @@ export async function resolveTrustedResourceTarget(
       return resolveTrustedExamApprovalTarget(supabase, request.id);
     case 'subject_offering':
       return resolveTrustedSubjectOfferingTarget(supabase, request.id);
+    case 'applicant':
+      return resolveTrustedApplicantTarget(supabase, request.id);
     default:
       throw new ResourceResolutionError(`Unsupported resource type: ${(request as any).type}`);
   }
 }
+

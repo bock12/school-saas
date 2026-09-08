@@ -7,26 +7,41 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-0007-PHASE-3C-COHORT-1
+  id: TASK-0007-PHASE-3C-COHORT-2
   parent_task: TASK-0007
   status: IMPLEMENTED_AWAITING_SUPERVISORY_REVIEW
-  branch: ai-eos/task-0007-phase-3c-cohort-1-permission-extension
-  base_commit: 08bb6b6
+  branch: ai-eos/task-0007-phase-3c-cohort-2-admissions-api
+  base_commit: ffc1064
   deliverables:
-    - src/lib/auth/permissions-registry.ts
-    - tests/auth/authorization-contract.test.ts
-    - tests/auth/authorization-engine.test.ts
-  permission_catalog_count:
-    baseline_frozen_phase_3a: 33
-    approved_extensions_phase_3c: 6
-    resulting_catalog: 39
-  files_modified:
-    - src/lib/auth/permissions-registry.ts
-    - tests/auth/authorization-contract.test.ts
-    - tests/auth/authorization-engine.test.ts
-    - .ai/05-WORKFLOW/CONTROL-STATE.yaml
-    - .ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md
-  api_routes_modified: false
+    - src/lib/auth/resource-resolver.ts
+    - src/lib/auth/api-guard.ts
+    - src/lib/admissions/admission-history.ts
+    - src/lib/admissions/applicant-patch.ts
+    - src/app/api/admissions/route.ts
+    - src/app/api/admissions/[id]/route.ts
+    - src/app/api/admissions/[id]/evaluate/route.ts
+    - src/app/api/admissions/[id]/place/route.ts
+    - src/app/api/admissions/[id]/approve/route.ts
+    - src/app/api/admissions/[id]/reject/route.ts
+    - src/app/api/admissions/[id]/letter/route.ts
+    - src/app/api/admissions/[id]/enroll/route.ts
+    - tests/security/privileged-api-containment.test.ts
+    - tests/security/api-rls-integration.test.ts
+    - tests/auth/admissions-canonical-api.test.ts
+    - package.json
+  permission_catalog_count: 39
+  command_endpoints_created:
+    - POST /api/admissions/[id]/evaluate -> admissions.applicants.evaluate
+    - POST /api/admissions/[id]/place -> admissions.applicants.place
+    - POST /api/admissions/[id]/approve -> admissions.applicants.approve
+    - POST /api/admissions/[id]/reject -> admissions.applicants.approve
+    - POST /api/admissions/[id]/letter -> admissions.letters.dispatch
+    - POST /api/admissions/[id]/enroll -> admissions.applicants.enroll
+  enrollment_rpc_security_hold:
+    status: COHORT_4_BLOCKING_DEPENDENCY
+    migration_required: 048_admissions_enrollment_security.sql
+    details: Direct PostgREST RPC enroll_applicant execution remains open to authenticated role at DB layer until Cohort 4.
+  api_routes_modified: true
   database_migrations_modified: false
   rpc_functions_modified: false
   rls_policies_modified: false
@@ -41,10 +56,10 @@ active_task:
   authorized_at: "2026-09-08"
   completed_at: "2026-09-08"
 last_completed_task:
-  id: TASK-0007-PHASE-3C-A
+  id: TASK-0007-PHASE-3C-COHORT-1
   status: SUPERVISORY_APPROVED
-  commit: 08bb6b6
-  branch: ai-eos/task-0007-phase-3c-a-permission-architecture
+  commit: ffc1064
+  branch: ai-eos/task-0007-phase-3c-cohort-1-permission-extension
 previous_completed_task:
   id: TASK-0007-PHASE-3B
   status: SUPERVISORY_APPROVED

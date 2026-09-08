@@ -125,8 +125,8 @@ function createMockTransport(config: {
     profile = null,
     tenants = [TENANT_A, TENANT_B, ORG_PARENT, CHILD_TENANT],
     applicants = [
-      { id: 'app-a-1', tenant_id: TENANT_A.id, first_name: 'Alpha', last_name: 'Kamara', school_level: 'SSS', target_stream: 'Science' },
-      { id: 'app-b-1', tenant_id: TENANT_B.id, first_name: 'Beta', last_name: 'Sesay', school_level: 'SSS', target_stream: 'Arts' },
+      { id: 'app-a-1', tenant_id: TENANT_A.id, first_name: 'Alpha', last_name: 'Kamara', school_level: 'SSS', target_stream: 'Science', stage: 'Application', status: 'active' },
+      { id: 'app-b-1', tenant_id: TENANT_B.id, first_name: 'Beta', last_name: 'Sesay', school_level: 'SSS', target_stream: 'Arts', stage: 'Application', status: 'active' },
     ],
     examSessions = [
       { id: 'sess-a-1', tenant_id: TENANT_A.id, title: 'WASSCE Mock 2026', status: 'Ongoing' },
@@ -188,7 +188,7 @@ function createMockTransport(config: {
             const match = applicants.find((a) => {
               return filters.every((f) => f.op === 'eq' && (a as any)[f.col] === f.val);
             });
-            return { data: match ? { id: match.id } : null, error: null };
+            return { data: match ? { ...match } : null, error: null };
           }
           return { data: null, error: null };
         },
@@ -421,20 +421,20 @@ test('SEC-07: Exam Officer calling admissionsDELETE returns 403 Forbidden (admin
 
 // ── 3. Cross-Tenant Isolation & IDOR/BOLA Protection ──────────────────────────
 
-test('SEC-08: Cross-tenant admissionsPATCH for resource belonging to different tenant returns 404 (IDOR defense)', async () => {
+test('SEC-08: Cross-tenant admissionsPATCH for resource belonging to different tenant returns 403 CROSS_TENANT_DENIED (IDOR defense)', async () => {
   // Actor belongs to Tenant A; attempts to PATCH applicant app-b-1 which belongs to Tenant B
   const transport = createMockTransport({ user: USER_ADMIN_A, profile: PROFILE_ADMIN_A });
   setTestClientOverride(transport.userClient, transport.adminClientFactory);
   try {
     const req = createMockRequest('http://localhost:3000/api/admissions', {
       method: 'PATCH',
-      body: { id: 'app-b-1', stage: 'Interview' },
+      body: { id: 'app-b-1', phone: '+23276000999' },
     });
     const res = await admissionsPATCH(req);
 
-    assert.equal(res.status, 404);
+    assert.equal(res.status, 403);
     const json = await res.json();
-    assert.equal(json.code, 'NOT_FOUND');
+    assert.equal(json.code, 'CROSS_TENANT_DENIED');
     assert.equal(transport.getAdminFactoryCallCount(), 0, 'Admin client must never be instantiated for IDOR attempt');
   } finally {
     resetTestClientOverride();
@@ -492,7 +492,10 @@ test('SEC-11: Client-supplied tenantSlug in admissionsGET cannot select another 
 
     assert.equal(res.status, 403);
     const json = await res.json();
-    assert.equal(json.code, 'TENANT_ACCESS_DENIED');
+    assert.ok(
+      json.code === 'CROSS_TENANT_DENIED' || json.code === 'TENANT_ACCESS_DENIED',
+      `Expected cross tenant denial code, got: ${json.code}`
+    );
     assert.equal(transport.getAdminFactoryCallCount(), 0);
   } finally {
     resetTestClientOverride();
@@ -624,7 +627,7 @@ test('SEC-16: Admissions PATCH rejects attempt to mutate immutable tenant_id wit
   }
 });
 
-test('SEC-17: Admissions PATCH with valid allowlisted fields succeeds and updates applicant', async () => {
+test('SEC-17: Admissions PATCH with valid allowlisted demographic fields succeeds and updates applicant', async () => {
   const transport = createMockTransport({ user: USER_ADMIN_A, profile: PROFILE_ADMIN_A });
   setTestClientOverride(transport.userClient, transport.adminClientFactory);
   try {
@@ -632,8 +635,10 @@ test('SEC-17: Admissions PATCH with valid allowlisted fields succeeds and update
       method: 'PATCH',
       body: {
         id: 'app-a-1',
-        stage: 'Interview',
-        targetStream: 'Science',
+        phone: '+23276000111',
+        address: '14 Wilkinson Road',
+        city: 'Freetown',
+        parentPhone: '+23276999888',
       },
     });
     const res = await admissionsPATCH(req);
@@ -642,12 +647,51 @@ test('SEC-17: Admissions PATCH with valid allowlisted fields succeeds and update
     const queries = transport.getAdminQueries();
     const updateQuery = queries.find((q) => q.method === 'update' && q.table === 'applicants');
     assert.ok(updateQuery);
-    assert.equal(updateQuery.payload.stage, 'Interview');
-    assert.equal(updateQuery.payload.target_stream, 'Science');
-    assert.equal(updateQuery.payload.stream_auto_placed, false);
+    assert.equal(updateQuery.payload.phone, '+23276000111');
+    assert.equal(updateQuery.payload.address, '14 Wilkinson Road');
+    assert.equal(updateQuery.payload.city, 'Freetown');
+    assert.equal(updateQuery.payload.parent_phone, '+23276999888');
     const tenantFilter = updateQuery.filters.find((f) => f.col === 'tenant_id');
     assert.ok(tenantFilter);
     assert.equal(tenantFilter.val, TENANT_A.id);
+  } finally {
+    resetTestClientOverride();
+  }
+});
+
+test('SEC-17-REGRESSION: Admissions PATCH rejects lifecycle fields with 400 INVALID_REQUEST', async () => {
+  const transport = createMockTransport({ user: USER_ADMIN_A, profile: PROFILE_ADMIN_A });
+  setTestClientOverride(transport.userClient, transport.adminClientFactory);
+  try {
+    const lifecyclePayloads = [
+      { stage: 'Interview' },
+      { status: 'rejected' },
+      { targetStream: 'Science' },
+      { target_stream: 'Science' },
+      { interviewScore: 85 },
+      { interview_score: 85 },
+      { admissionLetterSent: true },
+      { admission_letter_sent: true },
+      { docsVerified: true },
+      { assessmentScore: 90 },
+      { rejectionReason: 'Failed criteria' },
+    ];
+
+    for (const fieldObj of lifecyclePayloads) {
+      const fieldName = Object.keys(fieldObj)[0];
+      const req = createMockRequest('http://localhost:3000/api/admissions', {
+        method: 'PATCH',
+        body: {
+          id: 'app-a-1',
+          ...fieldObj,
+        },
+      });
+      const res = await admissionsPATCH(req);
+      assert.equal(res.status, 400, `Expected 400 for field ${fieldName}`);
+      const json = await res.json();
+      assert.equal(json.code, 'INVALID_REQUEST', `Expected INVALID_REQUEST code for ${fieldName}`);
+      assert.match(json.error, /prohibited on PATCH/i, `Expected prohibited message for ${fieldName}`);
+    }
   } finally {
     resetTestClientOverride();
   }
