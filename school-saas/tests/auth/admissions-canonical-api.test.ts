@@ -448,6 +448,7 @@ test('CMD-EVALUATE-02: teacher alone without exam_officer assignment -> DENY (40
     assert.equal(res.status, 403);
     const json = await res.json();
     assert.equal(json.code, 'INSUFFICIENT_ROLE');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on negative authorization path');
   } finally {
     resetTestClientOverride();
   }
@@ -475,6 +476,7 @@ test('CMD-EVALUATE-03: foreign applicant in different tenant -> DENY (403 CROSS_
     assert.equal(res.status, 403);
     const json = await res.json();
     assert.equal(json.code, 'CROSS_TENANT_DENIED');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on cross-tenant path');
   } finally {
     resetTestClientOverride();
   }
@@ -494,6 +496,7 @@ test('CMD-EVALUATE-04: rejected applicant -> DENY (400 INVALID_REQUEST)', async 
     const json = await res.json();
     assert.equal(json.code, 'INVALID_REQUEST');
     assert.match(json.error, /Cannot evaluate a rejected applicant/);
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on invalid lifecycle path');
   } finally {
     resetTestClientOverride();
   }
@@ -568,6 +571,7 @@ test('CMD-PLACE-02: teacher alone -> DENY (403)', async () => {
     assert.equal(res.status, 403);
     const json = await res.json();
     assert.equal(json.code, 'INSUFFICIENT_ROLE');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on negative authorization path');
   } finally {
     resetTestClientOverride();
   }
@@ -586,6 +590,27 @@ test('CMD-PLACE-03: foreign applicant -> DENY (403 CROSS_TENANT_DENIED)', async 
     assert.equal(res.status, 403);
     const json = await res.json();
     assert.equal(json.code, 'CROSS_TENANT_DENIED');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on cross-tenant path');
+  } finally {
+    resetTestClientOverride();
+  }
+});
+
+test('CMD-PLACE-04: cannot place stream for applicant already allocated/enrolled -> DENY (400 INVALID_REQUEST)', async () => {
+  const env = createAdmissionsMockEnvironment({});
+  setTestClientOverride(env.userClient, env.adminClientFactory);
+
+  try {
+    const req = makeRequest('http://localhost:3000/api/admissions/app-a-allocated/place', {
+      method: 'POST',
+      body: { stream: 'Commercial' },
+    });
+    const res = await placePOST(req, { params: Promise.resolve({ id: 'app-a-allocated' }) });
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.code, 'INVALID_REQUEST');
+    assert.match(json.error, /already been allocated/);
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on invalid lifecycle path');
   } finally {
     resetTestClientOverride();
   }
@@ -679,6 +704,7 @@ test('CMD-APPROVE-03: exam_officer -> DENY (403 - exam officer lacks approve per
     assert.equal(res.status, 403);
     const json = await res.json();
     assert.equal(json.code, 'INSUFFICIENT_ROLE');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on negative authorization path');
   } finally {
     resetTestClientOverride();
   }
@@ -697,6 +723,25 @@ test('CMD-APPROVE-04: teacher -> DENY (403)', async () => {
     });
     const res = await approvePOST(req, { params: Promise.resolve({ id: 'app-a-assessment' }) });
     assert.equal(res.status, 403);
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on negative authorization path');
+  } finally {
+    resetTestClientOverride();
+  }
+});
+
+test('CMD-APPROVE-05: foreign applicant in different tenant -> DENY (403 CROSS_TENANT_DENIED)', async () => {
+  const env = createAdmissionsMockEnvironment({});
+  setTestClientOverride(env.userClient, env.adminClientFactory);
+
+  try {
+    const req = makeRequest('http://localhost:3000/api/admissions/app-b-active/approve', {
+      method: 'POST',
+    });
+    const res = await approvePOST(req, { params: Promise.resolve({ id: 'app-b-active' }) });
+    assert.equal(res.status, 403);
+    const json = await res.json();
+    assert.equal(json.code, 'CROSS_TENANT_DENIED');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on cross-tenant path');
   } finally {
     resetTestClientOverride();
   }
@@ -741,6 +786,7 @@ test('CMD-REJECT-02: missing rejectionReason -> DENY (400 INVALID_REQUEST)', asy
     const json = await res.json();
     assert.equal(json.code, 'INVALID_REQUEST');
     assert.match(json.error, /rejectionReason is required/);
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on invalid payload path');
   } finally {
     resetTestClientOverride();
   }
@@ -760,6 +806,48 @@ test('CMD-REJECT-03: cannot reject already allocated/enrolled applicant -> DENY 
     const json = await res.json();
     assert.equal(json.code, 'INVALID_REQUEST');
     assert.match(json.error, /already been allocated/);
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on invalid lifecycle path');
+  } finally {
+    resetTestClientOverride();
+  }
+});
+
+test('CMD-REJECT-04: teacher -> DENY (403 INSUFFICIENT_ROLE)', async () => {
+  const env = createAdmissionsMockEnvironment({
+    userId: 'user-teacher-1',
+    profile: { id: 'user-teacher-1', tenant_id: TENANT_A_ID, role: 'teacher', is_active: true },
+  });
+  setTestClientOverride(env.userClient, env.adminClientFactory);
+
+  try {
+    const req = makeRequest('http://localhost:3000/api/admissions/app-a-active/reject', {
+      method: 'POST',
+      body: { rejectionReason: 'Unauthorized rejection attempt' },
+    });
+    const res = await rejectPOST(req, { params: Promise.resolve({ id: 'app-a-active' }) });
+    assert.equal(res.status, 403);
+    const json = await res.json();
+    assert.equal(json.code, 'INSUFFICIENT_ROLE');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on negative authorization path');
+  } finally {
+    resetTestClientOverride();
+  }
+});
+
+test('CMD-REJECT-05: foreign applicant in different tenant -> DENY (403 CROSS_TENANT_DENIED)', async () => {
+  const env = createAdmissionsMockEnvironment({});
+  setTestClientOverride(env.userClient, env.adminClientFactory);
+
+  try {
+    const req = makeRequest('http://localhost:3000/api/admissions/app-b-active/reject', {
+      method: 'POST',
+      body: { rejectionReason: 'Cross-tenant rejection attempt' },
+    });
+    const res = await rejectPOST(req, { params: Promise.resolve({ id: 'app-b-active' }) });
+    assert.equal(res.status, 403);
+    const json = await res.json();
+    assert.equal(json.code, 'CROSS_TENANT_DENIED');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on cross-tenant path');
   } finally {
     resetTestClientOverride();
   }
@@ -816,6 +904,7 @@ test('CMD-LETTER-02: exam_officer -> DENY (403 - exam officer lacks letters.disp
     assert.equal(res.status, 403);
     const json = await res.json();
     assert.equal(json.code, 'INSUFFICIENT_ROLE');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on negative authorization path');
   } finally {
     resetTestClientOverride();
   }
@@ -832,6 +921,23 @@ test('CMD-LETTER-03: dispatch letter for applicant in Application stage -> DENY 
     const json = await res.json();
     assert.equal(json.code, 'INVALID_REQUEST');
     assert.match(json.error, /must be in Offer or Allocation stage/);
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on invalid lifecycle path');
+  } finally {
+    resetTestClientOverride();
+  }
+});
+
+test('CMD-LETTER-04: foreign applicant in different tenant -> DENY (403 CROSS_TENANT_DENIED)', async () => {
+  const env = createAdmissionsMockEnvironment({});
+  setTestClientOverride(env.userClient, env.adminClientFactory);
+
+  try {
+    const req = makeRequest('http://localhost:3000/api/admissions/app-b-active/letter', { method: 'POST' });
+    const res = await letterPOST(req, { params: Promise.resolve({ id: 'app-b-active' }) });
+    assert.equal(res.status, 403);
+    const json = await res.json();
+    assert.equal(json.code, 'CROSS_TENANT_DENIED');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on cross-tenant path');
   } finally {
     resetTestClientOverride();
   }
@@ -890,6 +996,8 @@ test('CMD-ENROLL-02: exam_officer -> DENY (403 - exam officer lacks enroll permi
     const req = makeRequest('http://localhost:3000/api/admissions/app-a-offer/enroll', { method: 'POST' });
     const res = await enrollPOST(req, { params: Promise.resolve({ id: 'app-a-offer' }) });
     assert.equal(res.status, 403);
+    assert.equal(env.getRpcCalls().length, 0, 'RPC must not be invoked on unauthorized caller');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on negative authorization path');
   } finally {
     resetTestClientOverride();
   }
@@ -906,6 +1014,25 @@ test('CMD-ENROLL-03: enroll applicant not in Offer stage (Application) -> DENY (
     const json = await res.json();
     assert.equal(json.code, 'INVALID_REQUEST');
     assert.match(json.error, /must be approved into Offer stage before enrollment/);
+    assert.equal(env.getRpcCalls().length, 0, 'RPC must not be invoked on invalid lifecycle stage');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on invalid lifecycle path');
+  } finally {
+    resetTestClientOverride();
+  }
+});
+
+test('CMD-ENROLL-05: foreign applicant in different tenant -> DENY (403 CROSS_TENANT_DENIED)', async () => {
+  const env = createAdmissionsMockEnvironment({});
+  setTestClientOverride(env.userClient, env.adminClientFactory);
+
+  try {
+    const req = makeRequest('http://localhost:3000/api/admissions/app-b-active/enroll', { method: 'POST' });
+    const res = await enrollPOST(req, { params: Promise.resolve({ id: 'app-b-active' }) });
+    assert.equal(res.status, 403);
+    const json = await res.json();
+    assert.equal(json.code, 'CROSS_TENANT_DENIED');
+    assert.equal(env.getRpcCalls().length, 0, 'RPC must not be invoked on cross-tenant path');
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on cross-tenant path');
   } finally {
     resetTestClientOverride();
   }
@@ -981,7 +1108,41 @@ test('PATCH-ID-02: PATCH /api/admissions/[id] rejects lifecycle fields with 400'
     const json = await res.json();
     assert.equal(json.code, 'INVALID_REQUEST');
     assert.match(json.error, /prohibited on PATCH/);
+    assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on rejected patch payload');
   } finally {
     resetTestClientOverride();
   }
 });
+
+test('PATCH-ID-03: PATCH /api/admissions/[id] rejects Sierra Leone exam score fields with 400', async () => {
+  const env = createAdmissionsMockEnvironment({});
+  setTestClientOverride(env.userClient, env.adminClientFactory);
+
+  try {
+    const examFields = [
+      { npseAggregate: 320 },
+      { npse_aggregate: 320 },
+      { beceAggregate: 12 },
+      { bece_aggregate: 12 },
+      { wassceCredits: 5 },
+      { wassce_credits: 5 },
+    ];
+
+    for (const payload of examFields) {
+      const fieldName = Object.keys(payload)[0];
+      const req = makeRequest('http://localhost:3000/api/admissions/app-a-active', {
+        method: 'PATCH',
+        body: payload,
+      });
+      const res = await admissionsIdPATCH(req, { params: Promise.resolve({ id: 'app-a-active' }) });
+      assert.equal(res.status, 400, `Expected 400 for exam field ${fieldName}`);
+      const json = await res.json();
+      assert.equal(json.code, 'INVALID_REQUEST');
+      assert.match(json.error, /prohibited on PATCH/i);
+      assert.equal(env.getAdminQueries().length, 0, 'No privileged mutations must occur on exam field patch');
+    }
+  } finally {
+    resetTestClientOverride();
+  }
+});
+

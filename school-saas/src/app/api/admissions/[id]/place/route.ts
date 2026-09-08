@@ -39,9 +39,13 @@ export async function POST(
     const currentStage = target?.stage ?? 'Application';
     const currentStatus = target?.status ?? 'active';
 
-    // 2. Lifecycle validation: applicant must be active
+    // 2. Lifecycle validation: applicant must be active and not yet allocated/enrolled
     if (currentStatus === 'rejected') {
       return apiError('Cannot place stream for a rejected applicant', 'INVALID_REQUEST', 400);
+    }
+
+    if (currentStage === 'Allocation') {
+      return apiError('Cannot place stream for an applicant who has already been allocated/enrolled', 'INVALID_REQUEST', 400);
     }
 
     const { stream, comment } = body;

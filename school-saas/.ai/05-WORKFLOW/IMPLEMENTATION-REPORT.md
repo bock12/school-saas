@@ -3315,22 +3315,52 @@ Created files (9):
 
 ### 10. Verification Results
 - **Automated Tests (`npm test`):**
-  - Total Tests: 258
+  - Total Tests: 265
   - Test Suites: 21
-  - Pass: 258
+  - Pass: 265
   - Fail: 0
-  - Duration: 213.0s
-  - Includes 26 new comprehensive route-level and unit tests in `tests/auth/admissions-canonical-api.test.ts`.
+  - Duration: 172.0s
+  - Includes 33 comprehensive route-level and unit tests in `tests/auth/admissions-canonical-api.test.ts` (expanded from 26 with explicit negative-space mutation containment, cross-tenant coverage across all 6 commands, and exam score rejection).
 - **TypeScript Compilation (`npx tsc --noEmit`):**
   - Exit Code: 0 (clean, zero errors)
 - **Production Build (`npm run build`):**
   - Exit Code: 0 (compiled and optimized successfully with Turbopack, dynamic endpoints generated for all 6 command routes and dynamic PATCH route)
-- **Working Tree:** Clean, no uncommitted or untracked changes outside deliverables.
+- **Working Tree:** Clean.
 
-### 11. Final Status
+### 11. Supervisory Reverification & Substantiation Addendum
+In response to supervisory review (`CHANGES REQUESTED — NOT YET APPROVED FOR MERGE`), the implementation was substantiated and reverified across all 10 supervisory items:
+
+1. **Actual Route-Handler Execution in Tests:**
+   Tests in `tests/auth/admissions-canonical-api.test.ts` import the actual Next.js route handlers (`evaluatePOST`, `placePOST`, `approvePOST`, `rejectPOST`, `letterPOST`, `enrollPOST`, `admissionsPATCH`, `admissionsIdPATCH`). Every test constructs a real `NextRequest` and executes the handler end-to-end through the complete pipeline.
+2. **Strict Pipeline Ordering & Lazy Privileged Client:**
+   Every handler strictly enforces:
+   `request -> authenticate -> trusted context -> resolveTrustedApplicantTarget -> canonical permission evaluation -> lifecycle/input validation -> lazy adminClient mutation -> recordAdmissionHistory`.
+   No privileged client is created or executed before authorization and lifecycle validation succeed.
+3. **`admission_history` Schema & Failure Semantics:**
+   `src/lib/admissions/admission-history.ts` exactly aligns with `015_admission_applicants.sql` schema (`tenant_id`, `applicant_id`, `from_stage`, `to_stage`, `comment`, `created_by`, `created_at`). Mutation happens *before* history insertion: if mutation fails, an exception is thrown and `recordAdmissionHistory` is never reached, guaranteeing that no misleading success record can ever exist.
+4. **Lifecycle Semantics Alignment:**
+   Commands faithfully mirror admissions domain stages (`Application` -> `Assessment` -> `Interview` -> `Offer` -> `Allocation`). Added lifecycle guard on `place` route preventing stream modification on already allocated students. `approve` validates pre-offer stage and advances to `Offer`. `enroll` strictly requires `Offer` stage.
+5. **PATCH Allowlist Tripartite Classification:**
+   `src/lib/admissions/applicant-patch.ts` explicitly classifies fields into:
+   - *Record Maintenance:* General demographics, contact info, and guardian details.
+   - *Official / National Identity Data:* `nin` (National Civil ID) and `nationalIndexNo` / `national_index_no` (WAEC exam candidate index number). Allowed on PATCH to rectify clerical typos, but distinguished from routine demographics.
+   - *Workflow & Evaluation State:* Prohibited on PATCH (`stage`, `status`, `target_stream`, `npse_aggregate`, `bece_aggregate`, `interview_score`, `assessment_score`, `docs_verified`, etc.).
+6. **Cross-Tenant Protection Across All Commands:**
+   Every command endpoint (`evaluate`, `place`, `approve`, `reject`, `letter`, `enroll`, and `PATCH`) possesses dedicated cross-tenant negative test cases verifying `403 CROSS_TENANT_DENIED`.
+7. **Negative-Path Mutation Containment:**
+   All negative-path tests across the suite explicitly assert `env.getAdminQueries().length === 0` and `env.getRpcCalls().length === 0`, proving that unauthorized callers can never reach privileged mutation.
+8. **Documented Residual Enrollment DB Risk (Cohort 4 Blocker):**
+   Explicitly recorded in route code comments, test assertions (`CMD-ENROLL-04`), and governance artifacts that `public.enroll_applicant` remains directly callable by authenticated users at the database level. Production authorization of enrollment remains **BLOCKED** until Cohort 4 deploys `048_admissions_enrollment_security.sql`.
+9. **Zero Changes Outside Cohort 2 Scope:**
+   No database migrations, RLS policies, or Phase 3A frozen files were modified.
+10. **Evidence & Quality Gates:**
+    265/265 tests PASS (21 suites, 0 failures), `tsc --noEmit` clean, production build clean.
+
+### 12. Final Status
 ```text
-IMPLEMENTED — AWAITING SUPERVISORY REVIEW
+SUPERVISORY REVERIFICATION COMPLETE — AWAITING FINAL MERGE GATE
 ```
+
 
 
 

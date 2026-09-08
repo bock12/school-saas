@@ -1,39 +1,68 @@
 import { NextResponse } from 'next/server';
 import { apiError } from '@/lib/auth/api-guard';
 
+// 1. Immutable System Identifiers (Strictly prohibited from any mutation)
 export const IMMUTABLE_FIELDS = new Set(['id', 'tenant_id', 'tenantId', 'tenantSlug']);
 
-export const LIFECYCLE_COMMAND_FIELDS = new Set([
+// 2. Workflow, Lifecycle, Streaming & Exam Evaluation Fields
+// (Prohibited on PATCH. Must be executed via dedicated, privileged command endpoints)
+export const WORKFLOW_COMMAND_FIELDS = new Set([
+  // Core lifecycle & status
   'stage',
   'status',
+  'rejectionReason',
+  'rejection_reason',
+  // SSS Stream allocation workflow
   'targetStream',
   'target_stream',
   'stream',
-  'interviewScore',
-  'interview_score',
-  'assessmentScore',
-  'assessment_score',
-  'docsVerified',
-  'docs_verified',
-  'admissionLetterSent',
-  'admission_letter_sent',
-  'admissionLetterSentAt',
-  'admission_letter_sent_at',
   'streamAutoPlaced',
   'stream_auto_placed',
   'streamPlacedAt',
   'stream_placed_at',
   'streamPlacedBy',
   'stream_placed_by',
-  'rejectionReason',
-  'rejection_reason',
+  // Entrance assessment & interview evaluation
+  'interviewScore',
+  'interview_score',
+  'assessmentScore',
+  'assessment_score',
+  'assessmentDetails',
+  'assessment_details',
+  // Sierra Leone national examination credentials (NPSE, BECE, WASSCE)
+  'npseAggregate',
+  'npse_aggregate',
+  'beceAggregate',
+  'bece_aggregate',
+  'beceSubjects',
+  'bece_subjects',
+  'wassceCredits',
+  'wassce_credits',
+  'wassceSubjects',
+  'wassce_subjects',
+  // Document verification & official letters
+  'docsVerified',
+  'docs_verified',
+  'admissionLetterSent',
+  'admission_letter_sent',
+  'admissionLetterSentAt',
+  'admission_letter_sent_at',
+  // Matriculation & registry enrollment
   'enrollmentDate',
   'enrollment_date',
   'studentId',
   'student_id',
+  'studentIdNumber',
+  'student_id_number',
+  'classArm',
+  'class_arm',
 ]);
 
-export const ALLOWED_DEMOGRAPHIC_PATCH_FIELDS: Record<string, string> = {
+// Backwards-compatible alias for existing imports
+export const LIFECYCLE_COMMAND_FIELDS = WORKFLOW_COMMAND_FIELDS;
+
+// 3A. Record Maintenance Fields (Demographic, contact & guardian data)
+export const RECORD_MAINTENANCE_FIELDS: Record<string, string> = {
   firstName: 'first_name',
   first_name: 'first_name',
   lastName: 'last_name',
@@ -42,7 +71,6 @@ export const ALLOWED_DEMOGRAPHIC_PATCH_FIELDS: Record<string, string> = {
   gender: 'gender',
   bloodGroup: 'blood_group',
   blood_group: 'blood_group',
-  nin: 'nin',
   email: 'email',
   phone: 'phone',
   address: 'address',
@@ -59,8 +87,21 @@ export const ALLOWED_DEMOGRAPHIC_PATCH_FIELDS: Record<string, string> = {
   previous_school: 'previous_school',
   targetGrade: 'target_grade',
   target_grade: 'target_grade',
+};
+
+// 3B. Official / National Identity Data
+// (Civil identity and official WAEC exam candidate index numbers.
+// Allowed on PATCH for typo/record corrections, but distinguished from routine demographics)
+export const NATIONAL_IDENTITY_FIELDS: Record<string, string> = {
+  nin: 'nin',
   nationalIndexNo: 'national_index_no',
   national_index_no: 'national_index_no',
+};
+
+// Complete allowlist permitted on demographic PATCH
+export const ALLOWED_DEMOGRAPHIC_PATCH_FIELDS: Record<string, string> = {
+  ...RECORD_MAINTENANCE_FIELDS,
+  ...NATIONAL_IDENTITY_FIELDS,
 };
 
 /**
