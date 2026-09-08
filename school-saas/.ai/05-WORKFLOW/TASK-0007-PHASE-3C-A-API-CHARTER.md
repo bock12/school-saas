@@ -1,4 +1,4 @@
-# TASK-0007 Phase 3C-A — Operation-Oriented API Charter & Security Specification (Final Revision)
+# TASK-0007 Phase 3C-A — Operation-Oriented API Charter & Security Specification (Final Security Revision)
 
 **Task:** TASK-0007 Phase 3C-A  
 **Stage:** Architecture & Specification Only  
@@ -10,15 +10,16 @@
 
 ---
 
-## 1. Executive Architectural Rationale & Final Revisions
+## 1. Executive Architectural Rationale & Final Security Corrections
 
-In response to the final supervisory review, this specification formalizes the **command-oriented API architecture**, end-to-end enrollment lifecycle, AI authorization pipeline, and admission-letter dispatch mechanics:
+In response to the final supervisory review, this specification formalizes the **command-oriented API architecture**, the **unidirectional trust boundary**, the **master enrollment idempotency pipeline**, the **AI zero side-effect guarantee**, and the **admission-letter dispatch mechanics**:
 
-1. **Organization-Admin School-Scope Semantics:** For all school-scoped admissions endpoints, `org_admin` authority is strictly bounded to child schools within the caller's server-resolved organization subtree (`context.organizationSubtenantIds`). Reaching into unrelated schools is rejected with HTTP 403.
-2. **Complete Enrollment Lifecycle Chain:** Formally specifies the 9-stage prerequisite pipeline from executive admission offer to permanent student registration, guaranteeing idempotency, concurrency serialization via row-level locks, and atomic rollback on partial failure.
-3. **Strict AI Authorization & Zero Side-Effect Guarantee:** Formulates the authorization semantics for `curriculum.lesson_plan.generate`. Unauthorized requests, cross-tenant offerings, unassigned teachers, and draft syllabus versions result in **zero external AI calls, zero token quota consumption, and zero database usage logs**.
-4. **Admission Letter Dispatch Rules:** Establishes server-controlled dispatch state, resend policies, provider retry mechanics, and idempotency guarantees for `admissions.letters.dispatch`.
-5. **Comprehensive Security Test Contract:** Expands test specifications covering organization isolation, enrollment boundaries, AI side effects, and letter dispatch idempotency.
+1. **Unidirectional Trust Boundary:** Explicitly documents the 8-stage trust chain from client session to audit persistence. Prohibits any client transmission of `p_actor_id`, `service_role`, direct RPC, or arbitrary actor UUIDs.
+2. **Service Role as Transport Privilege Only:** Formally decouples `service_role` (database transport privilege) from `admissions.applicants.enroll` (business authorization) and `auth.uid()` (human actor identity).
+3. **Enrollment Idempotency & Schema Prerequisite:** Details the full transaction flow with row locking (`FOR UPDATE`), re-reading state, deterministic return for already enrolled applicants, and identifies the missing schema constraint (`students.applicant_id UUID UNIQUE`) as a mandatory implementation prerequisite for defense-in-depth.
+4. **Direct RPC Threat Model as Multi-Layer Defense:** Documents that revoking PostgREST `EXECUTE` privileges is merely one defense layer; full security requires authentication, canonical authorization, trusted resource resolution, and server-only privileged execution.
+5. **Organization-Admin Subtree Boundedness:** For all school-scoped admissions endpoints, `org_admin` authority is strictly bounded to child schools within the caller's server-resolved organization subtree (`context.organizationSubtenantIds`).
+6. **AI Zero Side-Effect Guarantee:** Formulates the authorization semantics for `curriculum.lesson_plan.generate`. Unauthorized requests, cross-tenant offerings, unassigned teachers, and draft syllabus versions result in **zero external AI calls, zero token quota consumption, and zero database usage logs**.
 
 ---
 
@@ -155,111 +156,132 @@ In response to the final supervisory review, this specification formalizes the *
 
 ---
 
-### 3.9 `POST /api/admissions/:id/enroll` — Master Student Enrollment Transaction (Detailed Section 2)
+### 3.9 `POST /api/admissions/:id/enroll` — Master Student Enrollment Transaction (Detailed Section 6)
 
-#### Complete Prerequisite Chain:
+#### A. Complete Trust Boundary & Actor Attribution:
 ```text
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        MASTER ENROLLMENT PREREQUISITE PIPELINE                         │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│  1. Authenticated Actor: auth.uid() valid, active profile                              │
-│        │                                                                               │
-│        ▼                                                                               │
-│  2. Target Resolution: Load applicant record from DB                                   │
-│        │                                                                               │
-│        ▼                                                                               │
-│  3. Tenant Isolation & Org Subtree Check:                                              │
-│     applicant.tenant_id === context.tenantId                                           │
-│     || context.organizationSubtenantIds.includes(applicant.tenant_id)                   │
-│     (Reject with 403 if foreign school)                                                │
-│        │                                                                               │
-│        ▼                                                                               │
-│  4. Canonical Permission Check:                                                        │
-│     evaluatePermission('admissions.applicants.enroll', target, context)                │
-│     (Reject with 403 if unauthorized role)                                             │
-│        │                                                                               │
-│        ▼                                                                               │
-│  5. Lifecycle State Prerequisites:                                                     │
-│     - applicant.stage === 'Offer'                                                      │
-│     - applicant.status === 'active'                                                    │
-│     - applicant.docs_verified === true                                                 │
-│     (Reject with 422 if in Application, Assessment, Interview, or Rejected)            │
-│        │                                                                               │
-│        ▼                                                                               │
-│  6. Database Concurrency Lock:                                                         │
-│     SELECT * FROM applicants WHERE id = p_applicant_id FOR UPDATE                      │
-│     (Inside transaction, verify stage != 'Allocation')                                 │
-│        │                                                                               │
-│        ▼                                                                               │
-│  7. Atomic Multi-Table Insertion:                                                      │
-│     - INSERT INTO students (admission_number, tenant_id, ...) RETURNING id             │
-│     - INSERT/SELECT INTO parents (tenant_id, phone, ...) RETURNING id                  │
-│     - INSERT INTO student_parents (student_id, parent_id, ...)                         │
-│     - UPDATE applicants SET stage = 'Allocation', status = 'enrolled'                  │
-│        │                                                                               │
-│        ▼                                                                               │
-│  8. Immutable Audit Recording:                                                         │
-│     INSERT INTO admission_history (tenant_id, applicant_id, from_stage, to_stage,      │
-│                                    comment, created_by)                                │
-│     VALUES (..., 'Offer', 'Allocation', 'Enrolled', p_actor_id)                        │
-│        │                                                                               │
-│        ▼                                                                               │
-│  9. Commit & Return Permanent Student ID                                               │
-│                                                                                        │
-└────────────────────────────────────────────────────────────────────────────────────────┘
+Browser/client
+    ↓ [1. HTTPS POST /api/admissions/:id/enroll with session cookie]
+Authenticated session
+    ↓ [2. Cryptographic JWT verification via Supabase Auth]
+Server endpoint / command
+    ↓ [3. Next.js extracts user.id: trustedActorId = auth.uid()]
+auth.uid()
+    ↓ [4. Pure Phase 3A RBAC engine: evaluatePermission()]
+Canonical authorization
+    ↓ [5. Authoritative DB lookup: resolveApplicantTarget()]
+Trusted applicant resolution
+    ↓ [6. Server-derived, non-forgeable actor UUID]
+Server-derived actor identity
+    ↓ [7. Server-only private connection via SUPABASE_SERVICE_ROLE_KEY]
+Privileged database transaction
+    ↓ [8. Immutable write to admission_history.created_by]
+Audit attribution
 ```
 
-#### Transaction & Concurrency Guarantees:
-- **Idempotency & Duplicate Prevention:** If the applicant is already enrolled (`stage = 'Allocation'`), the lock reveals this immediately and raises an exception: `ALREADY_ENROLLED`. No duplicate student or parent rows are created.
-- **Concurrency Behavior:** `SELECT ... FOR UPDATE` exclusively locks the applicant row for the duration of the transaction. Parallel requests queue on the row lock; the second transaction reads `stage = 'Allocation'` and fails safely.
-- **Atomic Rollback:** If any insert fails (e.g. database constraint violation), the entire transaction rolls back cleanly. Zero partial records remain.
-- **Audit Preservation:** The enacting administrator's `auth.uid()` is passed as `p_actor_id` and permanently written to `admission_history.created_by`.
+#### B. Server Command Trust Invariant:
+The server command request schema **accepts NO actor ID parameter**.
+```text
+actor identity is derived strictly from the authenticated request context,
+never accepted as an authorization input from the client.
+```
+Any client-supplied `p_actor_id`, `actorId`, or `adminId` is discarded. An ordinary client cannot invoke the privileged path because the server endpoint rejects unauthorized callers with HTTP 403.
+
+#### C. Full Idempotency & Database Transaction Flow:
+```text
+BEGIN
+  ↓
+1. Lock applicant row exclusively:
+   SELECT * FROM public.applicants WHERE id = p_applicant_id FOR UPDATE;
+  ↓
+2. Re-read applicant state inside the lock:
+   IF v_applicant.stage = 'Allocation' THEN
+     -- Idempotent return: find existing student ID and return deterministically
+     SELECT id INTO v_existing_student_id FROM public.students 
+     WHERE applicant_id = p_applicant_id OR (tenant_id = v_applicant.tenant_id AND admission_number = ...);
+     RETURN v_existing_student_id;
+   END IF;
+  ↓
+3. Validate lifecycle prerequisites:
+   IF v_applicant.stage != 'Offer' OR v_applicant.status != 'active' OR v_applicant.docs_verified != true THEN
+     RAISE EXCEPTION 'LIFECYCLE_PRECONDITION_FAILED';
+   END IF;
+  ↓
+4. Validate tenant/resource relationship:
+   Ensure v_applicant.tenant_id matches authorized target school.
+  ↓
+5. Create student record:
+   INSERT INTO public.students (tenant_id, applicant_id, admission_number, first_name, last_name, ...)
+   VALUES (v_applicant.tenant_id, p_applicant_id, v_admission_number, ...)
+   RETURNING id INTO v_student_id;
+  ↓
+6. Insert / Link parent record & student_parents junction.
+  ↓
+7. Transition applicant state:
+   UPDATE public.applicants SET stage = 'Allocation', status = 'enrolled', updated_at = NOW()
+   WHERE id = p_applicant_id;
+  ↓
+8. Record immutable audit history:
+   INSERT INTO public.admission_history (tenant_id, applicant_id, from_stage, to_stage, comment, created_by)
+   VALUES (v_applicant.tenant_id, p_applicant_id, 'Offer', 'Allocation', 'Enrolled', p_actor_id);
+  ↓
+COMMIT
+```
+
+#### D. Schema Uniqueness Constraint Implementation Prerequisite:
+`public.students` currently contains `UNIQUE(tenant_id, admission_number)`. It does NOT contain a unique constraint on `applicant_id`.
+**Architectural Prerequisite for Implementation:**
+```sql
+ALTER TABLE public.students ADD COLUMN applicant_id UUID UNIQUE REFERENCES public.applicants(id);
+```
+This guarantees defense-in-depth: runtime row locking (`FOR UPDATE`) serializes parallel transactions, while the database engine uniqueness constraint (`UNIQUE(applicant_id)`) guarantees at the storage engine level that duplicate student records can never be created for the same applicant.
+
+#### E. Minimum Enrollment Audit Record:
+Every enrollment execution records:
+- `actor_id`: Server-verified `auth.uid()` (never chosen by client).
+- `tenant_id / school_id`: Authoritative `applicant.tenant_id`.
+- `applicant_id`: Target applicant UUID.
+- `result`: Resulting student UUID.
+- `timestamp`: Server `NOW()`.
 
 ---
 
 ### 3.10 `POST /api/academics/ai/lesson-plan` — AI Lesson Plan Generation (Detailed Section 6)
 
-#### Authorization & Side-Effect Invariants:
+#### Strict AI Authorization & Side-Effect Sequence:
 ```text
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        AI EXECUTION & SIDE-EFFECT SEQUENCE                             │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│  Step 1: Authenticate Caller (auth.uid())                                              │
-│          Reject unauthenticated (HTTP 401). External AI calls = 0.                     │
-│             ↓                                                                          │
-│  Step 2: Resolve Target Offering & Context                                             │
-│          Load offering, subject, teacher assignment, curriculum version from DB.       │
-│          Reject non-existent resources (HTTP 404). External AI calls = 0.              │
-│             ↓                                                                          │
-│  Step 3: Evaluate Canonical Permission (curriculum.lesson_plan.generate)               │
-│          - Scope: 'offering'                                                           │
-│          - Org Reach: offering.tenant_id in organizationSubtenantIds                   │
-│          - Teacher Assignment: if caller is teacher, actorId === offering.teacher_id   │
-│          - Department: if caller is HOD, offering.department_id === HOD department     │
-│          Reject unauthorized (HTTP 403). External AI calls = 0. Quota consumed = 0.   │
-│             ↓                                                                          │
-│  Step 4: Validate Curriculum & Topic Prerequisites                                     │
-│          - offering.curriculum_status === 'published' (AI never runs on draft syllabus)│
-│          - topic belongs to offering's published curriculum version                    │
-│          - academic year is active                                                     │
-│          Reject invalid state (HTTP 422). External AI calls = 0. Quota consumed = 0.   │
-│             ↓                                                                          │
-│  Step 5: Enforce Tenant AI Token Quota                                                 │
-│          Sum billing period usage from ai_usage_logs for offering.tenant_id.           │
-│          Reject quota exhaustion (HTTP 429). External AI calls = 0.                    │
-│             ↓                                                                          │
-│  Step 6: Invoke Google Gemini API                                                      │
-│          Execute HTTP POST using server-held GEMINI_API_KEY.                           │
-│             ↓                                                                          │
-│  Step 7: Persist Audit & Token Attribution                                             │
-│          Insert usage log into public.ai_usage_logs (offering.tenant_id, auth.uid(),   │
-│          feature='lesson_plan', input_tokens, output_tokens, status='success').        │
-│             ↓                                                                          │
-│  Step 8: Return Ephemeral JSON to Client Session                                       │
-│                                                                                        │
-└────────────────────────────────────────────────────────────────────────────────────────┘
+Step 1: Authenticate Caller (auth.uid())
+        Reject unauthenticated (HTTP 401). External AI calls = 0. Quota = 0. Usage logs = 0.
+           ↓
+Step 2: Resolve Target Offering & Context
+        Load offering, subject, teacher assignment, curriculum version from DB.
+        Reject non-existent resources (HTTP 404). External AI calls = 0.
+           ↓
+Step 3: Evaluate Canonical Permission (curriculum.lesson_plan.generate)
+        - Scope: 'offering'
+        - Org Reach: offering.tenant_id in organizationSubtenantIds
+        - Teacher Assignment: if caller is teacher, actorId === offering.teacher_id
+        - Department: if caller is HOD, offering.department_id === HOD department
+        Reject unauthorized (HTTP 403). External AI calls = 0. Quota = 0. Usage logs = 0.
+           ↓
+Step 4: Validate Curriculum & Topic Prerequisites
+        - offering.curriculum_status === 'published' (AI never runs on draft syllabus)
+        - topic belongs to offering's published curriculum version
+        - academic year is active
+        Reject invalid state (HTTP 422). External AI calls = 0. Quota = 0. Usage logs = 0.
+           ↓
+Step 5: Enforce Tenant AI Token Quota
+        Sum billing period usage from ai_usage_logs for offering.tenant_id.
+        Reject quota exhaustion (HTTP 429). External AI calls = 0.
+           ↓
+Step 6: Invoke Google Gemini API
+        Execute HTTP POST using server-held GEMINI_API_KEY.
+           ↓
+Step 7: Persist Audit & Token Attribution
+        Insert usage log into public.ai_usage_logs (offering.tenant_id, auth.uid(),
+        feature='lesson_plan', input_tokens, output_tokens, status='success').
+           ↓
+Step 8: Return Ephemeral JSON to Client Session
 ```
 
 #### The Zero Side-Effect Guarantee:
@@ -268,7 +290,7 @@ Under invariant `INV-3C-A-09`:
 - **Zero calls are made to Google Gemini**.
 - **Zero tokens are consumed**.
 - **Zero records are inserted into `public.ai_usage_logs`**.
-- The existing system does NOT record rejected requests in `ai_usage_logs` (rejected requests are recorded exclusively in standard server access telemetry).
+- Rejected requests are recorded exclusively in standard server access telemetry.
 
 ---
 
@@ -286,7 +308,7 @@ The subsequent implementation phase must satisfy this expanded test contract:
 2. **`TEST-ENR-02` (Authorized Server-Mediated Enrollment):** School Admin calls `POST /api/admissions/:id/enroll` on applicant with `stage = 'Offer'`. Expected: **200 OK**. Student record created.
 3. **`TEST-ENR-03` (Spoofed Actor ID Prevented):** Caller sends `{ p_actor_id: 'fake-uuid' }` in body. Expected: Server ignores spoofed body field; audit record matches caller's real `auth.uid()`.
 4. **`TEST-ENR-04` (Wrong Tenant Applicant Enrollment):** School A admin calls `POST /api/admissions/:id/enroll` for School B applicant. Expected: **403 Forbidden**. Target record untouched.
-5. **`TEST-ENR-05` (Duplicate Concurrent Enrollment Serialization):** Two parallel requests execute `POST /api/admissions/:id/enroll` for same applicant UUID simultaneously. Expected: Exactly **one request succeeds (200 OK)**; the other fails with **422 Unprocessable Entity** (`ALREADY_ENROLLED`). Exactly **one student record** created in `public.students`.
+5. **`TEST-ENR-05` (Duplicate Concurrent Enrollment Serialization):** Two parallel requests execute `POST /api/admissions/:id/enroll` for same applicant UUID simultaneously. Expected: Exactly **one enrollment transaction executes**; both return the identical student UUID idempotently. Exactly **one student record** exists in `public.students`.
 6. **`TEST-ENR-06` (Unapproved Applicant Enrollment):** School Admin calls `POST /api/admissions/:id/enroll` on applicant in `stage = 'Application'`. Expected: **422 Unprocessable Entity**. Zero student records created.
 
 ### 4.3 Academic AI Security Tests

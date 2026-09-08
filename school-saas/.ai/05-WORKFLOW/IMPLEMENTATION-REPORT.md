@@ -3029,43 +3029,42 @@ Gemini has completed implementation, testing, static verification, production bu
 **Supervisory Authority:** ChatGPT (Chief Software Architect & Project Supervisor)  
 **Final Authority:** Human Project Owner  
 
-### 1. Executive Summary & Supervisory Corrections Resolution
+### 1. Executive Summary & Final Security Corrections Resolution
 
-Following the supervisory review of TASK-0007 Phase 3C-A ("CHANGES REQUESTED"), all architectural, boundary, and lifecycle specifications were finalized:
-1. **Org-Admin School-Scope Semantics:** Formalized the exact rule that an `org_admin` exercising school-scoped permissions is strictly bounded to child schools within their authorized organization subtree (`context.organizationSubtenantIds.includes(target.tenantId)`). Arbitrary school access is strictly prohibited.
-2. **AI Domain Ownership Justification:** Evaluated Option A (`curriculum.lesson_plan.generate`) vs Option B (`academics.lesson_plan.generate`). Option A was adopted as canonical based on direct linkage to `041_subjects_curriculum_engine.sql` (`curriculum_versions`, `curriculum_topics`, `learning_outcomes`), catalog consistency with the existing `curriculum.*` family, and `public.ai_usage_logs` schema.
-3. **AI Authorization Semantics & Zero Side-Effect Guarantee:** Formulated the strict 8-step pipeline where any failure (unauthorized, cross-tenant, unassigned teacher, or draft syllabus) results in zero external Gemini API calls, zero token quota consumption, and zero database usage logs.
-4. **Admissions Operations Decomposition:** Segregated monolithic PATCH into dedicated endpoints: demographic maintenance (`admissions.applicants.manage`), entrance evaluation scoring (`admissions.applicants.evaluate`), WAEC stream track allocation (`admissions.applicants.place`), and official letter dispatch (`admissions.letters.dispatch`).
-5. **Complete Enrollment Lifecycle:** Established the 9-stage prerequisite chain separating executive admission offers (`admissions.applicants.approve`) from the legal student/parent registry creation transaction (`admissions.applicants.enroll`). Enforced `SELECT ... FOR UPDATE` row locking to eliminate race conditions and guarantee idempotency.
-6. **Service-Role / Human Actor Trust Boundary:** Formulated the 10-point trust specification reconciling `service_role` database transport with human `auth.uid()` attribution. Documented the direct RPC threat model showing why PostgREST blocks unauthorized client calls when function execution is revoked from `PUBLIC`.
-7. **Exam Officer Authority Demarcation:** Strictly restricted Examination Officers to objective academic evaluation (`evaluate`) and stream qualification (`place`), with executive approval, demographic updates, letter dispatch, and enrollment transactions strictly denied.
+Following the supervisory review of TASK-0007 Phase 3C-A ("CHANGES REQUESTED — FINAL SECURITY CORRECTION"), the architecture was finalized with complete trust boundary rigor:
+1. **Correction of the `p_actor_id` Trust Model:** Explicitly established that `p_actor_id` is **not identity proof**. It is trusted only when supplied by a server-only execution boundary after cryptographic session authentication and canonical authorization have already established the human actor.
+2. **Complete Unidirectional Trust Boundary:** Formalized the 8-stage pipeline from client session to audit persistence, explicitly prohibiting `client → p_actor_id`, `client → service_role`, `client → enrollment RPC`, and `client → arbitrary actor UUID`.
+3. **Decoupling Transport from Identity:** Enforced the strict distinction between `service_role` (database transport privilege only; never represents the human user), `admissions.applicants.enroll` (business authorization), and `auth.uid()` (human actor identity).
+4. **Server Command Trust Invariant:** The server command schema accepts NO actor ID parameter; actor identity is derived strictly from `auth.uid()`, preventing client-controlled audit forging.
+5. **Multi-Layer Direct RPC Threat Model:** Established that revoking PostgREST `EXECUTE` privileges is only one security layer; full defense-in-depth combines authentication, canonical authorization, trusted resource resolution, and server-only privileged execution.
+6. **Enrollment Idempotency & Database Uniqueness Constraint Prerequisite:** Detailed the full transaction flow with row locking (`FOR UPDATE`), re-reading state, and deterministic returns for already enrolled applicants. Formally identified the addition of `students.applicant_id UUID UNIQUE REFERENCES applicants(id)` as a mandatory implementation prerequisite for defense-in-depth.
+7. **Minimum Enrollment Audit Record:** Formally defined the audit record (`actor_id`, `tenant_id`, `applicant_id`, `result`, `timestamp`), ensuring the client can never select or override the audit actor.
 
 ### 2. Architecture Deliverables Produced & Revised
 
-1. **Permission Architecture & Catalog Delta Specification (Final Revision):**  
+1. **Permission Architecture & Catalog Delta Specification (Final Security Revision):**  
    `.ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-PERMISSION-ARCHITECTURE.md`
    - Formalizes org-admin school-scope subtree reach rule.
-   - Documents AI domain ownership justification (Option A vs Option B).
-   - Specifies proposed permission `curriculum.lesson_plan.generate` (scope: `offering`).
+   - Documents AI domain ownership justification (Option A canonical: `curriculum.lesson_plan.generate`).
    - Decomposes admissions into 5 dedicated capabilities: `admissions.applicants.manage`, `evaluate`, `place`, `letters.dispatch`, and `enroll`.
    - Delivers the final consolidated decision matrix covering all 12 core capabilities.
-   - Catalog Count: 33 frozen + 6 proposed additions = 39 atomic permissions.
+   - Preserves permission catalog count: 33 frozen + 6 proposed additions = 39 implementation-target permissions (`delete` deferred).
 
-2. **Operation-Oriented API Charter & Security Specification (Final Revision):**  
+2. **Operation-Oriented API Charter & Security Specification (Final Security Revision):**  
    `.ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-API-CHARTER.md`
    - Pure command-oriented endpoint architecture across all admissions and academic AI operations.
    - Details letter dispatch rules: state preconditions (`Offer`/`Allocation`), resending policies, provider retries, server-controlled timestamps, and idempotency.
    - Details complete enrollment lifecycle chain: state preconditions (`stage = 'Offer'`, `status = 'active'`, `docs_verified = true`), concurrency row-locking, and atomic rollback.
-   - Formalizes AI zero side-effect guarantee.
+   - Details AI zero side-effect guarantee (zero calls, zero tokens, zero usage logs on failure).
    - Expands security test contract across Organization Isolation, Enrollment Boundaries, AI Side Effects, and Letter Dispatch.
 
-3. **Database Security Boundary Design & `enroll_applicant` Remediation (Final Revision):**  
+3. **Database Security Boundary Design & `enroll_applicant` Remediation (Final Security Revision):**  
    `.ai/05-WORKFLOW/TASK-0007-PHASE-3C-A-DB-SECURITY-DESIGN.md`
    - Exhaustive 18-point dissection of `public.enroll_applicant`.
    - Precise 10-point trust boundary specification reconciling service-role transport with human `auth.uid()` actor identity.
-   - Formal direct RPC threat model and defense explanation.
+   - Formal direct RPC threat model and multi-layer defense explanation.
    - Comprehensive 9-point database security model.
-   - Hardened remediation SQL migration specification:
+   - Hardened remediation SQL migration specification including `students.applicant_id UUID UNIQUE` constraint prerequisite:
      - `REVOKE ALL ON FUNCTION public.enroll_applicant FROM PUBLIC, anon, authenticated;`
      - `GRANT EXECUTE ON FUNCTION public.enroll_applicant TO service_role;`
      - Enforces caller verification and concurrency locking (`SELECT ... FOR UPDATE`).

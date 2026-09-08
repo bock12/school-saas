@@ -1,4 +1,4 @@
-# TASK-0007 Phase 3C-A — Canonical Permission Architecture & Catalog Delta Specification (Final Revision)
+# TASK-0007 Phase 3C-A — Canonical Permission Architecture & Catalog Delta Specification (Final Security Revision)
 
 **Task:** TASK-0007 Phase 3C-A  
 **Stage:** Architecture & Governance Specification Only  
@@ -10,16 +10,24 @@
 
 ---
 
-## 1. Executive Architectural Summary & Final Revisions
+## 1. Executive Architectural Summary & Final Security Corrections
 
-In response to the final supervisory review of TASK-0007 Phase 3C-A, this specification resolves all remaining architectural boundary constraints:
+In response to the final supervisory review of TASK-0007 Phase 3C-A, this specification resolves all remaining architectural, trust boundary, and idempotency constraints:
 
-1. **Explicit Org-Admin School-Scope Semantics:** Formalized the exact rule that an `org_admin` exercising school-scoped permissions is strictly bounded to child schools within their authorized organization subtree (`context.organizationSubtenantIds.includes(target.tenantId)`). Arbitrary school access is strictly prohibited.
-2. **Rigorous Enrollment Lifecycle & Transactional Boundary:** Established the end-to-end prerequisite chain separating the executive admission decision (`admissions.applicants.approve`) from the irreversible legal enrollment transaction (`admissions.applicants.enroll`), with complete concurrency, idempotency, and rollback rules.
-3. **AI Domain Ownership Justification (Option A vs Option B):** Conducted a formal comparative analysis demonstrating why `curriculum.lesson_plan.generate` is the canonical choice over `academics.lesson_plan.generate` based on `041_subjects_curriculum_engine.sql` and Phase 3A catalog cohesion.
-4. **Dedicated Admissions Letter Dispatch (`admissions.letters.dispatch`):** Governs external legal communications, resend policies, provider retries, and server-controlled dispatch timestamps.
-5. **Separation of Evaluation from Placement:** Retains `admissions.applicants.evaluate` strictly for scoring while segregating senior secondary stream allocation into `admissions.applicants.place`.
-6. **Strict Exam Officer Demarcation:** Exam Officers are restricted to objective academic evaluation (`evaluate`) and stream qualification (`place`), with executive approval, demographic editing, letter dispatch, and enrollment transactions strictly prohibited.
+1. **Correction of the `p_actor_id` Trust Overclaim:** Explicitly clarified that `p_actor_id` is **not identity proof**. It is trusted only when supplied by a server-only execution boundary after cryptographic session authentication and canonical authorization have already established the human actor.
+2. **Complete Trust Boundary & Separation of Concerns:** Formally distinguished:
+   - `service_role` = database transport privilege only (never represents the human user).
+   - `admissions.applicants.enroll` = canonical business authorization.
+   - `auth.uid()` = authenticated human actor identity.
+3. **Explicit Prohibition of Client-Controlled Actor Claims:** The architecture strictly prohibits:
+   - `client → p_actor_id`
+   - `client → service_role`
+   - `client → enrollment RPC`
+   - `client → arbitrary actor UUID`
+4. **Complete Enrollment Lifecycle & Idempotency Pipeline:** Established the complete prerequisite chain from executive offer to master student registration. Documented why `SELECT ... FOR UPDATE` alone is insufficient without database-level uniqueness constraints, and established the addition of `students.applicant_id UUID UNIQUE` as a mandatory implementation prerequisite.
+5. **Direct RPC Threat Model as Defense-in-Depth:** Formalized that revoking `EXECUTE` on `public.enroll_applicant` from `PUBLIC`, `anon`, and `authenticated` is only one security layer; the complete boundary combines authentication, canonical authorization, trusted resource resolution, and server-only privileged execution.
+6. **Explicit Org-Admin School-Scope Semantics:** Formalized that an `org_admin` exercising school-scoped permissions is strictly bounded to child schools within their server-resolved organization subtree (`context.organizationSubtenantIds.includes(target.tenantId)`). Arbitrary school access is strictly prohibited (`OUT_OF_SCOPE: 403 Forbidden`).
+7. **AI Domain Ownership Justification (Option A Canonical):** Formally justified `curriculum.lesson_plan.generate` over `academics.lesson_plan.generate` based on `041_subjects_curriculum_engine.sql` and Phase 3A catalog cohesion.
 
 ---
 
@@ -30,7 +38,7 @@ This final specification enforces:
 - **`INV-3C-A-01`:** The Phase 3A canonical authorization engine mechanics remain 100% frozen.
 - **`INV-3C-A-02`:** No existing permission is repurposed or semantically distorted.
 - **`INV-3C-A-03`:** Authorization decisions are evaluated strictly against server-resolved trusted context.
-- **`INV-3C-A-04`:** Client-controlled attributes (`role`, `tenantId`, `actorId`, `stage`) are treated as untrusted.
+- **`INV-3C-A-04`:** Client-controlled attributes (`role`, `tenantId`, `actorId`, `stage`, `p_actor_id`) are treated as untrusted.
 - **`INV-3C-A-05`:** Organization administrator reach into child schools does not expand permission resource scopes beyond `school`.
 - **`INV-3C-A-06`:** Functional staff assignments do not grant executive administrative privileges.
 - **`INV-3C-A-07`:** Business operations with materially different security consequences receive distinct, dedicated permissions.
@@ -83,7 +91,53 @@ This boundary is documented and strictly enforced for all proposed school-scoped
 
 ---
 
-## 4. AI Domain Ownership: Option A vs. Option B (Required Section 5)
+## 4. The Complete Trust Boundary & Actor Attribution Architecture (Required Sections 1–4)
+
+### 4.1 Correcting the `p_actor_id` Trust Model
+The assertion that passing `p_actor_id` into a database stored procedure guarantees actor attribution is an overclaim that conflates parameter passing with cryptographic identity proof.
+
+**Architectural Correction:**
+> `p_actor_id` is **not identity proof**. It is trusted only when supplied by a server-only execution boundary after authentication and canonical authorization have already established the human actor.
+
+### 4.2 The Complete Multi-Layer Trust Boundary
+The system establishes trust through seven strictly ordered, unidirectional boundaries:
+
+```text
+Browser/client
+    ↓ [1. HTTPS Request with secure session cookie]
+Authenticated session
+    ↓ [2. Cryptographic JWT verification via Supabase Auth]
+Server endpoint / command
+    ↓ [3. Next.js server boundary extracts user.id]
+auth.uid()
+    ↓ [4. Pure Phase 3A RBAC engine: evaluatePermission()]
+Canonical authorization
+    ↓ [5. Authoritative DB lookup: resolveApplicantTarget()]
+Trusted applicant resolution
+    ↓ [6. Server-derived, non-forgeable actor UUID]
+Server-derived actor identity
+    ↓ [7. Server-only private connection via SUPABASE_SERVICE_ROLE_KEY]
+Privileged database transaction
+    ↓ [8. Immutable write to admission_history.created_by]
+Audit attribution
+```
+
+### 4.3 Explicit Prohibitions
+To prevent privilege escalation and audit spoofing, the architecture strictly enforces:
+- **`client → p_actor_id` [PROHIBITED]:** Request schemas for admissions endpoints accept NO `actorId`, `adminId`, or `p_actor_id` parameter. Any such client-supplied fields are discarded or rejected.
+- **`client → service_role` [PROHIBITED]:** The `SUPABASE_SERVICE_ROLE_KEY` is strictly held in server-side environment variables and never exposed to the client bundle or network responses.
+- **`client → enrollment RPC` [PROHIBITED]:** Direct client invocation of `public.enroll_applicant` over PostgREST is blocked by revoking PostgreSQL `EXECUTE` privileges from `PUBLIC`, `anon`, and `authenticated`.
+- **`client → arbitrary actor UUID` [PROHIBITED]:** The enacting actor UUID passed to the database is derived strictly from `auth.uid()`, preventing an attacker from attributing actions to another user.
+
+### 4.4 Service Role is Transport Privilege Only
+The architecture strictly enforces the distinction between transport privilege, business authorization, and human actor identity:
+- **`service_role`:** A database-level transport privilege mechanism that allows the server to execute multi-table administrative writes across tables guarded by RLS (`students`, `parents`, `student_parents`). **`service_role` never represents the human user.**
+- **`admissions.applicants.enroll`:** The business authorization decision granted to `super_admin`, `org_admin`, and `school_admin` validating institutional authority over the school.
+- **`auth.uid()`:** The cryptographic, authenticated identity of the human administrator who initiated the transaction.
+
+---
+
+## 5. AI Domain Ownership: Option A vs. Option B (Required Section 5)
 
 A comprehensive architectural comparison was conducted to determine the canonical module for lesson-plan generation:
 
@@ -108,7 +162,7 @@ A comprehensive architectural comparison was conducted to determine the canonica
 └───────────────────────────────────────┴───────────────────────────────────────┘
 ```
 
-### 4.1 Canonical Decision & Justification
+### 5.1 Canonical Decision & Justification
 **Decision: Option A (`curriculum.lesson_plan.generate`) is adopted as canonical.**
 
 **Repository Evidence:**
@@ -118,9 +172,9 @@ A comprehensive architectural comparison was conducted to determine the canonica
 
 ---
 
-## 5. Granular Specification of Proposed Permissions
+## 6. Granular Specification of Proposed Permissions
 
-### 5.1 `admissions.applicants.manage` (PROPOSED)
+### 6.1 `admissions.applicants.manage` (PROPOSED)
 - **Module:** `admissions` | **Resource:** `applicants` | **Action:** `manage`
 - **Description:** `Update applicant demographic records, contact details, and biographical information`
 - **Canonical Scope:** `school` | **Allowed Scopes:** `['platform', 'organization', 'school']`
@@ -129,7 +183,7 @@ A comprehensive architectural comparison was conducted to determine the canonica
 - **Org Reach Rule:** `org_admin` access allowed ONLY if target school is in `organizationSubtenantIds`.
 - **Strict Prohibition:** Prohibited from modifying scores, stream tracks, admission stages, letters, or enrollment.
 
-### 5.2 `admissions.applicants.evaluate` (PROPOSED)
+### 6.2 `admissions.applicants.evaluate` (PROPOSED)
 - **Module:** `admissions` | **Resource:** `applicants` | **Action:** `evaluate`
 - **Description:** `Record interview scores, entrance assessment marks, and verify national exam aggregates`
 - **Canonical Scope:** `school` | **Allowed Scopes:** `['platform', 'organization', 'school']`
@@ -138,7 +192,7 @@ A comprehensive architectural comparison was conducted to determine the canonica
 - **Org Reach Rule:** `org_admin` access allowed ONLY if target school is in `organizationSubtenantIds`.
 - **Strict Prohibition:** Prohibited from altering stream tracks, demographic records, or issuing admission offers.
 
-### 5.3 `admissions.applicants.place` (PROPOSED)
+### 6.3 `admissions.applicants.place` (PROPOSED)
 - **Module:** `admissions` | **Resource:** `applicants` | **Action:** `place`
 - **Description:** `Allocate senior secondary school applicants to academic stream tracks (Science, Arts, Commercial, Technical)`
 - **Canonical Scope:** `school` | **Allowed Scopes:** `['platform', 'organization', 'school']`
@@ -147,7 +201,7 @@ A comprehensive architectural comparison was conducted to determine the canonica
 - **Org Reach Rule:** `org_admin` access allowed ONLY if target school is in `organizationSubtenantIds`.
 - **Strict Prohibition:** Stream placement qualifies an applicant for a track based on WAEC rules; it DOES NOT issue an admission offer or execute student enrollment.
 
-### 5.4 `admissions.letters.dispatch` (PROPOSED)
+### 6.4 `admissions.letters.dispatch` (PROPOSED)
 - **Module:** `admissions` | **Resource:** `letters` | **Action:** `dispatch`
 - **Description:** `Generate and record official dispatch of formal admission decision letters to applicants`
 - **Canonical Scope:** `school` | **Allowed Scopes:** `['platform', 'organization', 'school']`
@@ -156,7 +210,7 @@ A comprehensive architectural comparison was conducted to determine the canonica
 - **Org Reach Rule:** `org_admin` access allowed ONLY if target school is in `organizationSubtenantIds`.
 - **Lifecycle & Side Effects:** Permitted only when `applicant.stage IN ('Offer', 'Allocation')` and `status = 'active'`. Server sets `admission_letter_sent = true` and `admission_letter_sent_at = NOW()`; enqueues asynchronous outbound email/SMS delivery.
 
-### 5.5 `admissions.applicants.enroll` (PROPOSED)
+### 6.5 `admissions.applicants.enroll` (PROPOSED)
 - **Module:** `admissions` | **Resource:** `applicants` | **Action:** `enroll`
 - **Description:** `Execute master enrollment transaction converting an admitted applicant into an active student record`
 - **Canonical Scope:** `school` | **Allowed Scopes:** `['platform', 'organization', 'school']`
@@ -165,7 +219,7 @@ A comprehensive architectural comparison was conducted to determine the canonica
 - **Org Reach Rule:** `org_admin` access allowed ONLY if target school is in `organizationSubtenantIds`.
 - **Lifecycle Preconditions:** Target applicant must have `stage = 'Offer'`, `status = 'active'`, and `docs_verified = true`.
 
-### 5.6 `curriculum.lesson_plan.generate` (PROPOSED)
+### 6.6 `curriculum.lesson_plan.generate` (PROPOSED)
 - **Module:** `curriculum` | **Resource:** `lesson_plan` | **Action:** `generate`
 - **Description:** `Generate ephemeral classroom instructional lesson plans from published curriculum topics using AI`
 - **Canonical Scope:** `offering` | **Allowed Scopes:** `['platform', 'organization', 'school', 'department', 'offering']`
@@ -177,7 +231,7 @@ A comprehensive architectural comparison was conducted to determine the canonica
 
 ---
 
-## 6. Exam Officer Authority Demarcation
+## 7. Exam Officer Authority Demarcation
 
 The Examination Officer's authority in admissions is strictly bounded to objective academic assessment and stream track qualification:
 
@@ -205,7 +259,7 @@ The Examination Officer's authority in admissions is strictly bounded to objecti
 
 ---
 
-## 7. Final Permission Matrix (Required Section 8)
+## 8. Final Permission Matrix (Required Section 8)
 
 | Capability | Permission | Scope | Base Roles | Functional Assignments | Org Reach Rule | SoD Enforced | Lifecycle Precondition | Side Effects | Governance Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -224,7 +278,7 @@ The Examination Officer's authority in admissions is strictly bounded to objecti
 
 ---
 
-## 8. Catalog Delta & Permission Count Summary (Required Section 9)
+## 9. Final Catalog Delta & Permission Count Summary (Required Section 8)
 
 ```text
 Current Phase 3A Frozen Permissions:  33
@@ -236,13 +290,8 @@ Proposed Additions:                   6
   5. admissions.applicants.enroll
   6. curriculum.lesson_plan.generate
 --------------------------------------------------
-Resulting Canonical Catalog:          39 (33 + 6)
+Resulting Implementation-Target Catalog: 39 (33 + 6)
 ```
 
-Every proposed permission satisfies the distinct business-capability requirement:
-1. `admissions.applicants.manage`: Protects applicant demographic integrity from unauthorized mutation.
-2. `admissions.applicants.evaluate`: Empowers examination officers and markers to enter objective marks without administrative escalation.
-3. `admissions.applicants.place`: Governs senior secondary academic track allocation and WAEC prerequisite compliance.
-4. `admissions.letters.dispatch`: Governs external legal communications and document issuance.
-5. `admissions.applicants.enroll`: Governs the irreversible creation of legal student and parent identities in the master registry.
-6. `curriculum.lesson_plan.generate`: Governs external AI token consumption and pedagogical assistance bounded to published syllabus.
+> [!NOTE]
+> `admissions.applicants.delete` is preserved outside this count as explicitly **DEFERRED** per supervisory mandate.
