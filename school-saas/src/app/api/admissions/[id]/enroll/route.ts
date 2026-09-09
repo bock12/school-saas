@@ -69,14 +69,17 @@ export async function POST(
       );
     }
 
-    // 3. Invoke enroll_applicant RPC with server-derived actor ID
+    // 3. Invoke enroll_applicant RPC strictly with server-derived actor ID
+    // ACTOR TRUST BOUNDARY:
+    // The enacting actor ID is derived exclusively from the verified server-side
+    // session (auth.user.id). Any client-supplied body or query parameters for
+    // actor identity are strictly rejected/ignored at this boundary.
     const adminClient = auth.adminClient();
     const actorId = auth.user.id;
 
     const { data: studentId, error: rpcError } = await adminClient.rpc('enroll_applicant', {
       p_applicant_id: id,
       p_actor_id: actorId,
-      p_admin_id: actorId,
     });
 
     if (rpcError) {

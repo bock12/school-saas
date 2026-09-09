@@ -3386,14 +3386,17 @@ Phase 3C Cohort 4 resolves the database authorization vulnerability and producti
 Prior to this remediation, `public.enroll_applicant` was created with `SECURITY DEFINER` and default PostgreSQL public execute permissions, allowing any authenticated user with a valid JWT to execute student matriculation directly via PostgREST (`/rest/v1/rpc/enroll_applicant`), bypassing application-layer authorization, lifecycle invariants, and tenant boundaries.
 
 In Cohort 4, this exposure has been completely remediated through:
-1. Revocation of execution privileges from `PUBLIC`, `anon`, and `authenticated`, granting execution strictly to `service_role`.
-2. Multi-layered execution defense inside the RPC verifying `current_user` and `auth.role()`.
-3. Server-derived human actor verification (`p_actor_id` in `public.profiles` with `is_active = true` and authorized administrative role).
-4. Strict tenant isolation and hierarchical subtree reach enforcement (`school_admin` same-tenant, `org_admin` subtree reach, `super_admin` platform reach).
-5. Database-level schema uniqueness prerequisite: `students.applicant_id UNIQUE REFERENCES public.applicants(id)`.
-6. Concurrency safety (`SELECT ... FOR UPDATE`) and deterministic idempotency (returning existing `student_id` for already-enrolled applicants).
-7. Strict lifecycle invariant validation (requiring `Offer` stage, `active` status, and verified documents).
-8. Comprehensive test coverage (16 new database security tests in `tests/security/enrollment-rpc-security.test.ts`, raising test suite total to 281 passing tests).
+1. **Strict Revocation & Grants:** Revocation of execution privileges from `PUBLIC`, `anon`, and `authenticated`, granting execution strictly to `service_role`.
+2. **Multi-layered Invocation Boundary:** Internal defense inside the RPC verifying `current_user` and `auth.role()`.
+3. **Strict Actor Trust Boundary:** Function signature strictly canonicalized to `(p_applicant_id UUID, p_actor_id UUID)` without legacy fallback parameters. Enacting actor is authoritatively derived server-side from `auth.user.id` (cryptographically verified Supabase session) in both the REST API route and Server Actions. Any client-supplied actor payload is strictly ignored/rejected.
+4. **Actor Verification & Administrative Reach:** Enacting human actor must exist in `public.profiles`, have `is_active = true`, and hold an administrative role with verified reach (`school_admin` same-tenant, `org_admin` subtree reach, `super_admin` platform reach).
+5. **Production Migration Safety & Data Normalization:** Migration 048 safely normalizes pre-existing legacy data before constraint application:
+   - Nullifies any orphaned `applicant_id` values not present in `public.applicants` to guarantee Foreign Key constraint creation.
+   - Deduplicates legacy duplicate student records created under unhardened RPC race conditions, retaining the earliest created student's link and nullifying duplicates to guarantee `UNIQUE` constraint creation.
+   - Creates named constraints `students_applicant_id_fkey` and `students_applicant_id_key` idempotently.
+6. **Concurrency Safety & Idempotency:** Concurrency lock via `SELECT ... FOR UPDATE` on `public.applicants`; returns existing `student_id` deterministically if already enrolled in `Allocation`.
+7. **Lifecycle Invariant Validation:** Requires `stage = 'Offer'`, `status = 'active'`, and `docs_verified = true`.
+8. **Comprehensive Verification:** 17 database security tests in `tests/security/enrollment-rpc-security.test.ts`, raising test suite total to 282 passing tests across 21 suites.
 
 ---
 
@@ -3401,114 +3404,107 @@ In Cohort 4, this exposure has been completely remediated through:
 
 | File | Change Type | Purpose |
 |---|---|---|
-| `supabase/migrations/048_admissions_enrollment_security.sql` | NEW | Database migration: adds `students.applicant_id` uniqueness constraint, drops vulnerable function, recreates hardened RPC, and establishes strict `REVOKE` / `GRANT` model. |
-| `tests/security/enrollment-rpc-security.test.ts` | NEW | 16 database security and boundary tests covering role revocation, actor verification, cross-tenant isolation, lifecycle invariants, idempotency, and uniqueness constraints. |
+| `supabase/migrations/048_admissions_enrollment_security.sql` | NEW | Database migration: includes pre-migration data normalization (orphan cleanup + duplicate deduplication), adds named `students.applicant_id` foreign key and unique constraints, drops unhardened signatures, recreates canonical 2-argument `public.enroll_applicant(p_applicant_id UUID, p_actor_id UUID)` RPC, and establishes strict `REVOKE` / `GRANT` model. |
+| `tests/security/enrollment-rpc-security.test.ts` | NEW | 17 database security and boundary tests covering role revocation, actor verification, cross-tenant isolation, lifecycle invariants, idempotency, uniqueness constraints, strict 2-arg signature enforcement, and migration data sanitization safety. |
 | `package.json` | MODIFIED | Appended `tests/security/enrollment-rpc-security.test.ts` to `npm test` script. |
-| `src/app/api/admissions/[id]/enroll/route.ts` | MODIFIED | Updated parameter invocation to pass `p_actor_id` and `p_admin_id` compatibly; updated security documentation confirming Cohort 4 DB hardening. |
-| `src/app/[tenant]/admin/students/admissions/actions.ts` | MODIFIED | Updated server actions to invoke `enroll_applicant` via `createAdminClient()` complying with the `service_role`-only database boundary. |
+| `src/app/api/admissions/[id]/enroll/route.ts` | MODIFIED | Strictly passes `p_actor_id` derived server-side from `auth.user.id`; establishes and documents Actor Trust Boundary. |
+| `src/app/[tenant]/admin/students/admissions/actions.ts` | MODIFIED | Enforces authenticated session check (`auth.getUser()`), fails closed on missing session, and invokes `enroll_applicant` via `createAdminClient()` passing verified `user.id` as `p_actor_id`. |
+| `tests/auth/admissions-canonical-api.test.ts` | MODIFIED | Updated mock RPC assertion to verify `p_actor_id === 'user-admin-a'`. |
 | `.ai/05-WORKFLOW/CONTROL-STATE.yaml` | MODIFIED | Updated active task to `TASK-0007-PHASE-3C-COHORT-4`, updated enrollment hold status to `REMEDIATED`. |
-| `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` | MODIFIED | Documented Cohort 4 implementation details, test results, and security analysis. |
+| `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md` | MODIFIED | Documented Cohort 4 implementation details, supervisory scrutiny substantiation, test results, and security analysis. |
 
 ---
 
-### 3. Database Security & Migration Design (`048_admissions_enrollment_security.sql`)
+### 3. Detailed Architecture & Technical Substantiation
 
-#### 3.1 Schema Uniqueness Constraint
+#### 3.1 Migration Safety & Data Normalization Sequence (`048_admissions_enrollment_security.sql`)
 ```sql
+-- 1.1 Add column if not present
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = 'students' AND column_name = 'applicant_id'
     ) THEN
-        ALTER TABLE public.students 
-        ADD COLUMN applicant_id UUID UNIQUE REFERENCES public.applicants(id) ON DELETE SET NULL;
+        ALTER TABLE public.students ADD COLUMN applicant_id UUID;
     END IF;
 END $$;
 
+-- 1.2 Data sanitization: Nullify orphaned applicant_ids
+UPDATE public.students s
+SET applicant_id = NULL
+WHERE s.applicant_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM public.applicants a WHERE a.id = s.applicant_id
+  );
+
+-- 1.3 Data sanitization: Deduplicate pre-existing duplicate students (retain earliest)
+WITH ranked_dupes AS (
+    SELECT id, applicant_id,
+           ROW_NUMBER() OVER (PARTITION BY applicant_id ORDER BY created_at ASC, id ASC) as rn
+    FROM public.students
+    WHERE applicant_id IS NOT NULL
+)
+UPDATE public.students s
+SET applicant_id = NULL
+FROM ranked_dupes r
+WHERE s.id = r.id AND r.rn > 1;
+
+-- 1.4 Add foreign key safely and idempotently
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.students'::regclass AND conname = 'students_applicant_id_fkey'
+    ) THEN
+        ALTER TABLE public.students
+        ADD CONSTRAINT students_applicant_id_fkey
+        FOREIGN KEY (applicant_id) REFERENCES public.applicants(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- 1.5 Add unique constraint safely and idempotently
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.students'::regclass AND conname = 'students_applicant_id_key'
+    ) THEN
+        ALTER TABLE public.students
+        ADD CONSTRAINT students_applicant_id_key
+        UNIQUE (applicant_id);
+    END IF;
+END $$;
+
+-- 1.6 Performance index
 CREATE INDEX IF NOT EXISTS idx_students_applicant_id ON public.students(applicant_id);
 ```
 
-#### 3.2 Invocation Boundary & Defense-in-Depth
-```sql
-IF current_user NOT IN ('service_role', 'postgres') AND COALESCE(auth.role(), '') != 'service_role' THEN
-  RAISE EXCEPTION 'Access Denied: enroll_applicant may only be invoked by authorized service_role';
-END IF;
-```
-
-#### 3.3 Actor Verification & Tenant Reach Enforcement
-```sql
-v_actor_uuid := COALESCE(p_actor_id, p_admin_id);
-
-IF v_actor_uuid IS NULL THEN
-  RAISE EXCEPTION 'Audit Failure: Enacting administrator ID (p_actor_id) is required';
-END IF;
-
-SELECT id, tenant_id, role INTO v_verified_actor
-FROM public.profiles
-WHERE id = v_actor_uuid AND is_active = true;
-
-IF NOT FOUND THEN
-  RAISE EXCEPTION 'Audit Failure: Enacting actor % is not a valid active profile', v_actor_uuid;
-END IF;
-
--- Concurrency Lock
-SELECT * INTO v_applicant 
-FROM public.applicants 
-WHERE id = p_applicant_id
-FOR UPDATE;
-
-IF NOT FOUND THEN
-  RAISE EXCEPTION 'Applicant not found: %', p_applicant_id;
-END IF;
-
--- Tenant Reach Check
-IF v_verified_actor.role = 'super_admin' THEN
-  NULL;
-ELSIF v_verified_actor.role = 'org_admin' THEN
-  IF v_verified_actor.tenant_id != v_applicant.tenant_id AND NOT EXISTS (
-    SELECT 1 FROM public.tenants
-    WHERE id = v_applicant.tenant_id AND parent_id = v_verified_actor.tenant_id
-  ) THEN
-    RAISE EXCEPTION 'Cross-Tenant Violation: Organization admin % does not have authority over tenant %', v_actor_uuid, v_applicant.tenant_id;
-  END IF;
-ELSIF v_verified_actor.role = 'school_admin' THEN
-  IF v_verified_actor.tenant_id != v_applicant.tenant_id THEN
-    RAISE EXCEPTION 'Cross-Tenant Violation: School admin % does not belong to tenant %', v_actor_uuid, v_applicant.tenant_id;
-  END IF;
-ELSE
-  RAISE EXCEPTION 'Unauthorized: Actor % with role % is not authorized to enroll applicants', v_actor_uuid, v_verified_actor.role;
-END IF;
-```
-
-#### 3.4 Concurrency & Idempotency
-```sql
-IF v_applicant.stage = 'Allocation' THEN
-  SELECT id INTO v_student_id 
-  FROM public.students 
-  WHERE applicant_id = p_applicant_id;
-
-  IF v_student_id IS NOT NULL THEN
-    RETURN v_student_id;
-  END IF;
-END IF;
-```
-
-#### 3.5 Lifecycle Invariant Enforcement
-```sql
-IF v_applicant.stage != 'Offer' OR v_applicant.status != 'active' OR v_applicant.docs_verified IS NOT TRUE THEN
-  RAISE EXCEPTION 'Lifecycle Violation: Applicant must be active in Offer stage with verified docs. Stage: %, Status: %, Verified: %',
-    v_applicant.stage, v_applicant.status, v_applicant.docs_verified;
-END IF;
-```
-
-#### 3.6 Strict Privilege Grants & Revocations
-```sql
-REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID, UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID, UUID) FROM anon;
-REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID, UUID) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.enroll_applicant(UUID, UUID, UUID) TO service_role;
-```
+#### 3.2 Strict Actor Trust Boundary
+- **REST API (`src/app/api/admissions/[id]/enroll/route.ts`):**
+  The route handler executes `authorizeApiRequest(req, { permission: 'admissions.applicants.enroll', ... })`. Once authorized, `actorId` is authoritatively assigned as `auth.user.id`. The RPC invocation strictly executes:
+  ```ts
+  const { data: studentId, error: rpcError } = await adminClient.rpc('enroll_applicant', {
+    p_applicant_id: id,
+    p_actor_id: actorId,
+  });
+  ```
+  No user payload (body or query params) can override or specify the actor.
+- **Server Action (`src/app/[tenant]/admin/students/admissions/actions.ts`):**
+  Both `progressApplicantStage` and `allocateAndMatriculateApplicant` explicitly verify the authenticated session:
+  ```ts
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
+    return { success: false, error: 'Authentication required to perform enrollment.' };
+  }
+  ```
+  If `user.id` is missing, the action aborts immediately without calling the privileged client. When authenticated, it invokes `enroll_applicant` with `p_actor_id: user.id`.
+- **Database Function Boundary (`public.enroll_applicant(p_applicant_id UUID, p_actor_id UUID)`):**
+  The function signature is strictly two arguments. Any attempt by external callers to invoke the function with legacy `p_admin_id` fails with parameter binding errors. The RPC performs internal multi-layered checks:
+  1. Caller check: `IF current_user NOT IN ('service_role', 'postgres') AND COALESCE(auth.role(), '') != 'service_role' THEN RAISE EXCEPTION 'Access Denied...';`
+  2. Actor profile check: `SELECT id, tenant_id, role INTO v_verified_actor FROM public.profiles WHERE id = p_actor_id AND is_active = true;`
+  3. Role restriction: Actor must be `super_admin`, `org_admin`, or `school_admin`.
+  4. Tenant reach: School admin must match applicant tenant. Org admin must match or contain applicant tenant in subordinate hierarchy.
 
 ---
 
@@ -3531,29 +3527,30 @@ Suite: tests/security/enrollment-rpc-security.test.ts
   ✔ SEC-RPC-12: Org admin successfully enrolls subordinate school applicant
   ✔ SEC-RPC-13: Idempotent invocation returns existing student ID without mutation
   ✔ SEC-RPC-14: Schema uniqueness constraint prevents duplicate student applicant_id (23505)
-  ✔ SEC-RPC-15: Function signature accepts p_actor_id and p_admin_id compatibly
+  ✔ SEC-RPC-15: Function signature strictly requires p_actor_id and rejects legacy p_admin_id
+  ✔ SEC-RPC-16: Migration 048 data sanitization safely handles legacy duplicates and orphans
 ```
 
 #### 4.2 Full Regression Suite (`npm test`)
 - **Total Test Suites:** 21
-- **Total Tests:** 281
-- **Passed:** 281
+- **Total Tests:** 282
+- **Passed:** 282
 - **Failed:** 0
 - **Cancelled:** 0
 - **Skipped:** 0
-- **Duration:** 61.1s
+- **Duration:** 84.0s
 
-#### 4.3 Typecheck & Build
+#### 4.3 Typecheck
 - `npx tsc --noEmit`: Exit code 0 (0 errors)
-- `npm run build`: Exit code 0 (All 39 static pages, routes, dynamic endpoints compiled and generated with Turbopack)
 
 ---
 
 ### 5. Status & Next Step
 
-The database vulnerability in `public.enroll_applicant` is completely remediated. The codebase is clean and verified against live PostgreSQL.
+The two specific areas of supervisory scrutiny (Actor Trust Boundary and Migration Data Sanitization Safety) have been substantiated, implemented in code and migrations, and verified against the live PostgreSQL database with 17 dedicated security tests.
 
-**Next Step:** Submit implementation report to supervisory review (ChatGPT) for Cohort 4 approval.
+**Next Step:** Authoritative supervisory review for Cohort 4 merge authorization.
+
 
 
 

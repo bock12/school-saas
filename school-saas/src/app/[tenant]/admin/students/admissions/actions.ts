@@ -83,12 +83,14 @@ export async function progressApplicantStage(
   const { data: { user } } = await supabase.auth.getUser();
 
   if (toStage === 'Allocation') {
-    // 1. Call RPC via privileged admin client (service_role required by 048)
+    if (!user?.id) {
+      return { success: false, error: 'Authentication required to perform enrollment.' };
+    }
+    // 1. Call RPC via privileged admin client strictly passing verified session user.id
     const adminSupabase = createAdminClient();
     const { error: rpcError } = await adminSupabase.rpc('enroll_applicant', {
       p_applicant_id: applicantId,
-      p_actor_id: user?.id || null,
-      p_admin_id: user?.id || null,
+      p_actor_id: user.id,
     });
 
     if (rpcError) {
@@ -406,6 +408,9 @@ export async function allocateAndMatriculateApplicant(
   }
 
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
+    return { success: false, error: 'Authentication required to perform allocation and enrollment.' };
+  }
 
   const { data: applicant } = await supabase
     .from('applicants')
@@ -426,8 +431,7 @@ export async function allocateAndMatriculateApplicant(
   const adminSupabase = createAdminClient();
   const { error: rpcError } = await adminSupabase.rpc('enroll_applicant', {
     p_applicant_id: applicantId,
-    p_actor_id: user?.id || null,
-    p_admin_id: user?.id || null,
+    p_actor_id: user.id,
   });
 
   if (rpcError) {

@@ -6,36 +6,91 @@
 -- Implementation Engineer: Gemini / Antigravity
 -- ============================================================
 
--- 1. Add missing schema uniqueness constraint prerequisite on students table
+-- ============================================================
+-- SECTION 1: SCHEMA SAFETY & PRE-MIGRATION DATA NORMALIZATION
+-- ============================================================
+
+-- 1.1 Safely add column applicant_id if not present
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = 'students' AND column_name = 'applicant_id'
     ) THEN
-        ALTER TABLE public.students 
-        ADD COLUMN applicant_id UUID UNIQUE REFERENCES public.applicants(id) ON DELETE SET NULL;
+        ALTER TABLE public.students ADD COLUMN applicant_id UUID;
     END IF;
 END $$;
 
+-- 1.2 Data sanitization: Nullify any orphaned applicant_id references that do not exist in public.applicants
+-- Ensures subsequent FOREIGN KEY constraint addition never fails on legacy corrupted data.
+UPDATE public.students s
+SET applicant_id = NULL
+WHERE s.applicant_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM public.applicants a WHERE a.id = s.applicant_id
+  );
+
+-- 1.3 Data sanitization: Deduplicate any legacy pre-existing duplicates
+-- If multiple students were created for the same applicant (due to race conditions under legacy 017),
+-- retain the earliest created student's link and nullify duplicate links to guarantee UNIQUE constraint safety.
+WITH ranked_dupes AS (
+    SELECT id, applicant_id,
+           ROW_NUMBER() OVER (PARTITION BY applicant_id ORDER BY created_at ASC, id ASC) as rn
+    FROM public.students
+    WHERE applicant_id IS NOT NULL
+)
+UPDATE public.students s
+SET applicant_id = NULL
+FROM ranked_dupes r
+WHERE s.id = r.id AND r.rn > 1;
+
+-- 1.4 Add FOREIGN KEY constraint safely and idempotently
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.students'::regclass AND conname = 'students_applicant_id_fkey'
+    ) THEN
+        ALTER TABLE public.students
+        ADD CONSTRAINT students_applicant_id_fkey
+        FOREIGN KEY (applicant_id) REFERENCES public.applicants(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- 1.5 Add UNIQUE constraint safely and idempotently
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.students'::regclass AND conname = 'students_applicant_id_key'
+    ) THEN
+        ALTER TABLE public.students
+        ADD CONSTRAINT students_applicant_id_key
+        UNIQUE (applicant_id);
+    END IF;
+END $$;
+
+-- 1.6 Ensure index exists for performant lookups
 CREATE INDEX IF NOT EXISTS idx_students_applicant_id ON public.students(applicant_id);
 
--- 2. Drop existing function signatures to reset all grants and parameter bindings
+-- ============================================================
+-- SECTION 2: FUNCTION SIGNATURE RESET & DROP
+-- ============================================================
 DROP FUNCTION IF EXISTS public.enroll_applicant(UUID, UUID);
 DROP FUNCTION IF EXISTS public.enroll_applicant(UUID, UUID, UUID);
 
--- 3. Create hardened, concurrency-safe, idempotent enroll_applicant function
+-- ============================================================
+-- SECTION 3: CANONICAL HARDENED enroll_applicant RPC
+-- ============================================================
 CREATE OR REPLACE FUNCTION public.enroll_applicant(
   p_applicant_id UUID,
-  p_actor_id UUID DEFAULT NULL,
-  p_admin_id UUID DEFAULT NULL
+  p_actor_id UUID
 )
 RETURNS UUID
 SECURITY DEFINER
 SET search_path = public, auth, extensions
 AS $$
 DECLARE
-  v_actor_uuid UUID;
   v_verified_actor RECORD;
   v_applicant RECORD;
   v_student_id UUID;
@@ -51,18 +106,16 @@ BEGIN
   END IF;
 
   -- 2. Actor Identity Verification: Enacting human actor must be an active profile
-  v_actor_uuid := COALESCE(p_actor_id, p_admin_id);
-
-  IF v_actor_uuid IS NULL THEN
+  IF p_actor_id IS NULL THEN
     RAISE EXCEPTION 'Audit Failure: Enacting administrator ID (p_actor_id) is required';
   END IF;
 
   SELECT id, tenant_id, role INTO v_verified_actor
   FROM public.profiles
-  WHERE id = v_actor_uuid AND is_active = true;
+  WHERE id = p_actor_id AND is_active = true;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Audit Failure: Enacting actor % is not a valid active profile', v_actor_uuid;
+    RAISE EXCEPTION 'Audit Failure: Enacting actor % is not a valid active profile', p_actor_id;
   END IF;
 
   -- 3. Concurrency Lock: Lock applicant row exclusively to prevent race conditions
@@ -87,14 +140,14 @@ BEGIN
       SELECT 1 FROM public.tenants
       WHERE id = v_applicant.tenant_id AND parent_id = v_verified_actor.tenant_id
     ) THEN
-      RAISE EXCEPTION 'Cross-Tenant Violation: Organization admin % does not have authority over tenant %', v_actor_uuid, v_applicant.tenant_id;
+      RAISE EXCEPTION 'Cross-Tenant Violation: Organization admin % does not have authority over tenant %', p_actor_id, v_applicant.tenant_id;
     END IF;
   ELSIF v_verified_actor.role = 'school_admin' THEN
     IF v_verified_actor.tenant_id != v_applicant.tenant_id THEN
-      RAISE EXCEPTION 'Cross-Tenant Violation: School admin % does not belong to tenant %', v_actor_uuid, v_applicant.tenant_id;
+      RAISE EXCEPTION 'Cross-Tenant Violation: School admin % does not belong to tenant %', p_actor_id, v_applicant.tenant_id;
     END IF;
   ELSE
-    RAISE EXCEPTION 'Unauthorized: Actor % with role % is not authorized to enroll applicants', v_actor_uuid, v_verified_actor.role;
+    RAISE EXCEPTION 'Unauthorized: Actor % with role % is not authorized to enroll applicants', p_actor_id, v_verified_actor.role;
   END IF;
 
   -- 5. Idempotency Check: Return existing student ID deterministically if already enrolled
@@ -234,15 +287,17 @@ BEGIN
     v_applicant.stage,
     'Allocation',
     'Student successfully enrolled into institutional student registry via canonical authorization.',
-    v_actor_uuid
+    p_actor_id
   );
 
   RETURN v_student_id;
 END;
 $$ LANGUAGE plpgsql;
 
--- 4. Strict Permission Revocation & Grant Model
-REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID, UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID, UUID) FROM anon;
-REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID, UUID) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.enroll_applicant(UUID, UUID, UUID) TO service_role;
+-- ============================================================
+-- SECTION 4: STRICT PERMISSION REVOCATION & GRANT MODEL
+-- ============================================================
+REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID) FROM anon;
+REVOKE ALL ON FUNCTION public.enroll_applicant(UUID, UUID) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.enroll_applicant(UUID, UUID) TO service_role;

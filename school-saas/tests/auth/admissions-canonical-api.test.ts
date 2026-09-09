@@ -969,7 +969,7 @@ test('CMD-ENROLL-01: school_admin in Offer stage -> API ALLOW (200), passes serv
     const enrollRpc = rpcCalls.find((r) => r.rpcName === 'enroll_applicant');
     assert.ok(enrollRpc, 'enroll_applicant RPC must be invoked');
     assert.equal(enrollRpc.params.p_applicant_id, 'app-a-offer');
-    assert.equal(enrollRpc.params.p_admin_id, 'user-admin-a', 'RPC p_admin_id must equal verified server actor ID');
+    assert.equal(enrollRpc.params.p_actor_id, 'user-admin-a', 'RPC p_actor_id must equal verified server actor ID');
   } finally {
     resetTestClientOverride();
   }
@@ -1044,10 +1044,10 @@ test('CMD-ENROLL-04: DOCUMENTED RESIDUAL RISK: Direct PostgREST enroll_applicant
    *
    * As documented in TASK-0007 Phase 3C Preflight and Supervisory Decision:
    * The API endpoint POST /api/admissions/[id]/enroll enforces canonical authorization,
-   * lifecycle invariants, and injects the server-derived actor ID into p_admin_id.
+   * lifecycle invariants, and injects the server-derived actor ID into p_actor_id.
    *
-   * HOWEVER, public.enroll_applicant in 017_enroll_applicant_rpc.sql is currently marked
-   * SECURITY DEFINER and lacks REVOKE EXECUTE ON FUNCTION FROM public, authenticated.
+   * HOWEVER, public.enroll_applicant in 017_enroll_applicant_rpc.sql was previously marked
+   * SECURITY DEFINER and lacked REVOKE EXECUTE ON FUNCTION FROM public, authenticated.
    * Any authenticated client can currently bypass the API layer and invoke PostgREST RPC directly.
    *
    * RESOLUTION REQUIREMENT:

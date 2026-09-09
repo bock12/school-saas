@@ -355,10 +355,10 @@ test('TASK-0007 Phase 3C Cohort 4: Admissions Enrollment RPC Database Security &
     });
 
     // -------------------------------------------------------------------------
-    // Test 15: Parameter compatibility: p_actor_id or p_admin_id named parameters
+    // Test 15: Canonical function signature strictly enforces (p_applicant_id, p_actor_id)
     // -------------------------------------------------------------------------
-    await t.test('SEC-RPC-15: Function signature accepts p_actor_id and p_admin_id compatibly', async () => {
-      // Test school admin B enrolling applicant B via p_actor_id
+    await t.test('SEC-RPC-15: Function signature strictly requires p_actor_id and rejects legacy p_admin_id', async () => {
+      // Named call with p_actor_id succeeds
       const bStudentId = await client.query(`
         SELECT public.enroll_applicant(p_applicant_id := $1, p_actor_id := $2) as student_id;
       `, [appBOfferId, schoolAdminBId]);
@@ -367,6 +367,117 @@ test('TASK-0007 Phase 3C Cohort 4: Admissions Enrollment RPC Database Security &
       // Verify applicant B is enrolled
       const appBRes = await client.query(`SELECT stage FROM public.applicants WHERE id = $1`, [appBOfferId]);
       assert.equal(appBRes.rows[0].stage, 'Allocation');
+
+      // Attempt to call with legacy p_admin_id parameter name fails because parameter is deprecated/removed
+      await client.query('SAVEPOINT sp_named_admin');
+      try {
+        await client.query(`
+          SELECT public.enroll_applicant(p_applicant_id := $1, p_admin_id := $2);
+        `, [appBOfferId, schoolAdminBId]);
+        assert.fail('Call with non-existent parameter p_admin_id should fail');
+      } catch (err: any) {
+        await client.query('ROLLBACK TO SAVEPOINT sp_named_admin');
+        assert.ok(
+          err.message.includes('function public.enroll_applicant') || err.message.includes('p_admin_id') || err.code === '42883',
+          `Expected missing function or parameter error, got: "${err.message}"`
+        );
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // Test 16: Migration Safety & Pre-migration Data Sanitization Verification
+    // -------------------------------------------------------------------------
+    await t.test('SEC-RPC-16: Migration 048 data sanitization safely handles legacy duplicates and orphans', async () => {
+      await client.query('SAVEPOINT sp_migration_safety');
+      try {
+        // Drop unique constraint temporarily inside savepoint to simulate legacy pre-048 state
+        await client.query(`ALTER TABLE public.students DROP CONSTRAINT students_applicant_id_key;`);
+        await client.query(`ALTER TABLE public.students DROP CONSTRAINT students_applicant_id_fkey;`);
+
+        // Insert legacy orphaned applicant_id (non-existent applicant)
+        const orphanAppId = '99999999-0000-0000-0000-000000000099';
+        await client.query(`
+          INSERT INTO public.students (tenant_id, applicant_id, first_name, last_name)
+          VALUES ($1, $2, 'Orphaned', 'Student');
+        `, [schoolTenantAId, orphanAppId]);
+
+        // Insert legacy duplicate student rows for the same applicant (simulating pre-048 race conditions)
+        const dupAppId = '33333333-4444-4000-8000-000000000088';
+        await client.query(`
+          INSERT INTO public.applicants (
+            id, tenant_id, first_name, last_name, email, phone, stage, status, docs_verified,
+            parent_name, parent_phone, parent_email, parent_relation, dob, gender, address, city, target_grade
+          ) VALUES ($1, $2, 'DupApp', 'Test', 'dup@test.com', '+23276000099', 'Offer', 'active', true,
+            'Parent Dup', '+23276000098', 'pdup@test.com', 'Father', '2011-01-01', 'female', 'Street', 'City', 'Grade 2');
+        `, [dupAppId, schoolTenantAId]);
+
+        // Row 1 (Earliest created)
+        const row1 = await client.query(`
+          INSERT INTO public.students (tenant_id, applicant_id, first_name, last_name, created_at)
+          VALUES ($1, $2, 'First', 'Student', NOW() - INTERVAL '1 hour')
+          RETURNING id;
+        `, [schoolTenantAId, dupAppId]);
+
+        // Row 2 (Duplicate created later)
+        const row2 = await client.query(`
+          INSERT INTO public.students (tenant_id, applicant_id, first_name, last_name, created_at)
+          VALUES ($1, $2, 'Duplicate', 'Student', NOW())
+          RETURNING id;
+        `, [schoolTenantAId, dupAppId]);
+
+        // Execute Migration 048 Step 1.2: Orphan sanitization
+        await client.query(`
+          UPDATE public.students s
+          SET applicant_id = NULL
+          WHERE s.applicant_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM public.applicants a WHERE a.id = s.applicant_id
+            );
+        `);
+
+        // Verify orphan was sanitized
+        const orphanCheck = await client.query(`
+          SELECT applicant_id FROM public.students WHERE first_name = 'Orphaned' AND last_name = 'Student';
+        `);
+        assert.equal(orphanCheck.rows[0].applicant_id, null, 'Orphaned applicant_id must be nullified');
+
+        // Execute Migration 048 Step 1.3: Duplicate deduplication (retain earliest)
+        await client.query(`
+          WITH ranked_dupes AS (
+              SELECT id, applicant_id,
+                     ROW_NUMBER() OVER (PARTITION BY applicant_id ORDER BY created_at ASC, id ASC) as rn
+              FROM public.students
+              WHERE applicant_id IS NOT NULL
+          )
+          UPDATE public.students s
+          SET applicant_id = NULL
+          FROM ranked_dupes r
+          WHERE s.id = r.id AND r.rn > 1;
+        `);
+
+        // Verify row1 retains applicant_id and row2 has applicant_id nullified
+        const row1Check = await client.query(`SELECT applicant_id FROM public.students WHERE id = $1`, [row1.rows[0].id]);
+        const row2Check = await client.query(`SELECT applicant_id FROM public.students WHERE id = $1`, [row2.rows[0].id]);
+        assert.equal(row1Check.rows[0].applicant_id, dupAppId, 'Earliest student must retain applicant_id');
+        assert.equal(row2Check.rows[0].applicant_id, null, 'Duplicate student applicant_id must be nullified');
+
+        // Now verify that foreign key and unique constraints apply cleanly without any error
+        await client.query(`
+          ALTER TABLE public.students
+          ADD CONSTRAINT students_applicant_id_fkey
+          FOREIGN KEY (applicant_id) REFERENCES public.applicants(id) ON DELETE SET NULL;
+        `);
+
+        await client.query(`
+          ALTER TABLE public.students
+          ADD CONSTRAINT students_applicant_id_key
+          UNIQUE (applicant_id);
+        `);
+
+        assert.ok(true, 'Constraints added successfully without violating existing data');
+      } finally {
+        await client.query('ROLLBACK TO SAVEPOINT sp_migration_safety');
+      }
     });
 
   } finally {
