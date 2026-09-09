@@ -1,6 +1,21 @@
 'use server';
 
+/**
+ * ARCHITECTURAL BOUNDARY GOVERNANCE NOTE (TASK-0007 Phase 3C Cohort 4):
+ * The database RPC (public.enroll_applicant) is the authoritative authorization boundary
+ * for legacy Server Actions during this migration phase.
+ * 
+ * Unlike canonical API routes (which evaluate permissions via evaluateAuthorization()),
+ * legacy Server Actions authenticate the caller via supabase.auth.getUser() and securely
+ * derive p_actor_id = user.id before calling the service_role-only enroll_applicant RPC.
+ * The database RPC independently verifies actor existence, active status, role authorization,
+ * tenant reach, and lifecycle invariants.
+ * 
+ * Phase 3D will migrate these Server Actions to the canonical evaluateAuthorization() engine.
+ */
+
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 
 export async function createApplicant(formData: FormData) {
@@ -82,10 +97,16 @@ export async function progressApplicantStage(
   const { data: { user } } = await supabase.auth.getUser();
 
   if (toStage === 'Allocation') {
-    // 1. Call RPC
-    const { error: rpcError } = await supabase.rpc('enroll_applicant', {
+    if (!user?.id) {
+      return { success: false, error: 'Authentication required to perform enrollment.' };
+    }
+    // Note: The database RPC (public.enroll_applicant) is the authoritative security boundary
+    // for this legacy Server Action during Phase 3C. Actor identity is derived strictly from
+    // verified session user.id, and the database independently validates actor existence, status, role, and tenant reach.
+    const adminSupabase = createAdminClient();
+    const { error: rpcError } = await adminSupabase.rpc('enroll_applicant', {
       p_applicant_id: applicantId,
-      p_admin_id: user?.id || null
+      p_actor_id: user.id,
     });
 
     if (rpcError) {
@@ -403,6 +424,9 @@ export async function allocateAndMatriculateApplicant(
   }
 
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
+    return { success: false, error: 'Authentication required to perform allocation and enrollment.' };
+  }
 
   const { data: applicant } = await supabase
     .from('applicants')
@@ -419,10 +443,13 @@ export async function allocateAndMatriculateApplicant(
   const parPass = parentPasswordTemp || 'Parent2026!';
   const parentUser = applicant.parent_phone || applicant.parent_email || applicant.phone || 'parent@school.edu.sl';
 
-  // 1. Call RPC to enroll applicant into students table & parents table
-  const { error: rpcError } = await supabase.rpc('enroll_applicant', {
+  // Note: The database RPC (public.enroll_applicant) is the authoritative security boundary
+  // for this legacy Server Action during Phase 3C. Actor identity is derived strictly from
+  // verified session user.id, and the database independently validates actor existence, status, role, and tenant reach.
+  const adminSupabase = createAdminClient();
+  const { error: rpcError } = await adminSupabase.rpc('enroll_applicant', {
     p_applicant_id: applicantId,
-    p_admin_id: user?.id || null
+    p_actor_id: user.id,
   });
 
   if (rpcError) {
