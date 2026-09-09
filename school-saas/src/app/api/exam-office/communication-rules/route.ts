@@ -1,50 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { authorizeApiRequest, apiError } from '@/lib/auth/api-guard';
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { searchParams } = new URL(req.url);
+    const requestedTenantSlug =
+      searchParams.get('tenantSlug') || searchParams.get('tenant') || undefined;
 
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const auth = await authorizeApiRequest(req, {
+      permission: 'communications.rules.manage',
+      scope: 'tenant',
+      requestedTenantSlug,
+    });
 
-    const adminSupabase = createAdminClient();
-    const tenantId = user.user_metadata?.tenant_id;
-
-    let query = adminSupabase.from('notification_rules').select('*, notification_templates(*)').order('created_at', { ascending: false });
-
-    if (tenantId) {
-      query = query.eq('tenant_id', tenantId);
+    if (!auth.ok) {
+      return auth.response;
     }
 
-    const { data: rules, error } = await query;
+    const adminSupabase = auth.adminClient();
+    const tenantId = auth.tenantId!;
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const { data: rules, error } = await adminSupabase
+      .from('notification_rules')
+      .select('*, notification_templates(*)')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false });
+
+    if (error) return apiError(error.message, 'DATABASE_ERROR', 500);
 
     return NextResponse.json({ rules: rules || [] });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return apiError(err.message || 'Server error', 'INTERNAL_ERROR', 500);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const body = await req.json().catch(() => ({}));
+    const {
+      name,
+      eventType,
+      templateId,
+      audienceDefinition,
+      channelConfiguration = ['in_app'],
+      conditions = {},
+      delaySeconds = 0,
+      active = true,
+      tenantSlug,
+    } = body;
 
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { searchParams } = new URL(req.url);
+    const requestedTenantSlug =
+      searchParams.get('tenantSlug') || searchParams.get('tenant') || tenantSlug || undefined;
 
-    const body = await req.json();
-    const { name, eventType, templateId, audienceDefinition, channelConfiguration = ['in_app'], conditions = {}, delaySeconds = 0, active = true } = body;
+    const auth = await authorizeApiRequest(req, {
+      permission: 'communications.rules.manage',
+      scope: 'tenant',
+      requestedTenantSlug,
+    });
 
-    const adminSupabase = createAdminClient();
-    const tenantId = user.user_metadata?.tenant_id;
+    if (!auth.ok) {
+      return auth.response;
+    }
+
+    const adminSupabase = auth.adminClient();
+    const tenantId = auth.tenantId!;
 
     const { data: rule, error } = await adminSupabase
       .from('notification_rules')
       .insert({
-        tenant_id: tenantId || null,
+        tenant_id: tenantId,
         name,
         event_type: eventType,
         template_id: templateId,
@@ -53,15 +78,15 @@ export async function POST(req: NextRequest) {
         conditions,
         delay_seconds: delaySeconds,
         active,
-        created_by: user.id,
+        created_by: auth.user.id,
       })
       .select()
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return apiError(error.message, 'DATABASE_ERROR', 500);
 
     return NextResponse.json({ rule });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return apiError(err.message || 'Server error', 'INTERNAL_ERROR', 500);
   }
 }

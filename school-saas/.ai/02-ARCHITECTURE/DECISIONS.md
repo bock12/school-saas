@@ -57,5 +57,53 @@ Adopt the **Contextual Functional Assignment Architecture**:
 - RLS policies remain performant, simple, and clean by joining existing relational assignment tables (`departments`, `sections`, `teacher_assignments`, and future `school_staff_assignments`).
 
 
+## ADR-0004 — Canonical Communications & Notifications Authorization Architecture
+**Date:** 2026-09-09  
+**Status:** APPROVED (Supervisory Review TASK-0007 Phase 3D Cohort 3D-1)  
+**Authority:** ChatGPT / Human Project Owner  
+
+### Context
+In Phase 3A/3B, communications endpoints were deferred under GAP-3B-01 because the canonical registry lacked communications permissions. Furthermore, discovery in Phase 3D revealed critical cross-tenant rule and template leakage via client-writable `user_metadata.tenant_id`, and unguarded service-role operations on notifications. To prevent permission laundering and maintain least privilege, personal inbox management must be strictly separated from administrative institutional broadcasts and rule/template management.
+
+### Decision
+Extend the canonical permission registry with six atomic permissions across two modules:
+1. `notifications.self.view`: View personal inbox and unread counts (Scope: `self`, all active roles).
+2. `notifications.self.manage`: Mark personal notifications as read / dismiss (Scope: `self`, all active roles).
+3. `communications.templates.manage`: Create, edit, and archive message templates (Scope: `school`, base roles: `school_admin`, `org_admin`, `super_admin`; assignment: `exam_officer`).
+4. `communications.rules.manage`: Configure automated trigger rules and routing (Scope: `school`, base roles: `school_admin`, `org_admin`, `super_admin`; assignment: `exam_officer`).
+5. `communications.broadcast.send`: Dispatch or schedule mass multi-channel broadcasts (Scope: `school`, base roles: `school_admin`, `org_admin`, `super_admin`; assignment: `exam_officer`).
+6. `communications.broadcast.view`: View broadcast dispatch history and delivery logs (Scope: `school`, base roles: `school_admin`, `org_admin`, `super_admin`; assignments: `vice_principal`, `exam_officer`, `hod`).
+
+### Consequences
+- Personal notifications are strictly bounded to `user.id === auth.userId`. Client-supplied recipient parameters are rejected.
+- Multi-tenant boundary is enforced via server-validated `auth.tenantId`. Untrusted `user_metadata.tenant_id` is eliminated.
+- Teachers, students, and parents cannot dispatch school broadcasts or alter institutional communication rules.
+
+---
+
+## ADR-0005 — Platform Leads Authorization Architecture
+**Date:** 2026-09-09  
+**Status:** APPROVED (Supervisory Review TASK-0007 Phase 3D Cohort 3D-1)  
+**Authority:** ChatGPT / Human Project Owner  
+
+### Context
+Prospective institution demo inquiries and onboarding leads (`demo_requests` table) were historically guarded by legacy role checks (`roles: ['super_admin']`) and queried via raw `getPgPool()`. Overloading `platform.tenants.manage` with lead qualification conflates CRM pipeline management with production tenant lifecycle control (create, configure, suspend, migrate).
+
+### Decision
+Define a dedicated canonical permission:
+- `platform.leads.manage`:
+  - Module: `platform` | Resource: `leads` | Action: `manage`
+  - Description: "Manage prospective tenant inquiries, demo scheduling, and onboarding pipeline"
+  - Canonical Scope: `platform` | Allowed Scopes: `['platform']`
+  - Base Role Entitled: `super_admin` only
+  - Functional Assignments: None
+
+### Consequences
+- Clean domain separation between prospective onboarding leads and production school tenant infrastructure.
+- Eliminates raw `getPgPool()` bypass on `/api/super-admin/leads`.
+- Future platform sales/support roles can be granted lead management without inheriting production tenant management.
+
+---
+
 ## ADR protocol
 New ADRs cover material architecture, schema/RLS, dependency, integration, boundary and compatibility choices. Record evidence, alternatives, decision, consequences, security/data impact, rollout/rollback, authority and links. Human acceptance is required for material operational decisions.

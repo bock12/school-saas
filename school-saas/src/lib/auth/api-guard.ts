@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { User, SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
-import { CanonicalPermission, BaseRole, isBaseRole } from './permissions-registry';
+import { CanonicalPermission, BaseRole, isBaseRole, PERMISSIONS_CATALOG } from './permissions-registry';
 import {
   evaluateAuthorization,
   ResourceTarget,
@@ -358,8 +358,11 @@ export async function authorizeApiRequest(
         };
       }
 
+      const permDef = PERMISSIONS_CATALOG[permission];
+      const isSelfScoped = permDef?.canonicalScope === 'self';
       target = {
         tenantId: candidateTenantId || '',
+        ...(isSelfScoped ? { ownerId: user.id } : {}),
       };
     }
 

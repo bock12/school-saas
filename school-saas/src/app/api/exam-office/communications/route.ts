@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const targetTenantSlug = searchParams.get('tenant') || undefined;
 
     const auth = await authorizeApiRequest(req, {
-      roles: ['school_admin', 'exam_officer', 'super_admin'],
+      permission: 'communications.broadcast.view',
       requestedTenantSlug: targetTenantSlug,
       scope: 'tenant',
     });
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     } = body;
 
     const auth = await authorizeApiRequest(req, {
-      roles: ['school_admin', 'exam_officer', 'super_admin'],
+      permission: 'communications.broadcast.send',
       requestedTenantSlug: tenantSlug || undefined,
       scope: 'tenant',
     });
@@ -92,10 +92,13 @@ export async function POST(req: NextRequest) {
     const status = isScheduled ? 'scheduled' : 'sent';
 
     // 1. Resolve recipients
-    const recipients = await resolveAudience({
-      type: audienceType,
-      tenantId: tenantId!,
-    });
+    const recipients = await resolveAudience(
+      {
+        type: audienceType,
+        tenantId: tenantId!,
+      },
+      adminSupabase
+    );
 
     if (recipients.length === 0) {
       return apiError('No recipients match the selected audience filter', 'INVALID_AUDIENCE', 400);
@@ -174,13 +177,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await logCommunicationAudit({
-      tenantId: tenantId!,
-      actorId: user.id,
-      action: isScheduled ? 'notification_scheduled' : 'notification_sent',
-      notificationId: notif.id,
-      details: `${isScheduled ? 'Scheduled' : 'Sent'} notification "${finalTitle}" to ${recipients.length} recipients across ${channels.join(', ')}`,
-    });
+    await logCommunicationAudit(
+      {
+        tenantId: tenantId!,
+        actorId: user.id,
+        action: isScheduled ? 'notification_scheduled' : 'notification_sent',
+        notificationId: notif.id,
+        details: `${isScheduled ? 'Scheduled' : 'Sent'} notification "${finalTitle}" to ${recipients.length} recipients across ${channels.join(', ')}`,
+      },
+      adminSupabase
+    );
 
     return NextResponse.json({
       success: true,

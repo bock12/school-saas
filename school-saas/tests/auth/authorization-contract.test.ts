@@ -141,6 +141,7 @@ describe('Canonical Authorization Contract — Matrix-Driven Verification', () =
             departmentId: 'dept-contract',
             sectionId: 'sec-contract',
             subjectOfferingId: 'off-contract',
+            ownerId: `usr-${assignmentType}-contract`,
             submitterId: 'other-colleague-id',
             stage: 'draft',
           };
@@ -321,14 +322,29 @@ describe('Canonical Authorization Contract — Matrix-Driven Verification', () =
       'curriculum.lesson_plan.generate',
     ];
 
-    test('canonical catalog contains exactly 39 permissions (33 Phase 3A + 6 Phase 3C-A)', () => {
+    const ADR_0004_COMMUNICATIONS_PERMISSIONS: CanonicalPermission[] = [
+      'notifications.self.view',
+      'notifications.self.manage',
+      'communications.templates.manage',
+      'communications.rules.manage',
+      'communications.broadcast.send',
+      'communications.broadcast.view',
+    ];
+
+    const ADR_0005_LEADS_PERMISSIONS: CanonicalPermission[] = [
+      'platform.leads.manage',
+    ];
+
+    test('canonical catalog contains exactly 46 permissions (33 Phase 3A + 6 Phase 3C + 6 ADR-0004 + 1 ADR-0005)', () => {
       assert.equal(
         CANONICAL_PERMISSIONS.length,
-        39,
-        `Expected exactly 39 canonical permissions, but found ${CANONICAL_PERMISSIONS.length}`
+        46,
+        `Expected exactly 46 canonical permissions, but found ${CANONICAL_PERMISSIONS.length}`
       );
       assert.equal(PHASE_3A_PERMISSIONS.length, 33);
       assert.equal(PHASE_3C_NEW_PERMISSIONS.length, 6);
+      assert.equal(ADR_0004_COMMUNICATIONS_PERMISSIONS.length, 6);
+      assert.equal(ADR_0005_LEADS_PERMISSIONS.length, 1);
 
       // Verify every Phase 3A permission is present
       for (const p3aPerm of PHASE_3A_PERMISSIONS) {
@@ -343,6 +359,22 @@ describe('Canonical Authorization Contract — Matrix-Driven Verification', () =
         assert.ok(
           CANONICAL_PERMISSIONS.includes(newPerm),
           `Missing Phase 3C permission: ${newPerm}`
+        );
+      }
+
+      // Verify every ADR-0004 permission is present
+      for (const commsPerm of ADR_0004_COMMUNICATIONS_PERMISSIONS) {
+        assert.ok(
+          CANONICAL_PERMISSIONS.includes(commsPerm),
+          `Missing ADR-0004 permission: ${commsPerm}`
+        );
+      }
+
+      // Verify ADR-0005 leads permission is present
+      for (const leadsPerm of ADR_0005_LEADS_PERMISSIONS) {
+        assert.ok(
+          CANONICAL_PERMISSIONS.includes(leadsPerm),
+          `Missing ADR-0005 permission: ${leadsPerm}`
         );
       }
     });

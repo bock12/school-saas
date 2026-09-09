@@ -27,9 +27,12 @@ export interface AuditRecord {
   metadata?: Record<string, unknown>;
 }
 
-export async function logCommunicationAudit(record: AuditRecord): Promise<void> {
+export async function logCommunicationAudit(
+  record: AuditRecord,
+  customClient?: any
+): Promise<void> {
   try {
-    const supabase = createAdminClient();
+    const supabase = customClient || createAdminClient();
     await supabase.from('notification_events').insert({
       tenant_id: record.tenantId,
       event_type: record.action,
