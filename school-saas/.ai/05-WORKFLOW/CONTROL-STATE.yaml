@@ -7,16 +7,16 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: TASK-0007-PHASE-3C-COHORT-4
+  id: null
   parent_task: TASK-0007
-  status: COMPLETED_PENDING_SUPERVISORY_REVIEW
-  title: "Admissions Enrollment RPC Database Security Boundary Remediation"
-  branch: ai-eos/task-0007-phase-3c-cohort-4-enrollment-rpc
-  target_migration: 048_admissions_enrollment_security.sql
+  status: AWAITING_SUPERVISORY_DIRECTION
+  title: "Phase 3C Completion / Awaiting Next Milestone Specification"
+  branch: main
+  target_migration: null
   enrollment_rpc_security_hold:
-    status: REMEDIATED
+    status: REMEDIATED_AND_MERGED
     migration_applied: 048_admissions_enrollment_security.sql
-    details: Revoked public, anon, and authenticated execute permissions from public.enroll_applicant; restricted strictly to service_role; enforced internal execution boundary; verified actor profile and role; enforced tenant isolation and subtree reach; added unique constraint on students.applicant_id; established concurrency lock and idempotency.
+    details: Complete database RPC security boundary remediated, verified, and merged on main (PR #19, commit 2727b38). Function execution restricted to service_role; canonical signature enforced; actor verified; tenant reach verified; lifecycle invariants enforced; students.applicant_id UNIQUE constraint added; Option A fail-closed integrity pre-check added; ON DELETE RESTRICT foreign key constraint enforced.
   open_data_integrity_issues:
     - "REC-0010: CASS synthetic assessment score generation"
   deferred_operations:
@@ -25,19 +25,20 @@ active_task:
     - "Communications APIs (/api/exam-office/communications GET & POST, GAP-3B-01)"
     - "Super-admin leads"
     - "Frontend authorization migration"
-  authorized_at: "2026-09-08T23:37:59Z"
-  completed_at: "2026-09-09T00:03:00Z"
+  authorized_at: null
+  completed_at: null
 last_completed_task:
+  id: TASK-0007-PHASE-3C-COHORT-4
+  status: MERGED_ON_MAIN
+  commit: 2727b38
+  pr_number: 19
+  branch: ai-eos/task-0007-phase-3c-cohort-4-enrollment-rpc
+previous_completed_task:
   id: TASK-0007-PHASE-3C-COHORT-2
   status: MERGED_ON_MAIN
   commit: a0bfd90
   pr_number: 18
   branch: ai-eos/task-0007-phase-3c-cohort-2-admissions-api
-previous_completed_task:
-  id: TASK-0007-PHASE-3C-COHORT-1
-  status: MERGED_ON_MAIN
-  commit: 10cba03
-  branch: ai-eos/task-0007-phase-3c-cohort-1-permission-extension
 last_instruction:
   id: TASK-0007-PHASE-3B-SUPERVISORY-APPROVAL
   from: chatgpt
