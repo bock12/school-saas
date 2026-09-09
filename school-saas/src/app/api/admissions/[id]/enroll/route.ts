@@ -6,15 +6,14 @@ import { TrustedResourceTarget } from '@/lib/auth/resource-resolver';
  * ============================================================================
  * POST /api/admissions/[id]/enroll
  *
- * CRITICAL SECURITY HOLD / COHORT 4 DEPENDENCY NOTICE:
- * Application-layer authorization: Enforces admissions.applicants.enroll,
+ * CRITICAL SECURITY ARCHITECTURE (PHASE 3C COHORT 4):
+ * Application-layer authorization: Enforces canonical admissions.applicants.enroll,
  * verifies applicant lifecycle invariants, and injects server-derived actor ID.
  *
- * RESIDUAL DATABASE EXPOSURE:
- * The underlying PostgREST RPC public.enroll_applicant remains directly executable
- * by the 'authenticated' role until Cohort 4 deploys 048_admissions_enrollment_security.sql.
- * Application authorization via this endpoint is necessary but does NOT secure the
- * direct PostgREST RPC vector. Production authorization remains BLOCKED until Cohort 4.
+ * DATABASE HARDENING:
+ * 048_admissions_enrollment_security.sql revokes public/anon/authenticated execution
+ * rights on public.enroll_applicant, restricts execution strictly to service_role,
+ * enforces actor verification, tenant reach, concurrency locks, and idempotency.
  * ============================================================================
  */
 export async function POST(
@@ -76,6 +75,7 @@ export async function POST(
 
     const { data: studentId, error: rpcError } = await adminClient.rpc('enroll_applicant', {
       p_applicant_id: id,
+      p_actor_id: actorId,
       p_admin_id: actorId,
     });
 

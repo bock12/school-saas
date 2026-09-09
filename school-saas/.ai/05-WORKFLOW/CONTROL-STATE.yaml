@@ -9,14 +9,14 @@ engineering_memory: .ai/
 active_task:
   id: TASK-0007-PHASE-3C-COHORT-4
   parent_task: TASK-0007
-  status: AWAITING_SUPERVISORY_SPECIFICATION
+  status: COMPLETED_PENDING_SUPERVISORY_REVIEW
   title: "Admissions Enrollment RPC Database Security Boundary Remediation"
-  branch: null
+  branch: ai-eos/task-0007-phase-3c-cohort-4-enrollment-rpc
   target_migration: 048_admissions_enrollment_security.sql
   enrollment_rpc_security_hold:
-    status: COHORT_4_TARGET
-    migration_required: 048_admissions_enrollment_security.sql
-    details: Remediate public.enroll_applicant SECURITY DEFINER execute privileges, derive actor from auth.uid(), enforce tenant authorization, and add students.applicant_id uniqueness constraint.
+    status: REMEDIATED
+    migration_applied: 048_admissions_enrollment_security.sql
+    details: Revoked public, anon, and authenticated execute permissions from public.enroll_applicant; restricted strictly to service_role; enforced internal execution boundary; verified actor profile and role; enforced tenant isolation and subtree reach; added unique constraint on students.applicant_id; established concurrency lock and idempotency.
   open_data_integrity_issues:
     - "REC-0010: CASS synthetic assessment score generation"
   deferred_operations:
@@ -25,8 +25,8 @@ active_task:
     - "Communications APIs (/api/exam-office/communications GET & POST, GAP-3B-01)"
     - "Super-admin leads"
     - "Frontend authorization migration"
-  authorized_at: null
-  completed_at: null
+  authorized_at: "2026-09-08T23:37:59Z"
+  completed_at: "2026-09-09T00:03:00Z"
 last_completed_task:
   id: TASK-0007-PHASE-3C-COHORT-2
   status: MERGED_ON_MAIN

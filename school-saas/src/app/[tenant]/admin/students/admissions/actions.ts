@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 
 export async function createApplicant(formData: FormData) {
@@ -82,10 +83,12 @@ export async function progressApplicantStage(
   const { data: { user } } = await supabase.auth.getUser();
 
   if (toStage === 'Allocation') {
-    // 1. Call RPC
-    const { error: rpcError } = await supabase.rpc('enroll_applicant', {
+    // 1. Call RPC via privileged admin client (service_role required by 048)
+    const adminSupabase = createAdminClient();
+    const { error: rpcError } = await adminSupabase.rpc('enroll_applicant', {
       p_applicant_id: applicantId,
-      p_admin_id: user?.id || null
+      p_actor_id: user?.id || null,
+      p_admin_id: user?.id || null,
     });
 
     if (rpcError) {
@@ -419,10 +422,12 @@ export async function allocateAndMatriculateApplicant(
   const parPass = parentPasswordTemp || 'Parent2026!';
   const parentUser = applicant.parent_phone || applicant.parent_email || applicant.phone || 'parent@school.edu.sl';
 
-  // 1. Call RPC to enroll applicant into students table & parents table
-  const { error: rpcError } = await supabase.rpc('enroll_applicant', {
+  // 1. Call RPC to enroll applicant into students table & parents table via admin client
+  const adminSupabase = createAdminClient();
+  const { error: rpcError } = await adminSupabase.rpc('enroll_applicant', {
     p_applicant_id: applicantId,
-    p_admin_id: user?.id || null
+    p_actor_id: user?.id || null,
+    p_admin_id: user?.id || null,
   });
 
   if (rpcError) {
