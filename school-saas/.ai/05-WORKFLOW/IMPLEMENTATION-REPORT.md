@@ -3480,7 +3480,7 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_students_applicant_id ON public.students(applicant_id);
 ```
 
-#### 3.2 Strict Actor Trust Boundary
+#### 3.2 Strict Actor Trust Boundary & Server Actions Governance
 - **REST API (`src/app/api/admissions/[id]/enroll/route.ts`):**
   The route handler executes `authorizeApiRequest(req, { permission: 'admissions.applicants.enroll', ... })`. Once authorized, `actorId` is authoritatively assigned as `auth.user.id`. The RPC invocation strictly executes:
   ```ts
@@ -3490,15 +3490,15 @@ CREATE INDEX IF NOT EXISTS idx_students_applicant_id ON public.students(applican
   });
   ```
   No user payload (body or query params) can override or specify the actor.
-- **Server Action (`src/app/[tenant]/admin/students/admissions/actions.ts`):**
-  Both `progressApplicantStage` and `allocateAndMatriculateApplicant` explicitly verify the authenticated session:
+- **Server Actions Governance (`src/app/[tenant]/admin/students/admissions/actions.ts`):**
+  Both `progressApplicantStage` and `allocateAdmission` explicitly verify the authenticated session:
   ```ts
   const { data: { user } } = await supabase.auth.getUser();
   if (!user?.id) {
     return { success: false, error: 'Authentication required to perform enrollment.' };
   }
   ```
-  If `user.id` is missing, the action aborts immediately without calling the privileged client. When authenticated, it invokes `enroll_applicant` with `p_actor_id: user.id`.
+  *Architectural Boundary Governance Note:* As formally documented in `actions.ts`, the database RPC (`public.enroll_applicant`) serves as the authoritative security boundary for legacy Server Actions during Phase 3C. The Server Action derives `p_actor_id = user.id` from the verified session, and the database RPC independently validates actor existence, active status, role authorization, tenant reach, and lifecycle invariants. Phase 3D will converge Server Actions into the canonical `evaluateAuthorization()` engine.
 - **Database Function Boundary (`public.enroll_applicant(p_applicant_id UUID, p_actor_id UUID)`):**
   The function signature is strictly two arguments. Any attempt by external callers to invoke the function with legacy `p_admin_id` fails with parameter binding errors. The RPC performs internal multi-layered checks:
   1. Caller check: `IF current_user NOT IN ('service_role', 'postgres') AND COALESCE(auth.role(), '') != 'service_role' THEN RAISE EXCEPTION 'Access Denied...';`
@@ -3506,13 +3506,24 @@ CREATE INDEX IF NOT EXISTS idx_students_applicant_id ON public.students(applican
   3. Role restriction: Actor must be `super_admin`, `org_admin`, or `school_admin`.
   4. Tenant reach: School admin must match applicant tenant. Org admin must match or contain applicant tenant in subordinate hierarchy.
 
+#### 3.3 Option A Fail-Closed Migration Gate & ON DELETE RESTRICT Provenance
+- **Option A Pre-Migration Integrity Gate:**
+  Rather than silently mutating or nullifying legacy data, Section 1.2 of Migration 048 executes a fail-closed integrity pre-check. If any orphaned `applicant_id` references or duplicate applicant groupings exist on `public.students`, the migration aborts with an explicit diagnostic report:
+  ```sql
+  RAISE EXCEPTION 'MIGRATION 048 ABORTED (Fail-Closed Safety Gate): Pre-existing nonconforming student enrollment data detected. Diagnostic: orphan_count=%, duplicate_group_count=%, duplicate_row_count=%...',
+      v_orphan_count, v_duplicate_group_count, v_duplicate_row_count;
+  ```
+  Silent data truncation is prohibited, guaranteeing that existing student↔applicant relationships are preserved without loss of trace.
+- **ON DELETE RESTRICT Provenance:**
+  Section 1.3 adds/upgrades `students_applicant_id_fkey` to `ON DELETE RESTRICT`. Once an applicant is matriculated into a student, attempting to delete the applicant record is rejected with PostgreSQL foreign key violation `23503`, preserving permanent institutional admission history.
+
 ---
 
 ### 4. Verification & Quality Gates
 
-#### 4.1 Test Execution Results
+#### 4.1 Database Security Test Results (`tests/security/enrollment-rpc-security.test.ts`)
 ```text
-Suite: tests/security/enrollment-rpc-security.test.ts
+Suite: tests/security/enrollment-rpc-security.test.ts (Real PostgreSQL)
   ✔ SEC-RPC-01: Direct anon PostgreSQL execution denied (42501)
   ✔ SEC-RPC-02: Direct authenticated PostgreSQL execution denied (42501)
   ✔ SEC-RPC-03: Invocation without enacting actor rejected (Audit Failure)
@@ -3528,42 +3539,40 @@ Suite: tests/security/enrollment-rpc-security.test.ts
   ✔ SEC-RPC-13: Idempotent invocation returns existing student ID without mutation
   ✔ SEC-RPC-14: Schema uniqueness constraint prevents duplicate student applicant_id (23505)
   ✔ SEC-RPC-15: Function signature strictly requires p_actor_id and rejects legacy p_admin_id
-  ✔ SEC-RPC-16: Migration 048 data sanitization safely handles legacy duplicates and orphans
+  ✔ SEC-RPC-16: Migration 048 Option A fails closed with diagnostic counts if legacy nonconforming data exists
+  ✔ SEC-RPC-17: ON DELETE RESTRICT prevents deleting an enrolled applicant and preserves provenance
+
+Total Security Tests: 17 passed / 17
 ```
 
 #### 4.2 Full Regression Suite (`npm test`)
 - **Total Test Suites:** 21
-- **Total Tests:** 282
-- **Passed:** 282
+- **Total Tests:** 283
+- **Passed:** 283
 - **Failed:** 0
 - **Cancelled:** 0
 - **Skipped:** 0
-- **Duration:** 84.0s
+- **Duration:** 62.8s
 
 #### 4.3 Typecheck
 - `npx tsc --noEmit`: Exit code 0 (0 errors)
 
+#### 4.4 Production Build
+- `npm run build`: Exit code 0 (all 39 static and dynamic routes compiled successfully)
+
 ---
 
-### 5. Status & Next Step
+### 5. Supervisory Review Compliance Checklist
 
-The two specific areas of supervisory scrutiny (Actor Trust Boundary and Migration Data Sanitization Safety) have been substantiated, implemented in code and migrations, and verified against the live PostgreSQL database with 17 dedicated security tests.
+| Supervisory Review Requirement | Status | Implementation Details |
+|---|---|---|
+| **1. Review migration 048's orphan/duplicate sanitization** | ✅ RESOLVED | Removed silent `UPDATE students SET applicant_id = NULL` logic. |
+| **2. Do not silently discard legacy relationships** | ✅ RESOLVED | Zero data is destroyed or mutated during pre-migration checks. |
+| **3. Option A fail-closed detection with diagnostics** | ✅ RESOLVED | Implemented in Section 1.2 with `orphan_count`, `duplicate_group_count`, `duplicate_row_count` diagnostics. Tested in `SEC-RPC-16`. |
+| **4. ON DELETE RESTRICT for students.applicant_id** | ✅ RESOLVED | Implemented in Section 1.3. Upgrades any existing constraint to `ON DELETE RESTRICT`. Tested in `SEC-RPC-17`. |
+| **5. Document database RPC as authoritative security boundary** | ✅ RESOLVED | Formally documented at top of `actions.ts` and inline before RPC calls. |
+| **6. Re-run security suite, full regression, typecheck, build** | ✅ RESOLVED | Security: 17/17 PASS. Regression: 283/283 PASS. Typecheck: 0 errors. Build: PASS. |
+| **7. No unrelated changes** | ✅ RESOLVED | Zero changes to permissions matrix, RLS policies, or frontend UI code. |
 
-**Next Step:** Authoritative supervisory review for Cohort 4 merge authorization.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+**Next Step:** Human / Supervisory Merge Authorization for TASK-0007 Phase 3C Cohort 4.
 

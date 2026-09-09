@@ -385,23 +385,64 @@ test('TASK-0007 Phase 3C Cohort 4: Admissions Enrollment RPC Database Security &
     });
 
     // -------------------------------------------------------------------------
-    // Test 16: Migration Safety & Pre-migration Data Sanitization Verification
+    // Test 16: Migration Safety & Option A Fail-Closed Diagnostics
     // -------------------------------------------------------------------------
-    await t.test('SEC-RPC-16: Migration 048 data sanitization safely handles legacy duplicates and orphans', async () => {
+    await t.test('SEC-RPC-16: Migration 048 Option A fails closed with diagnostic counts if legacy nonconforming data exists', async () => {
       await client.query('SAVEPOINT sp_migration_safety');
       try {
-        // Drop unique constraint temporarily inside savepoint to simulate legacy pre-048 state
-        await client.query(`ALTER TABLE public.students DROP CONSTRAINT students_applicant_id_key;`);
-        await client.query(`ALTER TABLE public.students DROP CONSTRAINT students_applicant_id_fkey;`);
+        // Drop unique and FK constraints temporarily inside savepoint to simulate legacy pre-048 state
+        await client.query(`ALTER TABLE public.students DROP CONSTRAINT IF EXISTS students_applicant_id_key;`);
+        await client.query(`ALTER TABLE public.students DROP CONSTRAINT IF EXISTS students_applicant_id_fkey;`);
 
-        // Insert legacy orphaned applicant_id (non-existent applicant)
+        // SQL block matching Migration 048 Section 1.2
+        const failClosedCheckSql = `
+          DO $$
+          DECLARE
+              v_orphan_count INT := 0;
+              v_duplicate_group_count INT := 0;
+              v_duplicate_row_count INT := 0;
+          BEGIN
+              SELECT COUNT(*) INTO v_orphan_count
+              FROM public.students s
+              WHERE s.applicant_id IS NOT NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM public.applicants a WHERE a.id = s.applicant_id
+                );
+
+              SELECT COUNT(*), COALESCE(SUM(cnt), 0)
+              INTO v_duplicate_group_count, v_duplicate_row_count
+              FROM (
+                  SELECT applicant_id, COUNT(*) AS cnt
+                  FROM public.students
+                  WHERE applicant_id IS NOT NULL
+                  GROUP BY applicant_id
+                  HAVING COUNT(*) > 1
+              ) dupes;
+
+              IF v_orphan_count > 0 OR v_duplicate_group_count > 0 THEN
+                  RAISE EXCEPTION 'MIGRATION 048 ABORTED (Fail-Closed Safety Gate): Pre-existing nonconforming student enrollment data detected. Diagnostic: orphan_count=%, duplicate_group_count=%, duplicate_row_count=%. Automatic silent data truncation is prohibited to preserve enrollment relational provenance. Please review and remediate legacy data with an auditable plan prior to applying foreign key and unique constraints.',
+                      v_orphan_count, v_duplicate_group_count, v_duplicate_row_count;
+              END IF;
+          END $$;
+        `;
+
+        // 1. Verify clean data passes without throwing
+        await client.query(failClosedCheckSql);
+
+        // 2. Insert legacy orphaned applicant_id (non-existent applicant)
         const orphanAppId = '99999999-0000-0000-0000-000000000099';
         await client.query(`
           INSERT INTO public.students (tenant_id, applicant_id, first_name, last_name)
           VALUES ($1, $2, 'Orphaned', 'Student');
         `, [schoolTenantAId, orphanAppId]);
 
-        // Insert legacy duplicate student rows for the same applicant (simulating pre-048 race conditions)
+        // Verify fail-closed detection catches the orphan with diagnostic count
+        await expectError(
+          () => client.query(failClosedCheckSql),
+          'orphan_count=1, duplicate_group_count=0, duplicate_row_count=0'
+        );
+
+        // 3. Insert duplicate students for an existing applicant
         const dupAppId = '33333333-4444-4000-8000-000000000088';
         await client.query(`
           INSERT INTO public.applicants (
@@ -411,72 +452,50 @@ test('TASK-0007 Phase 3C Cohort 4: Admissions Enrollment RPC Database Security &
             'Parent Dup', '+23276000098', 'pdup@test.com', 'Father', '2011-01-01', 'female', 'Street', 'City', 'Grade 2');
         `, [dupAppId, schoolTenantAId]);
 
-        // Row 1 (Earliest created)
-        const row1 = await client.query(`
-          INSERT INTO public.students (tenant_id, applicant_id, first_name, last_name, created_at)
-          VALUES ($1, $2, 'First', 'Student', NOW() - INTERVAL '1 hour')
-          RETURNING id;
+        await client.query(`
+          INSERT INTO public.students (tenant_id, applicant_id, first_name, last_name)
+          VALUES ($1, $2, 'First', 'Student');
         `, [schoolTenantAId, dupAppId]);
 
-        // Row 2 (Duplicate created later)
-        const row2 = await client.query(`
-          INSERT INTO public.students (tenant_id, applicant_id, first_name, last_name, created_at)
-          VALUES ($1, $2, 'Duplicate', 'Student', NOW())
-          RETURNING id;
+        await client.query(`
+          INSERT INTO public.students (tenant_id, applicant_id, first_name, last_name)
+          VALUES ($1, $2, 'Second', 'Student');
         `, [schoolTenantAId, dupAppId]);
 
-        // Execute Migration 048 Step 1.2: Orphan sanitization
-        await client.query(`
-          UPDATE public.students s
-          SET applicant_id = NULL
-          WHERE s.applicant_id IS NOT NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM public.applicants a WHERE a.id = s.applicant_id
-            );
-        `);
-
-        // Verify orphan was sanitized
-        const orphanCheck = await client.query(`
-          SELECT applicant_id FROM public.students WHERE first_name = 'Orphaned' AND last_name = 'Student';
-        `);
-        assert.equal(orphanCheck.rows[0].applicant_id, null, 'Orphaned applicant_id must be nullified');
-
-        // Execute Migration 048 Step 1.3: Duplicate deduplication (retain earliest)
-        await client.query(`
-          WITH ranked_dupes AS (
-              SELECT id, applicant_id,
-                     ROW_NUMBER() OVER (PARTITION BY applicant_id ORDER BY created_at ASC, id ASC) as rn
-              FROM public.students
-              WHERE applicant_id IS NOT NULL
-          )
-          UPDATE public.students s
-          SET applicant_id = NULL
-          FROM ranked_dupes r
-          WHERE s.id = r.id AND r.rn > 1;
-        `);
-
-        // Verify row1 retains applicant_id and row2 has applicant_id nullified
-        const row1Check = await client.query(`SELECT applicant_id FROM public.students WHERE id = $1`, [row1.rows[0].id]);
-        const row2Check = await client.query(`SELECT applicant_id FROM public.students WHERE id = $1`, [row2.rows[0].id]);
-        assert.equal(row1Check.rows[0].applicant_id, dupAppId, 'Earliest student must retain applicant_id');
-        assert.equal(row2Check.rows[0].applicant_id, null, 'Duplicate student applicant_id must be nullified');
-
-        // Now verify that foreign key and unique constraints apply cleanly without any error
-        await client.query(`
-          ALTER TABLE public.students
-          ADD CONSTRAINT students_applicant_id_fkey
-          FOREIGN KEY (applicant_id) REFERENCES public.applicants(id) ON DELETE SET NULL;
-        `);
-
-        await client.query(`
-          ALTER TABLE public.students
-          ADD CONSTRAINT students_applicant_id_key
-          UNIQUE (applicant_id);
-        `);
-
-        assert.ok(true, 'Constraints added successfully without violating existing data');
+        // Verify fail-closed detection catches both orphan and duplicates with exact diagnostics
+        await expectError(
+          () => client.query(failClosedCheckSql),
+          'orphan_count=1, duplicate_group_count=1, duplicate_row_count=2'
+        );
       } finally {
         await client.query('ROLLBACK TO SAVEPOINT sp_migration_safety');
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // Test 17: ON DELETE RESTRICT Provenance Preservation
+    // -------------------------------------------------------------------------
+    await t.test('SEC-RPC-17: ON DELETE RESTRICT prevents deleting an enrolled applicant and preserves provenance', async () => {
+      await client.query('SAVEPOINT sp_fk_restrict');
+      try {
+        // Ensure student exists referencing appAOfferId
+        const enrolledStudentId = await callRpc(appAOfferId, schoolAdminAId);
+        assert.ok(enrolledStudentId, 'Student must be enrolled');
+
+        // Attempt to delete applicant record while student reference exists
+        await expectError(
+          () => client.query(`DELETE FROM public.applicants WHERE id = $1;`, [appAOfferId]),
+          'update or delete on table "applicants" violates foreign key constraint "students_applicant_id_fkey"'
+        );
+
+        // Verify that student and applicant link remained completely intact
+        const studentRes = await client.query(
+          `SELECT applicant_id FROM public.students WHERE id = $1;`,
+          [enrolledStudentId]
+        );
+        assert.equal(studentRes.rows[0].applicant_id, appAOfferId, 'Student applicant_id must remain preserved');
+      } finally {
+        await client.query('ROLLBACK TO SAVEPOINT sp_fk_restrict');
       }
     });
 

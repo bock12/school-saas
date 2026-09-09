@@ -21,43 +21,69 @@ BEGIN
     END IF;
 END $$;
 
--- 1.2 Data sanitization: Nullify any orphaned applicant_id references that do not exist in public.applicants
--- Ensures subsequent FOREIGN KEY constraint addition never fails on legacy corrupted data.
-UPDATE public.students s
-SET applicant_id = NULL
-WHERE s.applicant_id IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM public.applicants a WHERE a.id = s.applicant_id
-  );
-
--- 1.3 Data sanitization: Deduplicate any legacy pre-existing duplicates
--- If multiple students were created for the same applicant (due to race conditions under legacy 017),
--- retain the earliest created student's link and nullify duplicate links to guarantee UNIQUE constraint safety.
-WITH ranked_dupes AS (
-    SELECT id, applicant_id,
-           ROW_NUMBER() OVER (PARTITION BY applicant_id ORDER BY created_at ASC, id ASC) as rn
-    FROM public.students
-    WHERE applicant_id IS NOT NULL
-)
-UPDATE public.students s
-SET applicant_id = NULL
-FROM ranked_dupes r
-WHERE s.id = r.id AND r.rn > 1;
-
--- 1.4 Add FOREIGN KEY constraint safely and idempotently
+-- 1.2 Pre-Migration Integrity Gate (Option A: Fail-Closed Diagnostics):
+-- To prevent silent loss of student<->applicant relationships, the migration strictly fails closed
+-- if any orphaned or duplicate applicant_id references exist on public.students.
+-- If nonconforming data is detected, an exception is raised with complete diagnostic counts:
+-- orphan_count, duplicate_group_count, duplicate_row_count.
 DO $$
+DECLARE
+    v_orphan_count INT := 0;
+    v_duplicate_group_count INT := 0;
+    v_duplicate_row_count INT := 0;
 BEGIN
+    -- Detect orphaned references (students referencing non-existent applicants)
+    SELECT COUNT(*) INTO v_orphan_count
+    FROM public.students s
+    WHERE s.applicant_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM public.applicants a WHERE a.id = s.applicant_id
+      );
+
+    -- Detect duplicate applicant_id assignments across students
+    SELECT COUNT(*), COALESCE(SUM(cnt), 0)
+    INTO v_duplicate_group_count, v_duplicate_row_count
+    FROM (
+        SELECT applicant_id, COUNT(*) AS cnt
+        FROM public.students
+        WHERE applicant_id IS NOT NULL
+        GROUP BY applicant_id
+        HAVING COUNT(*) > 1
+    ) dupes;
+
+    IF v_orphan_count > 0 OR v_duplicate_group_count > 0 THEN
+        RAISE EXCEPTION 'MIGRATION 048 ABORTED (Fail-Closed Safety Gate): Pre-existing nonconforming student enrollment data detected. Diagnostic: orphan_count=%, duplicate_group_count=%, duplicate_row_count=%. Automatic silent data truncation is prohibited to preserve enrollment relational provenance. Please review and remediate legacy data with an auditable plan prior to applying foreign key and unique constraints.',
+            v_orphan_count, v_duplicate_group_count, v_duplicate_row_count;
+    END IF;
+END $$;
+
+-- 1.3 Add or Upgrade FOREIGN KEY constraint with ON DELETE RESTRICT
+-- Enrollment provenance is immutable: once an applicant is matriculated into a student,
+-- deleting the applicant must be restricted to preserve audit and admission history.
+DO $$
+DECLARE
+    v_confdeltype "char";
+BEGIN
+    SELECT confdeltype INTO v_confdeltype
+    FROM pg_constraint
+    WHERE conrelid = 'public.students'::regclass AND conname = 'students_applicant_id_fkey';
+
+    -- If constraint exists but does not enforce RESTRICT ('r'), drop it to upgrade
+    IF v_confdeltype IS NOT NULL AND v_confdeltype != 'r' THEN
+        ALTER TABLE public.students DROP CONSTRAINT students_applicant_id_fkey;
+    END IF;
+
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conrelid = 'public.students'::regclass AND conname = 'students_applicant_id_fkey'
     ) THEN
         ALTER TABLE public.students
         ADD CONSTRAINT students_applicant_id_fkey
-        FOREIGN KEY (applicant_id) REFERENCES public.applicants(id) ON DELETE SET NULL;
+        FOREIGN KEY (applicant_id) REFERENCES public.applicants(id) ON DELETE RESTRICT;
     END IF;
 END $$;
 
--- 1.5 Add UNIQUE constraint safely and idempotently
+-- 1.4 Add UNIQUE constraint safely and idempotently
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -70,7 +96,7 @@ BEGIN
     END IF;
 END $$;
 
--- 1.6 Ensure index exists for performant lookups
+-- 1.5 Ensure index exists for performant lookups
 CREATE INDEX IF NOT EXISTS idx_students_applicant_id ON public.students(applicant_id);
 
 -- ============================================================
