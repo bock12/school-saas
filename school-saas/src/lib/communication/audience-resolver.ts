@@ -41,8 +41,11 @@ export interface ResolvedRecipient {
 /**
  * Resolves audience user profiles for a notification.
  */
-export async function resolveAudience(def: AudienceDefinition): Promise<ResolvedRecipient[]> {
-  const supabase = createAdminClient();
+export async function resolveAudience(
+  def: AudienceDefinition,
+  customClient?: any
+): Promise<ResolvedRecipient[]> {
+  const supabase = customClient || createAdminClient();
   const { tenantId, type, customUserIds } = def;
 
   // Custom static user list
@@ -53,7 +56,7 @@ export async function resolveAudience(def: AudienceDefinition): Promise<Resolved
       .in('id', customUserIds)
       .eq('tenant_id', tenantId);
 
-    return (data || []).map((p) => ({
+    return (data || []).map((p: any) => ({
       userId: p.id,
       email: p.email || undefined,
       phone: p.phone || undefined,
@@ -70,7 +73,7 @@ export async function resolveAudience(def: AudienceDefinition): Promise<Resolved
       .eq('tenant_id', tenantId)
       .in('role', ['teacher', 'school_admin']);
 
-    return (data || []).map((p) => ({
+    return (data || []).map((p: any) => ({
       userId: p.id,
       email: p.email || undefined,
       phone: p.phone || undefined,
@@ -87,7 +90,7 @@ export async function resolveAudience(def: AudienceDefinition): Promise<Resolved
       .eq('tenant_id', tenantId)
       .in('role', ['teacher', 'school_admin']);
 
-    return (data || []).map((p) => ({
+    return (data || []).map((p: any) => ({
       userId: p.id,
       email: p.email || undefined,
       phone: p.phone || undefined,
@@ -104,7 +107,7 @@ export async function resolveAudience(def: AudienceDefinition): Promise<Resolved
       .eq('tenant_id', tenantId)
       .in('role', ['school_admin', 'org_admin', 'super_admin']);
 
-    return (data || []).map((p) => ({
+    return (data || []).map((p: any) => ({
       userId: p.id,
       email: p.email || undefined,
       phone: p.phone || undefined,
@@ -121,7 +124,7 @@ export async function resolveAudience(def: AudienceDefinition): Promise<Resolved
       .eq('tenant_id', tenantId)
       .eq('role', 'student');
 
-    return (data || []).map((p) => ({
+    return (data || []).map((p: any) => ({
       userId: p.id,
       email: p.email || undefined,
       phone: p.phone || undefined,
@@ -138,7 +141,7 @@ export async function resolveAudience(def: AudienceDefinition): Promise<Resolved
       .eq('tenant_id', tenantId)
       .eq('role', 'parent');
 
-    return (data || []).map((p) => ({
+    return (data || []).map((p: any) => ({
       userId: p.id,
       email: p.email || undefined,
       phone: p.phone || undefined,
@@ -153,7 +156,7 @@ export async function resolveAudience(def: AudienceDefinition): Promise<Resolved
     .select('id, email, phone, full_name, role')
     .eq('tenant_id', tenantId);
 
-  return (data || []).map((p) => ({
+  return (data || []).map((p: any) => ({
     userId: p.id,
     email: p.email || undefined,
     phone: p.phone || undefined,

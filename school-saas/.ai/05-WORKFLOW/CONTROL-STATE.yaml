@@ -7,26 +7,35 @@ authority:
 source_of_truth: github
 engineering_memory: .ai/
 active_task:
-  id: null
+  id: TASK-0007-PHASE-3D-COHORT-1
   parent_task: TASK-0007
-  status: AWAITING_SUPERVISORY_DIRECTION
-  title: "Phase 3C Completion / Awaiting Next Milestone Specification"
-  branch: main
+  status: APPROVED_MERGE_AUTHORIZED
+  title: "Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Containment"
+  branch: ai-eos/task-0007-phase-3d-cohort-1-api-containment
   target_migration: null
-  enrollment_rpc_security_hold:
-    status: REMEDIATED_AND_MERGED
-    migration_applied: 048_admissions_enrollment_security.sql
-    details: Complete database RPC security boundary remediated, verified, and merged on main (PR #19, commit 2727b38). Function execution restricted to service_role; canonical signature enforced; actor verified; tenant reach verified; lifecycle invariants enforced; students.applicant_id UNIQUE constraint added; Option A fail-closed integrity pre-check added; ON DELETE RESTRICT foreign key constraint enforced.
-  open_data_integrity_issues:
-    - "REC-0010: CASS synthetic assessment score generation"
+  canonical_permissions: 46
+  adrs:
+    - ADR-0004 (Communications & Notifications - 6 permissions - APPROVED/RATIFIED)
+    - ADR-0005 (Platform Leads Authorization - 1 permission - APPROVED/RATIFIED)
+  secured_routes:
+    - /api/academics/ai/lesson-plan (curriculum.lesson_plan.generate, offering scope, 0 Gemini leaks)
+    - /api/super-admin/leads (platform.leads.manage, platform scope, raw getPgPool eliminated)
+    - /api/exam-office/dashboard (exams.results.view, tenant/school scope, DELETE OPERATION_DEFERRED)
+    - /api/exam-office/communication-rules (communications.rules.manage, school scope, tenant metadata eliminated)
+    - /api/exam-office/communication-templates (communications.templates.manage, school scope)
+    - /api/exam-office/communications (communications.broadcast.view & send, school scope)
+    - /api/notifications (notifications.self.view & manage, self scope, bounded to auth.user.id)
   deferred_operations:
     - "Admissions DELETE (/api/admissions DELETE)"
-    - "Exam-session DELETE (/api/exam-office/dashboard DELETE)"
-    - "Communications APIs (/api/exam-office/communications GET & POST, GAP-3B-01)"
-    - "Super-admin leads"
-    - "Frontend authorization migration"
-  authorized_at: null
-  completed_at: null
+    - "Exam-session DELETE (/api/exam-office/dashboard DELETE - OPERATION_DEFERRED)"
+    - "Frontend authorization migration (Phase 3D-2)"
+    - "Server Actions migration (Phase 3D-3)"
+    - "RLS policy migration 049 (Phase 3D-4)"
+    - "REC-0010: CASS synthetic assessment score generation (Phase 3D-5)"
+  authorized_at: "2026-09-09T11:25:00Z"
+  completed_at: "2026-09-09T12:08:00Z"
+  approved_at: "2026-09-10T09:42:00Z"
+  approved_commit: "bca59ee"
 last_completed_task:
   id: TASK-0007-PHASE-3C-COHORT-4
   status: MERGED_ON_MAIN
@@ -40,21 +49,21 @@ previous_completed_task:
   pr_number: 18
   branch: ai-eos/task-0007-phase-3c-cohort-2-admissions-api
 last_instruction:
-  id: TASK-0007-PHASE-3B-SUPERVISORY-APPROVAL
+  id: TASK-0007-PHASE-3D-COHORT-1-SUPERVISORY-APPROVAL
   from: chatgpt
   to: gemini
   type: SUPERVISORY_APPROVAL
-  task_id: TASK-0007-PHASE-3B
-  status: APPROVED
+  task_id: TASK-0007-PHASE-3D-COHORT-1
+  status: APPROVED_MERGE_AUTHORIZED
 last_response:
-  id: MSG-0021
+  id: MSG-0022
   from: gemini
   to: chatgpt
-  type: IMPLEMENTATION_REPORT
-  task_id: TASK-0007-PHASE-3B
-  status: PENDING_SUPERVISORY_REVIEW
-  merge_authorized: false
-  in_response_to: TASK-0007-PHASE-3B-SUPERVISORY-APPROVAL
+  type: FINAL_SUBSTANTIATION_REPORT
+  task_id: TASK-0007-PHASE-3D-COHORT-1
+  status: APPROVED_MERGE_AUTHORIZED
+  merge_authorized: true
+  in_response_to: TASK-0007-PHASE-3D-COHORT-1-SUPERVISORY-APPROVAL
 
 pending:
   recommendations:

@@ -1171,10 +1171,138 @@ describe('Canonical Authorization Engine — Core Unit Tests', () => {
         assert.equal(
           can(schoolAdminCtx, perm, foreignTarget),
           false,
-          `school_admin MUST be denied ${perm} in foreign school`
         );
       }
     });
   });
+
+  // --------------------------------------------------------------------------
+  // 14. PHASE 3D COHORT 3D-1 BOUNDARIES (ADR-0004 & ADR-0005)
+  // --------------------------------------------------------------------------
+  describe('Group 14 — Phase 3D Cohort 3D-1 Boundaries (ADR-0004 & ADR-0005)', () => {
+    test('ADR-0005: platform.leads.manage is strictly platform-scoped for super_admin; org_admin, school_admin, teacher, student, parent denied', () => {
+      // 1. super_admin: platform scope -> ALLOW
+      const superCtx = createTestSecurityContext({
+        baseRole: 'super_admin',
+        isSuperAdmin: true,
+      });
+      assert.equal(can(superCtx, 'platform.leads.manage', { tenantId: 'ten-platform' }), true);
+
+      // 2. org_admin: denied even with multi-school tenant reach
+      const orgCtx = createTestSecurityContext({
+        baseRole: 'org_admin',
+        tenantId: 'ten-org-parent',
+        organizationSubtenantIds: ['ten-school-child-1', 'ten-school-child-2'],
+      });
+      assert.equal(can(orgCtx, 'platform.leads.manage', { tenantId: 'ten-org-parent' }), false);
+      assert.equal(can(orgCtx, 'platform.leads.manage', { tenantId: 'ten-school-child-1' }), false);
+
+      // 3. school_admin: denied
+      const adminCtx = createTestSecurityContext({
+        baseRole: 'school_admin',
+        tenantId: 'ten-school-1',
+      });
+      assert.equal(can(adminCtx, 'platform.leads.manage', { tenantId: 'ten-school-1' }), false);
+
+      // 4. teacher: denied
+      const teacherCtx = createTestSecurityContext({
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+      });
+      assert.equal(can(teacherCtx, 'platform.leads.manage', { tenantId: 'ten-school-1' }), false);
+
+      // 5. student: denied
+      const studentCtx = createTestSecurityContext({
+        baseRole: 'student',
+        tenantId: 'ten-school-1',
+      });
+      assert.equal(can(studentCtx, 'platform.leads.manage', { tenantId: 'ten-school-1' }), false);
+
+      // 6. parent: denied
+      const parentCtx = createTestSecurityContext({
+        baseRole: 'parent',
+        tenantId: 'ten-school-1',
+      });
+      assert.equal(can(parentCtx, 'platform.leads.manage', { tenantId: 'ten-school-1' }), false);
+    });
+
+    test('ADR-0004: exams.results.view at school scope correctly permits vice_principal and exam_officer; strictly denies student, parent, and unassigned teacher', () => {
+      const schoolTarget: ResourceTarget = { tenantId: 'ten-school-1' };
+
+      // 1. school_admin: ALLOW at school scope
+      const adminCtx = createTestSecurityContext({
+        baseRole: 'school_admin',
+        tenantId: 'ten-school-1',
+      });
+      assert.equal(can(adminCtx, 'exams.results.view', schoolTarget), true);
+
+      // 2. teacher + vice_principal functional assignment: ALLOW at school scope
+      const vpCtx = createTestSecurityContext({
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [
+          {
+            id: 'asg-vp-1',
+            assignmentType: 'vice_principal',
+            tenantId: 'ten-school-1',
+            academicYearId: 'ay-2026',
+            status: 'active',
+            isActive: true,
+            effectiveFrom: '2026-09-01',
+          },
+        ],
+      });
+      assert.equal(can(vpCtx, 'exams.results.view', schoolTarget), true);
+
+      // 3. teacher + exam_officer functional assignment: ALLOW at school scope
+      const eoCtx = createTestSecurityContext({
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [
+          {
+            id: 'asg-eo-1',
+            assignmentType: 'exam_officer',
+            tenantId: 'ten-school-1',
+            academicYearId: 'ay-2026',
+            status: 'active',
+            isActive: true,
+            effectiveFrom: '2026-09-01',
+          },
+        ],
+      });
+      assert.equal(can(eoCtx, 'exams.results.view', schoolTarget), true);
+
+      // 4. teacher WITHOUT leadership assignment: DENIED at school scope (only offering if assigned, 0 if unassigned)
+      const ordinaryTeacherCtx = createTestSecurityContext({
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [],
+      });
+      assert.equal(can(ordinaryTeacherCtx, 'exams.results.view', schoolTarget), false);
+
+      // 5. student: DENIED at school scope (student holds exams.results.view strictly at self scope)
+      const studentCtx = createTestSecurityContext({
+        baseRole: 'student',
+        actorId: 'usr-student-1',
+        tenantId: 'ten-school-1',
+      });
+      assert.equal(can(studentCtx, 'exams.results.view', schoolTarget), false);
+      // Student can only view self results when ownerId matches actorId
+      assert.equal(can(studentCtx, 'exams.results.view', { tenantId: 'ten-school-1', ownerId: 'usr-student-1' }), true);
+      assert.equal(can(studentCtx, 'exams.results.view', { tenantId: 'ten-school-1', ownerId: 'usr-victim-2' }), false);
+
+      // 6. parent: DENIED at school scope (parent holds exams.results.view strictly at self scope for verified children)
+      const parentCtx = createTestSecurityContext({
+        baseRole: 'parent',
+        actorId: 'usr-parent-1',
+        tenantId: 'ten-school-1',
+        verifiedChildStudentIds: ['usr-child-1'],
+      });
+      assert.equal(can(parentCtx, 'exams.results.view', schoolTarget), false);
+      assert.equal(can(parentCtx, 'exams.results.view', { tenantId: 'ten-school-1', ownerId: 'usr-child-1' }), true);
+      assert.equal(can(parentCtx, 'exams.results.view', { tenantId: 'ten-school-1', ownerId: 'usr-child-other' }), false);
+    });
+  });
 });
+
 

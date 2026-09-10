@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
       searchParams.get('tenantSlug') || searchParams.get('tenant') || undefined;
 
     const auth = await authorizeApiRequest(req, {
-      permission: 'exams.sessions.manage',
+      permission: 'exams.results.view',
       scope: 'tenant',
       requestedTenantSlug,
     });
@@ -346,48 +346,13 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-// DELETE: Delete exam session (restricted strictly to administrators; exam officers excluded)
-export async function DELETE(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-
-    if (!id || typeof id !== 'string') {
-      return apiError('Session ID is required', 'INVALID_REQUEST', 400);
-    }
-
-    const requestedTenantSlug =
-      searchParams.get('tenantSlug') || searchParams.get('tenant') || undefined;
-
-    const auth = await authorizeApiRequest(req, {
-      roles: ['school_admin', 'org_admin', 'super_admin'],
-      scope: 'tenant',
-      requestedTenantSlug,
-      resource: {
-        table: 'exam_sessions',
-        id,
-        tenantColumn: 'tenant_id',
-      },
-    });
-
-    if (!auth.ok) {
-      return auth.response;
-    }
-
-    const adminClient = auth.adminClient();
-    const tenantId = auth.tenantId!;
-
-    const { error } = await adminClient
-      .from('exam_sessions')
-      .delete()
-      .eq('id', id)
-      .eq('tenant_id', tenantId);
-
-    if (error) throw error;
-
-    return NextResponse.json({ success: true, message: 'Session deleted successfully.' });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return apiError(message, 'INTERNAL_ERROR', 500);
-  }
+// DELETE: Delete exam session (DEFERRED per CONTROL-STATE.yaml pending data retention lifecycle design)
+export async function DELETE(_req: NextRequest) {
+  return NextResponse.json(
+    {
+      error: 'Exam session deletion is deferred pending formal data-retention lifecycle design.',
+      code: 'OPERATION_DEFERRED',
+    },
+    { status: 405 }
+  );
 }

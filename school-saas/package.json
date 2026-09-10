@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --conditions=react-server --import tsx --test tests/auth/admissions-canonical-api.test.ts tests/auth/api-canonical-integration.test.ts tests/auth/api-guard.test.ts tests/auth/authorization-engine.test.ts tests/auth/authorization-context-resolver.test.ts tests/auth/authorization-contract.test.ts tests/security/privileged-api-containment.test.ts tests/security/credential-containment.test.ts tests/security/rls-database-boundary.test.ts tests/security/api-rls-integration.test.ts tests/security/enrollment-rpc-security.test.ts"
+    "test": "node --conditions=react-server --test-concurrency=1 --import tsx --test tests/auth/admissions-canonical-api.test.ts tests/auth/api-canonical-integration.test.ts tests/auth/api-guard.test.ts tests/auth/authorization-engine.test.ts tests/auth/authorization-context-resolver.test.ts tests/auth/authorization-contract.test.ts tests/security/privileged-api-containment.test.ts tests/security/credential-containment.test.ts tests/security/rls-database-boundary.test.ts tests/security/api-rls-integration.test.ts tests/security/enrollment-rpc-security.test.ts tests/security/cohort-3d-1-api-containment.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

@@ -1,97 +1,123 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPgPool } from '@/lib/db/pg-fallback';
-import { createClient } from '@/lib/supabase/server';
+import { authorizeApiRequest, apiError } from '@/lib/auth/api-guard';
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/academics/ai/lesson-plan
-// Body: { offering_id, topic_id, duration_minutes?, style? }
+// Body: { offering_id, topic_id, duration_minutes?, style?, tenantSlug? }
 // 
-// AI is fully constrained to the published curriculum structure:
-//   school curriculum → curriculum_version → topic → learning_outcomes
-// AI never invents curriculum; it only operationalises it.
+// Canonical Authorization: curriculum.lesson_plan.generate
+// Scope: tenant (with offering-level resource resolution)
+// Invariant: Zero Gemini AI invocations if any auth or validation check fails.
 // ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
-    // Auth check
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const body = await req.json().catch(() => ({}));
+    const {
+      offering_id,
+      topic_id,
+      duration_minutes = 40,
+      style = 'standard',
+      tenantSlug,
+    } = body;
 
-    const body = await req.json();
-    const { offering_id, topic_id, duration_minutes = 40, style = 'standard' } = body;
-
-    if (!offering_id || !topic_id) {
-      return NextResponse.json({ error: 'offering_id and topic_id are required.' }, { status: 400 });
+    if (!offering_id || typeof offering_id !== 'string') {
+      return apiError('offering_id is required and must be a valid identifier.', 'INVALID_REQUEST', 400);
+    }
+    if (!topic_id || typeof topic_id !== 'string') {
+      return apiError('topic_id is required and must be a valid identifier.', 'INVALID_REQUEST', 400);
     }
 
-    const pool = getPgPool();
-    if (!pool) return NextResponse.json({ error: 'Database connection unavailable.' }, { status: 503 });
+    const { searchParams } = new URL(req.url);
+    const requestedTenantSlug =
+      searchParams.get('tenantSlug') || searchParams.get('tenant') || tenantSlug || undefined;
 
-    // ── 1. Fetch offering context (validates tenant access) ─────────────
-    const offeringRes = await pool.query(
-      `SELECT
-          so.id, so.tenant_id, so.periods_per_week,
-          s.name AS subject_name, s.code AS subject_code, s.description AS subject_description,
-          sec.name AS section_name, cl.name AS class_name,
-          ay.name AS academic_year_name,
-          (te.first_name || ' ' || te.last_name) AS teacher_name,
-          cv.status AS curriculum_status, cv.id AS curriculum_version_id
-        FROM subject_offerings so
-        JOIN subjects s ON s.id = so.subject_id
-        JOIN sections sec ON sec.id = so.section_id
-        JOIN classes cl ON cl.id = sec.class_id
-        JOIN academic_years ay ON ay.id = so.academic_year_id
-        LEFT JOIN teachers te ON te.id = so.teacher_id
-        LEFT JOIN curriculum_versions cv ON cv.id = so.curriculum_version_id
-        WHERE so.id = $1`,
-      [offering_id]
-    );
+    // ── 1. Authenticate, Resolve Offering Target & Authorize Canonical Permission ──
+    const auth = await authorizeApiRequest(req, {
+      permission: 'curriculum.lesson_plan.generate',
+      scope: 'tenant',
+      requestedTenantSlug,
+      resolveResource: {
+        type: 'subject_offering',
+        id: offering_id,
+      },
+    });
 
-    if (offeringRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Offering not found.' }, { status: 404 });
+    if (!auth.ok) {
+      return auth.response;
     }
 
-    const offering = offeringRes.rows[0];
+    const adminClient = auth.adminClient();
+    const tenantId = auth.tenantId!;
 
-    // Validate that the curriculum is published (AI must not work on drafts)
-    if (offering.curriculum_status !== 'published') {
-      return NextResponse.json({
-        error: `AI lesson plans require a published curriculum. Current status: "${offering.curriculum_status || 'none'}". Publish the curriculum first.`
-      }, { status: 422 });
+    // ── 2. Fetch offering details strictly scoped to authorized tenant ──
+    const { data: offering, error: offeringErr } = await adminClient
+      .from('subject_offerings')
+      .select(`
+        id, tenant_id, periods_per_week, curriculum_version_id, subject_id, section_id, academic_year_id, teacher_id,
+        subjects (name, code, description),
+        sections (name, classes (name)),
+        academic_years (name),
+        teachers (first_name, last_name),
+        curriculum_versions (id, status)
+      `)
+      .eq('id', offering_id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (offeringErr || !offering) {
+      return apiError('Offering not found.', 'NOT_FOUND', 404);
     }
 
-    // ── 2. Fetch the specific topic + its learning outcomes ─────────────
-    const topicRes = await pool.query(
-      `SELECT t.title, t.description, t.term, t.estimated_periods,
-          pt.title AS parent_title,
-          COALESCE(
-            json_agg(
-              json_build_object(
-                'code', lo.code,
-                'description', lo.description,
-                'cognitive_level', lo.cognitive_level
-              ) ORDER BY lo.sequence
-            ) FILTER (WHERE lo.id IS NOT NULL), '[]'
-          ) AS learning_outcomes
-        FROM curriculum_topics t
-        LEFT JOIN curriculum_topics pt ON pt.id = t.parent_topic_id
-        LEFT JOIN learning_outcomes lo ON lo.topic_id = t.id
-        WHERE t.id = $1 AND t.curriculum_version_id = $2
-        GROUP BY t.id, pt.title`,
-      [topic_id, offering.curriculum_version_id]
-    );
+    const cv = (offering as any).curriculum_versions;
+    const curriculumStatus = cv?.status;
+    const curriculumVersionId = cv?.id || (offering as any).curriculum_version_id;
 
-    if (topicRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Topic not found in this curriculum version.' }, { status: 404 });
+    // Validate that curriculum is published (AI must not work on drafts)
+    if (curriculumStatus !== 'published') {
+      return apiError(
+        `AI lesson plans require a published curriculum. Current status: "${curriculumStatus || 'none'}". Publish the curriculum first.`,
+        'UNPROCESSABLE_ENTITY',
+        422
+      );
     }
 
-    const topic = topicRes.rows[0];
-    const learningOutcomes: { code?: string; description: string; cognitive_level?: string }[] = topic.learning_outcomes || [];
+    if (!curriculumVersionId) {
+      return apiError('No published curriculum version linked to this offering.', 'NOT_FOUND', 404);
+    }
 
-    // ── 3. Build structured prompt ──────────────────────────────────────
-    const outcomesList = learningOutcomes.length > 0
-      ? learningOutcomes.map((lo, i) => `  ${lo.code || (i + 1) + '.'} [${(lo.cognitive_level || 'remember').toUpperCase()}] ${lo.description}`).join('\n')
+    // ── 3. Fetch topic + learning outcomes ──
+    let topicData: any = null;
+    let outcomes: any[] = [];
+
+    const { data: singleTopic, error: singleTopicErr } = await adminClient
+      .from('curriculum_topics')
+      .select('id, title, description, term, estimated_periods, parent_topic_id')
+      .eq('id', topic_id)
+      .eq('curriculum_version_id', curriculumVersionId)
+      .maybeSingle();
+
+    if (singleTopicErr || !singleTopic) {
+      return apiError('Topic not found in this curriculum version.', 'NOT_FOUND', 404);
+    }
+    topicData = singleTopic;
+
+    const { data: outcomesData } = await adminClient
+      .from('learning_outcomes')
+      .select('code, description, cognitive_level, sequence')
+      .eq('topic_id', topic_id)
+      .order('sequence', { ascending: true });
+
+    outcomes = outcomesData || [];
+
+    const subjectName = (offering as any).subjects?.name || 'Subject';
+    const subjectCode = (offering as any).subjects?.code || '';
+    const sectionName = (offering as any).sections?.name || '';
+    const className = (offering as any).sections?.classes?.name || '';
+
+    // ── 4. Build Prompt ──
+    const outcomesList = outcomes.length > 0
+      ? outcomes.map((lo: any, i: number) => `  ${lo.code || (i + 1) + '.'} [${(lo.cognitive_level || 'remember').toUpperCase()}] ${lo.description}`).join('\n')
       : '  (No specific outcomes defined — generate based on topic)';
 
     const styleInstructions = style === 'inquiry'
@@ -109,12 +135,12 @@ Return ONLY valid JSON matching the schema exactly. No markdown fences, no expla
 
     const userPrompt = `Generate a lesson plan using ONLY the following approved curriculum data:
 
-SUBJECT: ${offering.subject_name}${offering.subject_code ? ` (${offering.subject_code})` : ''}
-CLASS: ${offering.class_name} ${offering.section_name}
-TOPIC: ${topic.parent_title ? `${topic.parent_title} > ` : ''}${topic.title}
-${topic.description ? `TOPIC DESCRIPTION: ${topic.description}` : ''}
-TERM: ${topic.term || 'Unspecified'}
-ESTIMATED PERIODS: ${topic.estimated_periods}
+SUBJECT: ${subjectName}${subjectCode ? ` (${subjectCode})` : ''}
+CLASS: ${className} ${sectionName}
+TOPIC: ${topicData.title}
+${topicData.description ? `TOPIC DESCRIPTION: ${topicData.description}` : ''}
+TERM: ${topicData.term || 'Unspecified'}
+ESTIMATED PERIODS: ${topicData.estimated_periods || 1}
 LESSON DURATION: ${duration_minutes} minutes
 
 APPROVED LEARNING OUTCOMES (from published curriculum):
@@ -152,10 +178,10 @@ Return a JSON object with this exact schema:
   "teacher_notes": "string"
 }`;
 
-    // ── 4. Call Gemini API ──────────────────────────────────────────────
+    // ── 5. Call External Gemini API (ONLY after all authorization & validations pass) ──
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!GEMINI_API_KEY) {
-      return NextResponse.json({ error: 'AI service not configured. Set GEMINI_API_KEY in environment.' }, { status: 503 });
+      return apiError('AI service not configured. Set GEMINI_API_KEY in environment.', 'SERVICE_UNAVAILABLE', 503);
     }
 
     const geminiRes = await fetch(
@@ -178,7 +204,7 @@ Return a JSON object with this exact schema:
     if (!geminiRes.ok) {
       const errBody = await geminiRes.text();
       console.error('Gemini API error:', errBody);
-      return NextResponse.json({ error: 'AI service returned an error. Please try again.' }, { status: 502 });
+      return apiError('AI service returned an error. Please try again.', 'GATEWAY_ERROR', 502);
     }
 
     const geminiData = await geminiRes.json();
@@ -190,50 +216,45 @@ Return a JSON object with this exact schema:
     try {
       lessonPlan = JSON.parse(rawText);
     } catch {
-      return NextResponse.json({ error: 'AI returned malformed JSON. Please retry.' }, { status: 502 });
+      return apiError('AI returned malformed JSON. Please retry.', 'GATEWAY_ERROR', 502);
     }
 
-    // ── 5. Log AI usage ─────────────────────────────────────────────────
+    // ── 6. Log AI usage strictly bound to tenant and user ──
     try {
-      // Get user's profile to link tenant_id
-      const profileRes = await pool.query(
-        'SELECT tenant_id FROM profiles WHERE id = $1 LIMIT 1',
-        [user.id]
-      );
-      if (profileRes.rows.length > 0) {
-        await pool.query(
-          `INSERT INTO ai_usage_logs
-            (tenant_id, user_id, feature, model, subject_id, curriculum_version_id, input_tokens, output_tokens, status)
-           SELECT $1, $2, 'lesson_plan', 'gemini-2.0-flash',
-                  so.subject_id, so.curriculum_version_id, $3, $4, 'success'
-           FROM subject_offerings so WHERE so.id = $5`,
-          [profileRes.rows[0].tenant_id, user.id, inputTokens, outputTokens, offering_id]
-        );
-      }
+      await adminClient.from('ai_usage_logs').insert({
+        tenant_id: tenantId,
+        user_id: auth.user.id,
+        feature: 'lesson_plan',
+        model: 'gemini-2.0-flash',
+        subject_id: (offering as any).subject_id,
+        curriculum_version_id: curriculumVersionId,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        status: 'success',
+      });
     } catch (logErr) {
       console.warn('AI usage log failed (non-fatal):', logErr);
     }
 
-    // ── 6. Return lesson plan ───────────────────────────────────────────
+    // ── 7. Return lesson plan ──
     return NextResponse.json({
       success: true,
       lesson_plan: lessonPlan,
       metadata: {
         offering_id,
         topic_id,
-        topic_title: topic.title,
-        subject_name: offering.subject_name,
-        class_name: offering.class_name,
-        section_name: offering.section_name,
-        curriculum_version_id: offering.curriculum_version_id,
+        topic_title: topicData.title,
+        subject_name: subjectName,
+        class_name: className,
+        section_name: sectionName,
+        curriculum_version_id: curriculumVersionId,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         generated_at: new Date().toISOString(),
       },
     });
-
   } catch (err: any) {
     console.error('lesson-plan API error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error.' }, { status: 500 });
+    return apiError(err.message || 'Internal server error.', 'INTERNAL_ERROR', 500);
   }
 }

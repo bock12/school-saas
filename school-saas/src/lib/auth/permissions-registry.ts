@@ -50,6 +50,13 @@ export const CANONICAL_PERMISSIONS = [
   'staff.accounts.manage',
   'platform.tenants.manage',
   'platform.billing.manage',
+  'notifications.self.view',
+  'notifications.self.manage',
+  'communications.templates.manage',
+  'communications.rules.manage',
+  'communications.broadcast.send',
+  'communications.broadcast.view',
+  'platform.leads.manage',
 ] as const;
 
 export type CanonicalPermission = (typeof CANONICAL_PERMISSIONS)[number];
@@ -459,6 +466,69 @@ export const PERMISSIONS_CATALOG: Readonly<Record<CanonicalPermission, Permissio
     canonicalScope: 'platform',
     allowedScopes: ['platform'],
   },
+  'notifications.self.view': {
+    key: 'notifications.self.view',
+    module: 'notifications',
+    resource: 'self',
+    action: 'view',
+    description: 'View personal incoming notifications and unread badge counts',
+    canonicalScope: 'self',
+    allowedScopes: ['platform', 'organization', 'school', 'self'],
+  },
+  'notifications.self.manage': {
+    key: 'notifications.self.manage',
+    module: 'notifications',
+    resource: 'self',
+    action: 'manage',
+    description: 'Update status of personal notifications (mark as read, dismiss)',
+    canonicalScope: 'self',
+    allowedScopes: ['platform', 'organization', 'school', 'self'],
+  },
+  'communications.templates.manage': {
+    key: 'communications.templates.manage',
+    module: 'communications',
+    resource: 'templates',
+    action: 'manage',
+    description: 'Create, edit, and archive institutional communication message templates',
+    canonicalScope: 'school',
+    allowedScopes: ['platform', 'organization', 'school'],
+  },
+  'communications.rules.manage': {
+    key: 'communications.rules.manage',
+    module: 'communications',
+    resource: 'rules',
+    action: 'manage',
+    description: 'Configure automated event-driven communication trigger rules and channel routing',
+    canonicalScope: 'school',
+    allowedScopes: ['platform', 'organization', 'school'],
+  },
+  'communications.broadcast.view': {
+    key: 'communications.broadcast.view',
+    module: 'communications',
+    resource: 'broadcast',
+    action: 'view',
+    description: 'View broadcast dispatch history, recipient delivery logs, and delivery metrics',
+    canonicalScope: 'school',
+    allowedScopes: ['platform', 'organization', 'school'],
+  },
+  'communications.broadcast.send': {
+    key: 'communications.broadcast.send',
+    module: 'communications',
+    resource: 'broadcast',
+    action: 'send',
+    description: 'Dispatch or schedule mass multi-channel communication broadcasts to school audiences',
+    canonicalScope: 'school',
+    allowedScopes: ['platform', 'organization', 'school'],
+  },
+  'platform.leads.manage': {
+    key: 'platform.leads.manage',
+    module: 'platform',
+    resource: 'leads',
+    action: 'manage',
+    description: 'Manage prospective tenant inquiries, demo scheduling, and onboarding pipeline',
+    canonicalScope: 'platform',
+    allowedScopes: ['platform'],
+  },
 };
 
 // ----------------------------------------------------------------------------
@@ -524,6 +594,12 @@ export const BASE_ROLE_PERMISSIONS: Readonly<Record<BaseRole, readonly BaseRoleG
     { permission: 'staff.directory.view', scope: 'school' },
     { permission: 'staff.allocations.manage', scope: 'school' },
     { permission: 'staff.accounts.manage', scope: 'school' },
+    { permission: 'notifications.self.view', scope: 'self' },
+    { permission: 'notifications.self.manage', scope: 'self' },
+    { permission: 'communications.templates.manage', scope: 'school' },
+    { permission: 'communications.rules.manage', scope: 'school' },
+    { permission: 'communications.broadcast.view', scope: 'school' },
+    { permission: 'communications.broadcast.send', scope: 'school' },
   ],
 
   /**
@@ -569,6 +645,12 @@ export const BASE_ROLE_PERMISSIONS: Readonly<Record<BaseRole, readonly BaseRoleG
     { permission: 'staff.directory.view', scope: 'school' },
     { permission: 'staff.allocations.manage', scope: 'school' },
     { permission: 'staff.accounts.manage', scope: 'school' },
+    { permission: 'notifications.self.view', scope: 'self' },
+    { permission: 'notifications.self.manage', scope: 'self' },
+    { permission: 'communications.templates.manage', scope: 'school' },
+    { permission: 'communications.rules.manage', scope: 'school' },
+    { permission: 'communications.broadcast.view', scope: 'school' },
+    { permission: 'communications.broadcast.send', scope: 'school' },
   ],
 
   /**
@@ -579,6 +661,8 @@ export const BASE_ROLE_PERMISSIONS: Readonly<Record<BaseRole, readonly BaseRoleG
    */
   teacher: [
     { permission: 'staff.directory.view', scope: 'school' },
+    { permission: 'notifications.self.view', scope: 'self' },
+    { permission: 'notifications.self.manage', scope: 'self' },
   ],
 
   /**
@@ -593,6 +677,8 @@ export const BASE_ROLE_PERMISSIONS: Readonly<Record<BaseRole, readonly BaseRoleG
     { permission: 'exams.results.view', scope: 'self' },
     { permission: 'exams.appeals.submit', scope: 'self' },
     { permission: 'finance.invoices.view', scope: 'self' },
+    { permission: 'notifications.self.view', scope: 'self' },
+    { permission: 'notifications.self.manage', scope: 'self' },
   ],
 
   /**
@@ -607,6 +693,8 @@ export const BASE_ROLE_PERMISSIONS: Readonly<Record<BaseRole, readonly BaseRoleG
     { permission: 'exams.results.view', scope: 'self' },
     { permission: 'exams.appeals.submit', scope: 'self' },
     { permission: 'finance.invoices.view', scope: 'self' },
+    { permission: 'notifications.self.view', scope: 'self' },
+    { permission: 'notifications.self.manage', scope: 'self' },
   ],
 };
 
@@ -641,6 +729,7 @@ export const FUNCTIONAL_ASSIGNMENT_PERMISSIONS: Readonly<
     { permission: 'exams.results.view', scope: 'department', assignmentType: 'hod' },
     { permission: 'staff.directory.view', scope: 'school', assignmentType: 'hod' },
     { permission: 'staff.allocations.manage', scope: 'department', assignmentType: 'hod' },
+    { permission: 'communications.broadcast.view', scope: 'school', assignmentType: 'hod' },
   ],
 
   /**
@@ -715,6 +804,10 @@ export const FUNCTIONAL_ASSIGNMENT_PERMISSIONS: Readonly<
     { permission: 'exams.appeals.resolve', scope: 'school', assignmentType: 'exam_officer' },
     { permission: 'exams.cass.export', scope: 'school', assignmentType: 'exam_officer' },
     { permission: 'staff.directory.view', scope: 'school', assignmentType: 'exam_officer' },
+    { permission: 'communications.templates.manage', scope: 'school', assignmentType: 'exam_officer' },
+    { permission: 'communications.rules.manage', scope: 'school', assignmentType: 'exam_officer' },
+    { permission: 'communications.broadcast.send', scope: 'school', assignmentType: 'exam_officer' },
+    { permission: 'communications.broadcast.view', scope: 'school', assignmentType: 'exam_officer' },
   ],
 
   /**
@@ -740,6 +833,7 @@ export const FUNCTIONAL_ASSIGNMENT_PERMISSIONS: Readonly<
     { permission: 'exams.appeals.resolve', scope: 'school', assignmentType: 'vice_principal' },
     { permission: 'staff.directory.view', scope: 'school', assignmentType: 'vice_principal' },
     { permission: 'staff.allocations.manage', scope: 'school', assignmentType: 'vice_principal' },
+    { permission: 'communications.broadcast.view', scope: 'school', assignmentType: 'vice_principal' },
   ],
 };
 
