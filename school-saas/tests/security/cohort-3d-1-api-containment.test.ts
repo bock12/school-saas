@@ -6,6 +6,7 @@ import {
   resetTestClientOverride,
   AppRole,
 } from '@/lib/auth/api-guard';
+import { StaffAssignmentType } from '@/lib/auth/permissions-registry';
 import { POST as lessonPlanPOST } from '@/app/api/academics/ai/lesson-plan/route';
 import {
   GET as leadsGET,
@@ -49,6 +50,7 @@ const USER_HOD_A = { id: 'usr-hod-a' };
 const USER_VP_A = { id: 'usr-vp-a' };
 const USER_STUDENT_A = { id: 'usr-student-a' };
 const USER_PARENT_A = { id: 'usr-parent-a' };
+const USER_ORG_ADMIN = { id: 'usr-org-admin' };
 
 const PROFILE_SUPER_ADMIN = {
   id: USER_SUPER_ADMIN.id,
@@ -56,6 +58,15 @@ const PROFILE_SUPER_ADMIN = {
   role: 'super_admin' as AppRole,
   email: 'root@platform.sl',
   full_name: 'Platform Super Admin',
+  is_active: true,
+};
+
+const PROFILE_ORG_ADMIN = {
+  id: USER_ORG_ADMIN.id,
+  tenant_id: 'ten-org-parent',
+  role: 'org_admin' as AppRole,
+  email: 'org@network.sl',
+  full_name: 'Network Director Koroma',
   is_active: true,
 };
 
@@ -75,6 +86,39 @@ const PROFILE_EXAM_OFFICER_A = {
   email: 'exams@albert.edu.sl',
   full_name: 'Exam Officer Sahr',
   is_active: true,
+};
+
+const PROFILE_VP_A = {
+  id: USER_VP_A.id,
+  tenant_id: TENANT_A.id,
+  role: 'teacher' as AppRole,
+  email: 'vp@albert.edu.sl',
+  full_name: 'Vice Principal Kargbo',
+  is_active: true,
+};
+
+const ASSIGNMENT_VP_A = {
+  id: 'asg-vp-a',
+  staff_id: USER_VP_A.id,
+  tenant_id: TENANT_A.id,
+  assignment_type: 'vice_principal' as StaffAssignmentType,
+  academic_year_id: 'ay-2025-2026',
+  status: 'active' as const,
+  is_active: true,
+  effective_from: '2025-09-01',
+  effective_until: null,
+};
+
+const ASSIGNMENT_EXAM_OFFICER_A = {
+  id: 'asg-eo-a',
+  staff_id: USER_EXAM_OFFICER_A.id,
+  tenant_id: TENANT_A.id,
+  assignment_type: 'exam_officer' as StaffAssignmentType,
+  academic_year_id: 'ay-2025-2026',
+  status: 'active' as const,
+  is_active: true,
+  effective_from: '2025-09-01',
+  effective_until: null,
 };
 
 const PROFILE_TEACHER_ASSIGNED_A = {
@@ -228,6 +272,12 @@ function createMockTransport(config: {
         return { data: { user }, error: null };
       },
     },
+    async rpc(fn: string, args?: any) {
+      if (fn === 'get_org_subtenant_ids') {
+        return { data: ['school-child-1', 'school-child-2'], error: null };
+      }
+      return { data: null, error: null };
+    },
     from(table: string) {
       const filters: Array<{ col: string; val: any; op: string }> = [];
       const queryObj: any = {
@@ -273,10 +323,28 @@ function createMockTransport(config: {
             const match = examSessions.find((es) => !idFilter || es.id === idFilter.val);
             return { data: match ? { ...match } : null, error: null };
           }
+          if (table === 'academic_years') {
+            return { data: [{ id: 'ay-2025-2026', is_current: true }], error: null };
+          }
+          if (table === 'teachers') {
+            return { data: { id: 'teacher-rec-1', profile_id: profile?.id, tenant_id: profile?.tenant_id }, error: null };
+          }
           if (table === 'school_staff_assignments') {
-            return { data: assignments[0] || null, error: null };
+            return { data: assignments, error: null };
           }
           return { data: null, error: null };
+        },
+        then(resolve: any) {
+          if (table === 'academic_years') {
+            return resolve({ data: [{ id: 'ay-2025-2026', is_current: true }], error: null });
+          }
+          if (table === 'teachers') {
+            return resolve({ data: [{ id: 'teacher-rec-1', profile_id: profile?.id, tenant_id: profile?.tenant_id }], error: null });
+          }
+          if (table === 'school_staff_assignments') {
+            return resolve({ data: assignments, error: null });
+          }
+          return resolve({ data: [], error: null });
         },
       };
       return queryObj;
@@ -670,6 +738,25 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
     assert.equal(geminiApiCallCount, 0, 'Gemini API must NOT be called for draft curriculum');
   });
 
+  await t.test('AI-06b: invalid/unresolved topic_id returns 404 NOT_FOUND; zero Gemini calls', async () => {
+    const transport = createMockTransport({
+      user: USER_SCHOOL_ADMIN_A,
+      profile: PROFILE_SCHOOL_ADMIN_A,
+    });
+    setTestClientOverride(transport.userClient, transport.adminClientFactory);
+
+    const req = createMockRequest('http://localhost:3000/api/academics/ai/lesson-plan', {
+      method: 'POST',
+      body: { offering_id: 'off-a-1', topic_id: 'non-existent-topic-id' },
+    });
+
+    const res = await lessonPlanPOST(req);
+    assert.equal(res.status, 404);
+    const body = await res.json();
+    assert.equal(body.code, 'NOT_FOUND');
+    assert.equal(geminiApiCallCount, 0, 'Gemini API must NOT be called for invalid topic');
+  });
+
   await t.test('AI-07: authorized school_admin with published curriculum succeeds (200) and calls Gemini', async () => {
     const transport = createMockTransport({
       user: USER_SCHOOL_ADMIN_A,
@@ -793,22 +880,45 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
     assert.equal(res.status, 401);
   });
 
-  await t.test('CB-02: student / ordinary teacher cannot dispatch broadcasts (returns 403)', async () => {
-    const transport = createMockTransport({ user: USER_TEACHER_UNASSIGNED_A, profile: PROFILE_TEACHER_UNASSIGNED_A });
-    setTestClientOverride(transport.userClient, transport.adminClientFactory);
-
-    const req = createMockRequest('http://localhost:3000/api/exam-office/communications', {
+  await t.test('CB-02: student, parent, ordinary teacher cannot dispatch broadcasts (returns 403, zero privileged client)', async () => {
+    // 1. student
+    const studentTransport = createMockTransport({ user: USER_STUDENT_A, profile: PROFILE_STUDENT_A });
+    setTestClientOverride(studentTransport.userClient, studentTransport.adminClientFactory);
+    const studentReq = createMockRequest('http://localhost:3000/api/exam-office/communications', {
       method: 'POST',
-      body: { title: 'Test Broadcast', message: 'Hello school' },
+      body: { title: 'Student Broadcast', message: 'Hello' },
     });
-    const res = await commsPOST(req);
-    assert.equal(res.status, 403);
+    const studentRes = await commsPOST(studentReq);
+    assert.equal(studentRes.status, 403);
+    assert.equal(studentTransport.getAdminClientCallCount(), 0, 'No privileged client creation for student');
+
+    // 2. parent
+    const parentTransport = createMockTransport({ user: USER_PARENT_A, profile: PROFILE_PARENT_A });
+    setTestClientOverride(parentTransport.userClient, parentTransport.adminClientFactory);
+    const parentReq = createMockRequest('http://localhost:3000/api/exam-office/communications', {
+      method: 'POST',
+      body: { title: 'Parent Broadcast', message: 'Hello' },
+    });
+    const parentRes = await commsPOST(parentReq);
+    assert.equal(parentRes.status, 403);
+    assert.equal(parentTransport.getAdminClientCallCount(), 0, 'No privileged client creation for parent');
+
+    // 3. ordinary teacher
+    const teacherTransport = createMockTransport({ user: USER_TEACHER_UNASSIGNED_A, profile: PROFILE_TEACHER_UNASSIGNED_A });
+    setTestClientOverride(teacherTransport.userClient, teacherTransport.adminClientFactory);
+    const teacherReq = createMockRequest('http://localhost:3000/api/exam-office/communications', {
+      method: 'POST',
+      body: { title: 'Teacher Broadcast', message: 'Hello' },
+    });
+    const teacherRes = await commsPOST(teacherReq);
+    assert.equal(teacherRes.status, 403);
+    assert.equal(teacherTransport.getAdminClientCallCount(), 0, 'No privileged client creation for teacher');
   });
 
-  await t.test('CB-03: school_admin can view broadcast history (200) and dispatch broadcast (200)', async () => {
-    const transport = createMockTransport({ user: USER_SCHOOL_ADMIN_A, profile: PROFILE_SCHOOL_ADMIN_A });
-    setTestClientOverride(transport.userClient, transport.adminClientFactory);
-
+  await t.test('CB-03: exam_officer within assigned school and school_admin can broadcast; cross-tenant denied; forged tenant metadata ignored', async () => {
+    // 1. school_admin: allowed
+    const adminTransport = createMockTransport({ user: USER_SCHOOL_ADMIN_A, profile: PROFILE_SCHOOL_ADMIN_A });
+    setTestClientOverride(adminTransport.userClient, adminTransport.adminClientFactory);
     const getReq = createMockRequest('http://localhost:3000/api/exam-office/communications');
     const getRes = await commsGET(getReq);
     assert.equal(getRes.status, 200);
@@ -819,6 +929,50 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
     });
     const postRes = await commsPOST(postReq);
     assert.equal(postRes.status, 200);
+
+    // 2. exam_officer within assigned school: allowed
+    const eoTransport = createMockTransport({
+      user: USER_EXAM_OFFICER_A,
+      profile: PROFILE_EXAM_OFFICER_A,
+      assignments: [ASSIGNMENT_EXAM_OFFICER_A],
+    });
+    setTestClientOverride(eoTransport.userClient, eoTransport.adminClientFactory);
+    const eoPostReq = createMockRequest('http://localhost:3000/api/exam-office/communications', {
+      method: 'POST',
+      body: { title: 'Exam Notice', message: 'Exam timetable released.' },
+    });
+    const eoPostRes = await commsPOST(eoPostReq);
+    assert.equal(eoPostRes.status, 200);
+
+    // 3. Forged tenant_id in body and user_metadata ignored; inserted with TENANT_A.id
+    const forgedTransport = createMockTransport({
+      user: { id: USER_SCHOOL_ADMIN_A.id, user_metadata: { tenant_id: 'ten-forged-evil' } } as any,
+      profile: PROFILE_SCHOOL_ADMIN_A,
+    });
+    setTestClientOverride(forgedTransport.userClient, forgedTransport.adminClientFactory);
+    const forgedReq = createMockRequest('http://localhost:3000/api/exam-office/communications', {
+      method: 'POST',
+      body: {
+        title: 'Tamper Notice',
+        message: 'Trying to inject tenant_id',
+        tenant_id: 'ten-forged-evil',
+      },
+    });
+    const forgedRes = await commsPOST(forgedReq);
+    assert.equal(forgedRes.status, 200);
+    const notifInsert = forgedTransport.getAdminQueries().find(
+      (q) => q.table === 'notifications' && q.method === 'insert'
+    );
+    assert.ok(notifInsert);
+    assert.equal(notifInsert.payload.tenant_id, TENANT_A.id, 'Payload tenant_id must strictly match auth.tenantId');
+
+    // 4. Foreign tenant request denied (CROSS_TENANT_DENIED)
+    const foreignReq = createMockRequest('http://localhost:3000/api/exam-office/communications?tenantSlug=other-school', {
+      method: 'POST',
+      body: { title: 'Cross tenant attack', message: 'Hello' },
+    });
+    const foreignRes = await commsPOST(foreignReq);
+    assert.equal(foreignRes.status, 403);
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -833,43 +987,44 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
     assert.equal(res.status, 401);
   });
 
-  await t.test('NOTIF-02: authenticated user receives their own notifications strictly filtered by auth.userId', async () => {
+  await t.test('NOTIF-02: authenticated user receives their own notifications strictly filtered by auth.userId (GET ?user_id=B cannot escape)', async () => {
     const transport = createMockTransport({
       user: USER_TEACHER_ASSIGNED_A,
       profile: PROFILE_TEACHER_ASSIGNED_A,
     });
     setTestClientOverride(transport.userClient, transport.adminClientFactory);
 
-    const req = createMockRequest('http://localhost:3000/api/notifications');
+    // Client maliciously requests another user's notifications via query parameter
+    const req = createMockRequest('http://localhost:3000/api/notifications?user_id=usr-victim-b');
     const res = await notifsGET(req);
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.ok(Array.isArray(body.notifications));
 
-    // Verify query filter in adminClient enforced user_id === USER_TEACHER_ASSIGNED_A.id
+    // Verify query filter in adminClient enforced user_id === USER_TEACHER_ASSIGNED_A.id, ignoring query param
     const query = transport.getAdminQueries().find((q) => q.table === 'notification_recipients' && q.method === 'select');
     assert.ok(query);
     const userFilter = query.filters.find((f) => f.col === 'user_id');
-    assert.equal(userFilter?.val, USER_TEACHER_ASSIGNED_A.id);
+    assert.equal(userFilter?.val, USER_TEACHER_ASSIGNED_A.id, 'Query must be strictly filtered by auth.userId');
   });
 
-  await t.test('NOTIF-03: User A attempting to mark User B notification returns 404 access denied', async () => {
+  await t.test('NOTIF-03: User A attempting to mark User B notification returns 404 access denied (POST { user_id: B } cannot escape)', async () => {
     const transport = createMockTransport({
       user: USER_TEACHER_ASSIGNED_A,
       profile: PROFILE_TEACHER_ASSIGNED_A,
     });
     setTestClientOverride(transport.userClient, transport.adminClientFactory);
 
-    // recip-user-other belongs to usr-other-victim
+    // recip-user-other belongs to usr-other-victim; request also attempts to forge user_id
     const req = createMockRequest('http://localhost:3000/api/notifications', {
       method: 'POST',
-      body: { recipientId: 'recip-user-other' },
+      body: { recipientId: 'recip-user-other', user_id: 'usr-victim-b' },
     });
     const res = await notifsPOST(req);
     assert.equal(res.status, 404);
   });
 
-  await t.test('NOTIF-04: User A marking all read only updates their own records', async () => {
+  await t.test('NOTIF-04: User A marking all read only updates their own records (POST { user_id: B, markAllRead: true } cannot escape)', async () => {
     const transport = createMockTransport({
       user: USER_TEACHER_ASSIGNED_A,
       profile: PROFILE_TEACHER_ASSIGNED_A,
@@ -878,7 +1033,7 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
 
     const req = createMockRequest('http://localhost:3000/api/notifications', {
       method: 'POST',
-      body: { markAllRead: true },
+      body: { markAllRead: true, user_id: 'usr-victim-b' },
     });
     const res = await notifsPOST(req);
     assert.equal(res.status, 200);
@@ -886,7 +1041,7 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
     const updateQuery = transport.getAdminQueries().find((q) => q.table === 'notification_recipients' && q.method === 'update');
     assert.ok(updateQuery);
     const userFilter = updateQuery.filters.find((f) => f.col === 'user_id');
-    assert.equal(userFilter?.val, USER_TEACHER_ASSIGNED_A.id);
+    assert.equal(userFilter?.val, USER_TEACHER_ASSIGNED_A.id, 'Must filter update strictly by auth.userId');
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -901,13 +1056,46 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
     assert.equal(res.status, 401);
   });
 
-  await t.test('LEADS-02: school_admin / teacher / student returns 403 Forbidden (insufficient permission)', async () => {
-    const transport = createMockTransport({ user: USER_SCHOOL_ADMIN_A, profile: PROFILE_SCHOOL_ADMIN_A });
-    setTestClientOverride(transport.userClient, transport.adminClientFactory);
+  await t.test('LEADS-02: org_admin (even with org reach), school_admin, teacher, student, parent returns 403 Forbidden (zero privileged client)', async () => {
+    // 1. org_admin
+    const orgTransport = createMockTransport({ user: USER_ORG_ADMIN, profile: PROFILE_ORG_ADMIN });
+    setTestClientOverride(orgTransport.userClient, orgTransport.adminClientFactory);
+    const orgReq = createMockRequest('http://localhost:3000/api/super-admin/leads');
+    const orgRes = await leadsGET(orgReq);
+    assert.equal(orgRes.status, 403);
+    assert.equal(orgTransport.getAdminClientCallCount(), 0, 'No privileged client for org_admin');
 
-    const req = createMockRequest('http://localhost:3000/api/super-admin/leads');
-    const res = await leadsGET(req);
-    assert.equal(res.status, 403);
+    // 2. school_admin
+    const schoolTransport = createMockTransport({ user: USER_SCHOOL_ADMIN_A, profile: PROFILE_SCHOOL_ADMIN_A });
+    setTestClientOverride(schoolTransport.userClient, schoolTransport.adminClientFactory);
+    const schoolReq = createMockRequest('http://localhost:3000/api/super-admin/leads');
+    const schoolRes = await leadsGET(schoolReq);
+    assert.equal(schoolRes.status, 403);
+    assert.equal(schoolTransport.getAdminClientCallCount(), 0, 'No privileged client for school_admin');
+
+    // 3. teacher
+    const teacherTransport = createMockTransport({ user: USER_TEACHER_ASSIGNED_A, profile: PROFILE_TEACHER_ASSIGNED_A });
+    setTestClientOverride(teacherTransport.userClient, teacherTransport.adminClientFactory);
+    const teacherReq = createMockRequest('http://localhost:3000/api/super-admin/leads');
+    const teacherRes = await leadsGET(teacherReq);
+    assert.equal(teacherRes.status, 403);
+    assert.equal(teacherTransport.getAdminClientCallCount(), 0, 'No privileged client for teacher');
+
+    // 4. student
+    const studentTransport = createMockTransport({ user: USER_STUDENT_A, profile: PROFILE_STUDENT_A });
+    setTestClientOverride(studentTransport.userClient, studentTransport.adminClientFactory);
+    const studentReq = createMockRequest('http://localhost:3000/api/super-admin/leads');
+    const studentRes = await leadsGET(studentReq);
+    assert.equal(studentRes.status, 403);
+    assert.equal(studentTransport.getAdminClientCallCount(), 0, 'No privileged client for student');
+
+    // 5. parent
+    const parentTransport = createMockTransport({ user: USER_PARENT_A, profile: PROFILE_PARENT_A });
+    setTestClientOverride(parentTransport.userClient, parentTransport.adminClientFactory);
+    const parentReq = createMockRequest('http://localhost:3000/api/super-admin/leads');
+    const parentRes = await leadsGET(parentReq);
+    assert.equal(parentRes.status, 403);
+    assert.equal(parentTransport.getAdminClientCallCount(), 0, 'No privileged client for parent');
   });
 
   await t.test('LEADS-03: super_admin GET leads succeeds (200) under platform.leads.manage without raw getPgPool', async () => {
@@ -953,24 +1141,64 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
   // ──────────────────────────────────────────────────────────────────────────
   // 7. Exam Office Dashboard (exams.results.view, exams.sessions.manage, DELETE deferred)
   // ──────────────────────────────────────────────────────────────────────────
-  await t.test('DASH-01: GET /api/exam-office/dashboard succeeds for exam_officer with exams.results.view', async () => {
-    const transport = createMockTransport({ user: USER_EXAM_OFFICER_A, profile: PROFILE_EXAM_OFFICER_A });
-    setTestClientOverride(transport.userClient, transport.adminClientFactory);
+  await t.test('DASH-01: GET /api/exam-office/dashboard succeeds for school_admin, teacher+vice_principal, and teacher+exam_officer (exams.results.view)', async () => {
+    // 1. teacher + exam_officer functional assignment
+    const eoTransport = createMockTransport({
+      user: USER_EXAM_OFFICER_A,
+      profile: PROFILE_EXAM_OFFICER_A,
+      assignments: [ASSIGNMENT_EXAM_OFFICER_A],
+    });
+    setTestClientOverride(eoTransport.userClient, eoTransport.adminClientFactory);
+    const req1 = createMockRequest('http://localhost:3000/api/exam-office/dashboard');
+    const res1 = await dashboardGET(req1);
+    assert.equal(res1.status, 200);
+    const body1 = await res1.json();
+    assert.equal(body1.success, true);
 
-    const req = createMockRequest('http://localhost:3000/api/exam-office/dashboard');
-    const res = await dashboardGET(req);
-    assert.equal(res.status, 200);
-    const body = await res.json();
-    assert.equal(body.success, true);
+    // 2. teacher + vice_principal functional assignment
+    const vpTransport = createMockTransport({
+      user: USER_VP_A,
+      profile: PROFILE_VP_A,
+      assignments: [ASSIGNMENT_VP_A],
+    });
+    setTestClientOverride(vpTransport.userClient, vpTransport.adminClientFactory);
+    const req2 = createMockRequest('http://localhost:3000/api/exam-office/dashboard');
+    const res2 = await dashboardGET(req2);
+    assert.equal(res2.status, 200);
+    const body2 = await res2.json();
+    assert.equal(body2.success, true);
+
+    // 3. school_admin
+    const adminTransport = createMockTransport({
+      user: USER_SCHOOL_ADMIN_A,
+      profile: PROFILE_SCHOOL_ADMIN_A,
+    });
+    setTestClientOverride(adminTransport.userClient, adminTransport.adminClientFactory);
+    const req3 = createMockRequest('http://localhost:3000/api/exam-office/dashboard');
+    const res3 = await dashboardGET(req3);
+    assert.equal(res3.status, 200);
+    const body3 = await res3.json();
+    assert.equal(body3.success, true);
   });
 
-  await t.test('DASH-02: GET /api/exam-office/dashboard is DENIED for student and ordinary teacher', async () => {
-    const transport = createMockTransport({ user: USER_STUDENT_A, profile: PROFILE_STUDENT_A });
-    setTestClientOverride(transport.userClient, transport.adminClientFactory);
+  await t.test('DASH-02: GET /api/exam-office/dashboard is DENIED for student, parent, and ordinary teacher without VP/EO', async () => {
+    // 1. student
+    const studentTransport = createMockTransport({ user: USER_STUDENT_A, profile: PROFILE_STUDENT_A });
+    setTestClientOverride(studentTransport.userClient, studentTransport.adminClientFactory);
+    const res1 = await dashboardGET(createMockRequest('http://localhost:3000/api/exam-office/dashboard'));
+    assert.equal(res1.status, 403);
 
-    const req = createMockRequest('http://localhost:3000/api/exam-office/dashboard');
-    const res = await dashboardGET(req);
-    assert.equal(res.status, 403);
+    // 2. ordinary teacher
+    const teacherTransport = createMockTransport({ user: USER_TEACHER_UNASSIGNED_A, profile: PROFILE_TEACHER_UNASSIGNED_A, assignments: [] });
+    setTestClientOverride(teacherTransport.userClient, teacherTransport.adminClientFactory);
+    const res2 = await dashboardGET(createMockRequest('http://localhost:3000/api/exam-office/dashboard'));
+    assert.equal(res2.status, 403);
+
+    // 3. parent
+    const parentTransport = createMockTransport({ user: USER_PARENT_A, profile: PROFILE_PARENT_A });
+    setTestClientOverride(parentTransport.userClient, parentTransport.adminClientFactory);
+    const res3 = await dashboardGET(createMockRequest('http://localhost:3000/api/exam-office/dashboard'));
+    assert.equal(res3.status, 403);
   });
 
   await t.test('DASH-03: POST /api/exam-office/dashboard creates session for school_admin', async () => {
@@ -997,7 +1225,10 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
     assert.equal(res.status, 200);
   });
 
-  await t.test('DASH-05: DELETE /api/exam-office/dashboard returns 405 Method Not Allowed with OPERATION_DEFERRED', async () => {
+  await t.test('DASH-05: DELETE /api/exam-office/dashboard returns 405 Method Not Allowed with OPERATION_DEFERRED and zero DB operations', async () => {
+    const transport = createMockTransport({ user: USER_SCHOOL_ADMIN_A, profile: PROFILE_SCHOOL_ADMIN_A });
+    setTestClientOverride(transport.userClient, transport.adminClientFactory);
+
     const req = createMockRequest('http://localhost:3000/api/exam-office/dashboard?id=sess-a-1', {
       method: 'DELETE',
     });
@@ -1005,5 +1236,10 @@ test('Phase 3D Cohort 3D-1: API Route Authorization Completion & Leakage Contain
     assert.equal(res.status, 405);
     const body = await res.json();
     assert.equal(body.code, 'OPERATION_DEFERRED');
+
+    // Negative proof: zero DB lookups, mutations, or privileged client creations
+    assert.equal(transport.getAdminQueries().length, 0, 'Must NOT perform any admin queries on DELETE');
+    assert.equal(transport.getUserQueries().length, 0, 'Must NOT perform any user queries on DELETE');
+    assert.equal(transport.getAdminClientCallCount(), 0, 'Must NOT create privileged admin client on DELETE');
   });
 });

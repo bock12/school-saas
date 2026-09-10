@@ -256,6 +256,7 @@ describe('Canonical Authorization Contract — Matrix-Driven Verification', () =
       const platformPerms: CanonicalPermission[] = [
         'platform.tenants.manage',
         'platform.billing.manage',
+        'platform.leads.manage',
       ];
 
       for (const role of BASE_ROLES) {
@@ -267,6 +268,18 @@ describe('Canonical Authorization Contract — Matrix-Driven Verification', () =
             has,
             false,
             `Role [${role}] must NEVER hold platform permission [${pp}]`
+          );
+        }
+      }
+
+      for (const asg of STAFF_ASSIGNMENT_TYPES) {
+        const grants = getAssignmentGrants(asg);
+        for (const pp of platformPerms) {
+          const has = grants.some((g) => g.permission === pp);
+          assert.equal(
+            has,
+            false,
+            `Staff assignment [${asg}] must NEVER hold platform permission [${pp}]`
           );
         }
       }
@@ -531,6 +544,41 @@ describe('Canonical Authorization Contract — Matrix-Driven Verification', () =
           grants.some((g) => g.permission === 'curriculum.lesson_plan.generate'),
           false,
           `Base role [${role}] must NEVER receive curriculum.lesson_plan.generate`
+        );
+      }
+    });
+
+    test('ADR-0005: platform.leads.manage is strictly platform-scoped, granted ONLY to super_admin, and denied to all other base roles and staff assignments', () => {
+      const def = getPermissionDefinition('platform.leads.manage');
+      assert.equal(def.key, 'platform.leads.manage');
+      assert.equal(def.canonicalScope, 'platform');
+      assert.deepEqual(def.allowedScopes, ['platform']);
+
+      // super_admin holds it
+      const superGrants = getBaseRoleGrants('super_admin');
+      assert.ok(
+        superGrants.some((g) => g.permission === 'platform.leads.manage' && g.scope === 'platform'),
+        'super_admin MUST hold platform.leads.manage at platform scope'
+      );
+
+      // All other base roles denied
+      for (const role of BASE_ROLES) {
+        if (role === 'super_admin') continue;
+        const grants = getBaseRoleGrants(role);
+        assert.equal(
+          grants.some((g) => g.permission === 'platform.leads.manage'),
+          false,
+          `Base role [${role}] must NEVER hold platform.leads.manage`
+        );
+      }
+
+      // All staff assignments denied
+      for (const asg of STAFF_ASSIGNMENT_TYPES) {
+        const grants = getAssignmentGrants(asg);
+        assert.equal(
+          grants.some((g) => g.permission === 'platform.leads.manage'),
+          false,
+          `Staff assignment [${asg}] must NEVER hold platform.leads.manage`
         );
       }
     });

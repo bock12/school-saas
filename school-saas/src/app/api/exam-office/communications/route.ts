@@ -42,8 +42,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
+    const url = new URL(req.url);
+    const tenantSlug =
+      body.tenantSlug ||
+      url.searchParams.get('tenant') ||
+      url.searchParams.get('tenantSlug') ||
+      undefined;
     const {
-      tenantSlug,
       title,
       message,
       templateId,
