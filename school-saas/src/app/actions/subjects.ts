@@ -1,5 +1,7 @@
 'use server';
 
+import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
+
 import { getPgPool } from '@/lib/db/pg-fallback';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
@@ -314,7 +316,12 @@ export async function getSubjectById(
 export async function createSubject(
   tenantSlug: string,
   payload: SubjectPayload
-): Promise<{ success: boolean; subject?: SubjectRecord; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; subject?: SubjectRecord; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -393,7 +400,12 @@ export async function updateSubject(
   tenantSlug: string,
   subjectId: string,
   payload: Partial<SubjectPayload>
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -458,7 +470,12 @@ export async function updateSubject(
 export async function archiveSubject(
   tenantSlug: string,
   subjectId: string
-): Promise<{ success: boolean; blocked?: boolean; reason?: string; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; blocked?: boolean; reason?: string; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -512,7 +529,12 @@ export async function archiveSubject(
 export async function restoreSubject(
   tenantSlug: string,
   subjectId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -546,7 +568,12 @@ export async function restoreSubject(
 export async function bulkCreateSubjects(
   tenantSlug: string,
   rows: SubjectPayload[]
-): Promise<{ success: boolean; created: number; errors: { row: number; error: string }[] }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; created: number; errors: { row: number; error: string }[] }> {
   const errors: { row: number; error: string }[] = [];
   let created = 0;
 
@@ -686,6 +713,11 @@ export async function getCurriculumStreams(
 export async function createCurriculumStream(
   tenantSlug: string,
   payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+
     code: string;
     name: string;
     description?: string;
@@ -733,6 +765,11 @@ export async function updateCurriculumStream(
   tenantSlug: string,
   streamId: string,
   payload: Partial<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+
     code: string;
     name: string;
     description?: string;
@@ -780,7 +817,12 @@ export async function updateCurriculumStream(
 export async function deleteCurriculumStream(
   tenantSlug: string,
   streamId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -874,6 +916,11 @@ export async function getStreamSubjectRules(
 export async function upsertStreamSubjectRule(
   tenantSlug: string,
   payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+
     id?: string;
     stream_id: string;
     subject_id: string;
@@ -949,7 +996,12 @@ export async function upsertStreamSubjectRule(
 export async function deleteStreamSubjectRule(
   tenantSlug: string,
   ruleId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
