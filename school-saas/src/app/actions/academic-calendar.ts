@@ -97,6 +97,7 @@ export async function getAcademicCalendarEvents(
 ): Promise<{ success: boolean; data: AcademicCalendarEvent[]; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
+    const supabase = await createClient();
     if (!tenantId) {
       return { success: false, data: [], error: 'Tenant not found.' };
     }
@@ -159,7 +160,7 @@ export async function getAcademicCalendarEvents(
       }
     }
 
-    let query = supabaseAdmin
+    let query = supabase
       .from('academic_calendar_events')
       .select('*, academic_years(name), terms(name)')
       .eq('tenant_id', tenantId);
