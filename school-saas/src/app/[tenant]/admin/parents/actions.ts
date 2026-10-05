@@ -5,19 +5,12 @@ import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard
 import { revalidatePath } from 'next/cache';
 
 export async function createParent(tenantSlug: string, formData: FormData) {
-  const supabase = await createClient();
-  
-  // Get tenant ID
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .single();
-
-  if (!tenant) throw new Error('Tenant not found');
+  const authorization = await requireServerActionAuthorization({ permission: 'students.records.manage', requestedTenantSlug: tenantSlug });
+  const supabase = authorization.supabase;
+  const tenantId = authorization.target.tenantId;
 
   const parentData = {
-    tenant_id: tenant.id,
+    tenant_id: tenantId,
     first_name: formData.get('firstName') as string,
     last_name: formData.get('lastName') as string,
     email: formData.get('email') as string || null,
@@ -59,7 +52,7 @@ export async function createParent(tenantSlug: string, formData: FormData) {
 
     if (studentIds.length > 0) {
       const studentParentsData = studentIds.map(studentId => ({
-        tenant_id: tenant.id,
+        tenant_id: tenantId,
         student_id: studentId,
         parent_id: parent.id,
         relationship: relationships[studentId] || 'Guardian',
@@ -79,15 +72,9 @@ export async function createParent(tenantSlug: string, formData: FormData) {
 }
 
 export async function linkStudentToParent(tenantSlug: string, parentId: string, studentId: string, relationship: string) {
-  const supabase = await createClient();
-  
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .single();
-
-  if (!tenant) throw new Error('Tenant not found');
+  const authorization = await requireServerActionAuthorization({ permission: 'students.records.manage', requestedTenantSlug: tenantSlug });
+  const supabase = authorization.supabase;
+  const tenantId = authorization.target.tenantId;
 
   const { data, error } = await supabase
     .from('student_parents')
@@ -105,12 +92,15 @@ export async function linkStudentToParent(tenantSlug: string, parentId: string, 
 }
 
 export async function deleteParent(tenantSlug: string, parentId: string) {
-  const supabase = await createClient();
-  
+  const authorization = await requireServerActionAuthorization({ permission: 'students.records.manage', requestedTenantSlug: tenantSlug });
+  const supabase = authorization.supabase;
+  const tenantId = authorization.target.tenantId;
+
   const { error } = await supabase
     .from('parents')
     .delete()
-    .eq('id', parentId);
+    .eq('id', parentId)
+    .eq('tenant_id', tenantId);
 
   if (error) throw error;
 
