@@ -28,11 +28,6 @@ export interface ServerActionAuthorizationOptions {
     type: SupportedResourceType;
     id: string;
   };
-  /**
-   * Explicit trusted target is only for server-composed calls.
-   * Client-provided objects must never be passed here.
-   */
-  resourceTarget?: ResourceTarget;
 }
 
 export interface ServerActionAuthorizationSuccess {
@@ -130,8 +125,6 @@ export async function authorizeServerAction(
         supabase,
         options.resolveResource
       );
-    } else if (options.resourceTarget) {
-      target = options.resourceTarget;
     } else {
       target = await resolveTrustedTenantTarget(
         supabase,
