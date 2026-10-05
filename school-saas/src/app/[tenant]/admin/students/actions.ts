@@ -14,17 +14,7 @@ export async function addStudent(formData: FormData) {
   const supabase = authorization.supabase;
   const sectionId = formData.get('section_id') as string | null;
 
-  // 1. Resolve tenant_id from slug
-  const { data: tenantData, error: tenantError } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', tenant)
-    .single();
-
-  if (tenantError || !tenantData) {
-    return { success: false, error: 'Tenant not found.' };
-  }
-  const tenantId = tenantData.id;
+  const tenantId = authorization.target.tenantId;
 
   // 2. Insert the student
   const admissionNumber = `ADM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
