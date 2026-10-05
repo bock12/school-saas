@@ -214,10 +214,6 @@ export async function getSubjectOfferings(
 export async function createSubjectOffering(
   tenantSlug: string,
   payload: {
-  const authorization = await requireServerActionAuthorization({
-    permission: 'staff.allocations.manage',
-    requestedTenantSlug: tenantSlug,
-  });
 
     academic_year_id: string;
     term_id?: string;
@@ -236,6 +232,11 @@ export async function createSubjectOffering(
     override_overload?: boolean;
   }
 ): Promise<OfferingMutationResult> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -341,10 +342,6 @@ export async function updateSubjectOffering(
   tenantSlug: string,
   offeringId: string,
   payload: {
-  const authorization = await requireServerActionAuthorization({
-    permission: 'staff.allocations.manage',
-    requestedTenantSlug: tenantSlug,
-  });
 
     teacher_id?: string | null;
     assistant_teacher_id?: string | null;
@@ -355,6 +352,11 @@ export async function updateSubjectOffering(
     override_overload?: boolean;
   }
 ): Promise<OfferingMutationResult> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -446,11 +448,12 @@ export async function deleteSubjectOffering(
   tenantSlug: string,
   offeringId: string
 ): Promise<{
+ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'staff.allocations.manage',
     requestedTenantSlug: tenantSlug,
   });
- success: boolean; error?: string }> {
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -668,12 +671,13 @@ export async function upsertTeacherQualification(
   teacherId: string,
   subjectId: string,
   payload: {
+ qualification_level?: string; is_primary?: boolean }
+): Promise<{ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'staff.allocations.manage',
     requestedTenantSlug: tenantSlug,
   });
- qualification_level?: string; is_primary?: boolean }
-): Promise<{ success: boolean; error?: string }> {
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -742,11 +746,12 @@ export async function generateTermOfferingsFromYear(
   academicYearId: string,
   termId: string
 ): Promise<{
+ success: boolean; count?: number; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'staff.allocations.manage',
     requestedTenantSlug: tenantSlug,
   });
- success: boolean; count?: number; error?: string }> {
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -859,10 +864,6 @@ export async function updateTermOffering(
   tenantSlug: string,
   termOfferingId: string,
   payload: {
-  const authorization = await requireServerActionAuthorization({
-    permission: 'staff.allocations.manage',
-    requestedTenantSlug: tenantSlug,
-  });
 
     term_teacher_id?: string | null;
     assistant_teacher_id?: string | null;
@@ -874,6 +875,11 @@ export async function updateTermOffering(
     override_overload?: boolean;
   }
 ): Promise<OfferingMutationResult> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
