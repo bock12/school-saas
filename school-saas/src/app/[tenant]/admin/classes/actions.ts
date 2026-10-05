@@ -5,20 +5,14 @@ import { revalidatePath } from 'next/cache';
 import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
 
 export async function addClass(formData: FormData) {
-  const supabase = await createClient();
-
   const tenant = formData.get('tenant') as string;
 
-  const { data: tenantData, error: tenantError } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', tenant)
-    .single();
-
-  if (tenantError || !tenantData) {
-    return { success: false, error: 'Tenant not found.' };
-  }
-  const tenantId = tenantData.id;
+  const authorization = await requireServerActionAuthorization({
+    permission: 'students.records.manage',
+    requestedTenantSlug: tenant,
+  });
+  const supabase = authorization.supabase;
+  const tenantId = authorization.target.tenantId;
 
   // Get the next sort_order
   const { count } = await supabase
