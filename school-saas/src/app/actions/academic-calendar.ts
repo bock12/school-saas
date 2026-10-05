@@ -1,11 +1,10 @@
 'use server';
 
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
 import { getPgPool } from '@/lib/db/pg-fallback';
 import { revalidatePath } from 'next/cache';
 import { getAcademicSessions } from './academic-sessions';
-
-const supabaseAdmin = createAdminClient();
 
 export interface AcademicCalendarEvent {
   id: string;
@@ -61,75 +60,20 @@ function formatIsoStr(d: any): string {
 }
 
 async function resolveTenantId(slugOrId?: string | null): Promise<string | null> {
-  const supabase = createAdminClient();
+  if (!slugOrId || slugOrId === 'undefined' || slugOrId === 'null') return null;
 
-  if (!slugOrId || slugOrId === 'undefined' || slugOrId === 'null') {
-    const { data: firstTenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .limit(1)
-      .maybeSingle();
-    return firstTenant?.id || null;
-  }
+  const supabase = await createClient();
+  const normalized = slugOrId.toLowerCase().trim();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized);
 
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId);
-  if (isUuid) return slugOrId;
-
-  // 1. Exact slug match
-  const { data: bySlug } = await supabase
+  const query = supabase
     .from('tenants')
     .select('id')
-    .eq('slug', slugOrId.toLowerCase().trim())
+    .eq(isUuid ? 'id' : 'slug', normalized)
     .maybeSingle();
 
-  if (bySlug) return bySlug.id;
-
-  // 2. Partial / ILIKE slug match
-  const { data: byIlikeSlug } = await supabase
-    .from('tenants')
-    .select('id')
-    .ilike('slug', `%${slugOrId.trim()}%`)
-    .limit(1)
-    .maybeSingle();
-
-  if (byIlikeSlug) return byIlikeSlug.id;
-
-  // 3. Match by name
-  const { data: byName } = await supabase
-    .from('tenants')
-    .select('id')
-    .ilike('name', `%${slugOrId.replace(/-/g, ' ').trim()}%`)
-    .limit(1)
-    .maybeSingle();
-
-  if (byName) return byName.id;
-
-  // 4. Try PG Pool directly
-  const pool = getPgPool();
-  if (pool) {
-    try {
-      const pgRes = await pool.query(
-        `SELECT id FROM tenants 
-         WHERE slug = $1 OR slug ILIKE $2 OR name ILIKE $3 
-         LIMIT 1`,
-        [slugOrId.toLowerCase().trim(), `%${slugOrId.trim()}%`, `%${slugOrId.replace(/-/g, ' ').trim()}%`]
-      );
-      if (pgRes.rows.length > 0) return pgRes.rows[0].id;
-      const anyTenant = await pool.query('SELECT id FROM tenants LIMIT 1');
-      if (anyTenant.rows.length > 0) return anyTenant.rows[0].id;
-    } catch {
-      // ignore
-    }
-  }
-
-  // 5. Fallback to first available tenant
-  const { data: fallbackTenant } = await supabase
-    .from('tenants')
-    .select('id')
-    .limit(1)
-    .maybeSingle();
-
-  return fallbackTenant?.id || null;
+  const { data } = await query;
+  return data?.id || null;
 }
 
 function cleanUuid(id?: string | null): string | null {
@@ -359,13 +303,15 @@ export async function getAcademicCalendarEvents(
 export async function createCalendarEvent(
   tenantSlug: string,
   payload: CalendarEventPayload
-): Promise<{ success: boolean; event?: AcademicCalendarEvent; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+  const authorizedSupabase = authorization.supabase;
+  const authorizedTenantId = authorization.target.authorizedTenantId;
+ success: boolean; event?: AcademicCalendarEvent; error?: string }> {
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) {
-      return { success: false, error: 'Tenant not found.' };
-    }
-
     const pool = getPgPool();
     if (pool) {
       const res = await pool.query(
@@ -374,7 +320,7 @@ export async function createCalendarEvent(
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING *`,
         [
-          tenantId,
+          authorizedTenantId,
           cleanUuid(payload.academicYearId),
           cleanUuid(payload.termId),
           payload.title.trim(),
@@ -398,10 +344,10 @@ export async function createCalendarEvent(
       return { success: true, event: res.rows[0] };
     }
 
-    const { data: created, error } = await supabaseAdmin
+    const { data: created, error } = await authorizedSupabase
       .from('academic_calendar_events')
       .insert({
-        tenant_id: tenantId,
+        tenant_id: authorizedTenantId,
         academic_year_id: cleanUuid(payload.academicYearId),
         term_id: cleanUuid(payload.termId),
         title: payload.title.trim(),
@@ -441,13 +387,15 @@ export async function updateCalendarEvent(
   tenantSlug: string,
   eventId: string,
   payload: CalendarEventPayload
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+  const authorizedSupabase = authorization.supabase;
+  const authorizedTenantId = authorization.target.authorizedTenantId;
+ success: boolean; error?: string }> {
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) {
-      return { success: false, error: 'Tenant not found.' };
-    }
-
     const pool = getPgPool();
     if (pool) {
       await pool.query(
@@ -472,7 +420,7 @@ export async function updateCalendarEvent(
           payload.isPublished !== false,
           payload.color || 'blue',
           eventId,
-          tenantId,
+          authorizedTenantId,
         ]
       );
 
@@ -482,7 +430,7 @@ export async function updateCalendarEvent(
       return { success: true };
     }
 
-    const { error } = await supabaseAdmin
+    const { error } = await authorizedSupabase
       .from('academic_calendar_events')
       .update({
         academic_year_id: cleanUuid(payload.academicYearId),
@@ -502,7 +450,7 @@ export async function updateCalendarEvent(
         updated_at: new Date().toISOString(),
       })
       .eq('id', eventId)
-      .eq('tenant_id', tenantId);
+      .eq('tenant_id', authorizedTenantId);
 
     if (error) {
       return { success: false, error: error.message };
@@ -524,26 +472,28 @@ export async function updateCalendarEvent(
 export async function deleteCalendarEvent(
   tenantSlug: string,
   eventId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+  const authorizedSupabase = authorization.supabase;
+  const authorizedTenantId = authorization.target.authorizedTenantId;
+ success: boolean; error?: string }> {
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) {
-      return { success: false, error: 'Tenant not found.' };
-    }
-
     const pool = getPgPool();
     if (pool) {
-      await pool.query('DELETE FROM academic_calendar_events WHERE id = $1 AND tenant_id = $2', [eventId, tenantId]);
+      await pool.query('DELETE FROM academic_calendar_events WHERE id = $1 AND tenant_id = $2', [eventId, authorizedTenantId]);
       revalidatePath(`/${tenantSlug}/admin/academics/calendar`);
       revalidatePath(`/${tenantSlug}/admin/academics`);
       return { success: true };
     }
 
-    const { error } = await supabaseAdmin
+    const { error } = await authorizedSupabase
       .from('academic_calendar_events')
       .delete()
       .eq('id', eventId)
-      .eq('tenant_id', tenantId);
+      .eq('tenant_id', authorizedTenantId);
 
     if (error) {
       return { success: false, error: error.message };
