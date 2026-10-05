@@ -303,8 +303,7 @@ export async function getAcademicCalendarEvents(
 export async function createCalendarEvent(
   tenantSlug: string,
   payload: CalendarEventPayload
-): Promise<{
-
+): Promise<{ success: boolean; event?: AcademicCalendarEvent; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
@@ -388,8 +387,7 @@ export async function updateCalendarEvent(
   tenantSlug: string,
   eventId: string,
   payload: CalendarEventPayload
-): Promise<{
-
+): Promise<{ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
@@ -474,8 +472,7 @@ export async function updateCalendarEvent(
 export async function deleteCalendarEvent(
   tenantSlug: string,
   eventId: string
-): Promise<{
-
+): Promise<{ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
