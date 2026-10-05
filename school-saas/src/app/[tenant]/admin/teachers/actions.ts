@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
 
 export async function addTeacher(formData: FormData) {
   const supabase = await createClient();
