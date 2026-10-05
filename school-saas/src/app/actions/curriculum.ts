@@ -1,5 +1,7 @@
 'use server';
 
+import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
+
 import { getPgPool } from '@/lib/db/pg-fallback';
 import { revalidatePath } from 'next/cache';
 
@@ -173,6 +175,11 @@ export async function getCurriculumVersions(
 export async function createCurriculumVersion(
   tenantSlug: string,
   payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+
     subject_id: string;
     academic_year_id: string;
     grade_level: string;
@@ -236,7 +243,12 @@ export async function createCurriculumVersion(
 export async function updateCurriculumVersion(
   tenantSlug: string,
   versionId: string,
-  payload: { notes?: string; effective_from?: string; effective_to?: string; grade_level?: string }
+  payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+ notes?: string; effective_from?: string; effective_to?: string; grade_level?: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
@@ -279,7 +291,12 @@ export async function updateCurriculumVersion(
 export async function submitCurriculumForReview(
   tenantSlug: string,
   versionId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.review',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -333,7 +350,12 @@ export async function submitCurriculumForReview(
 export async function approveCurriculum(
   tenantSlug: string,
   versionId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.approve',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -369,7 +391,12 @@ export async function approveCurriculum(
 export async function publishCurriculum(
   tenantSlug: string,
   versionId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.publish',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -463,6 +490,11 @@ export async function upsertCurriculumTopic(
   tenantSlug: string,
   versionId: string,
   payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+
     id?: string;
     parent_topic_id?: string;
     title: string;
@@ -520,7 +552,12 @@ export async function upsertCurriculumTopic(
 export async function deleteCurriculumTopic(
   tenantSlug: string,
   topicId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -550,6 +587,11 @@ export async function upsertLearningOutcome(
   versionId: string,
   topicId: string,
   payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+
     id?: string;
     code?: string;
     description: string;
@@ -654,7 +696,12 @@ export async function logTopicProgress(
   topicId: string,
   status: string,
   notes?: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.coverage.log',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const userId = await resolveUserId();
     const pool = getPgPool();
