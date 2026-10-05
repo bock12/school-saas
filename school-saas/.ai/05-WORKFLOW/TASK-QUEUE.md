@@ -30,15 +30,24 @@ Harden high-risk privileged API routes identified during TASK-0003 (/api/admissi
 ## TASK-0006 — Authorization regression test foundation & RLS Verification
 **Status:** COMPLETED (Merged to main via PR #16) · **Priority:** High · **Owner:** ChatGPT Supervision · **Target:** Gemini/Antigravity
 
-Implement and verify database-level Row Level Security (RLS) policies, cross-tenant isolation, RBAC boundaries, and recipient ownership. Remediated `public.tenants` prototype allow-all policy, enabled RLS and table-specific policies on exam core and analytics tables, added recipient ownership to notifications, protected profile mutations against privilege escalation/tenant rebinding via trigger, updated database helpers with `is_active = true`. Under TASK-0006-CORRECTION, resolved teacher authorization contradiction by strictly restricting `exam_results_approval` and `exam_malpractices` to administrative roles (`school_admin`, `org_admin`, `super_admin`), hardened `protect_profile_fields()` against `auth.uid() IS NULL` abuse by web callers, secured test harness TLS to fail-closed defaults, captured PostgreSQL SQLSTATE 42501 denials, verified database state post-denial, and established 50 real PostgreSQL non-service-role RLS & TLS tests and 6 API+RLS integration tests (132/132 total suite pass). Specification: TASK-0006 Supervisory Amendments & TASK-0006-CORRECTION. Migration: `046_fix_rls_boundaries_and_exam_security.sql`. Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Responses: `.ai/05-WORKFLOW/messages/MSG-0013.md`, `.ai/05-WORKFLOW/messages/MSG-0014.md`.
+Implement and verify database-level Row Level Security (RLS) policies, cross-tenant isolation, RBAC boundaries, and recipient ownership. See prior governance record and implementation report.
 
 ## TASK-0007 — Canonical RBAC & Permission Architecture
-**Status:** IN_REVIEW (Phase 1 Final Correction Complete · Pending Final Supervisory Review · Phase 2 Not Authorized) · **Priority:** High · **Owner:** ChatGPT / Architecture Supervision · **Implementation:** Gemini/Antigravity
+**Status:** ACTIVE — Phase 3D implementation in progress · **Priority:** High · **Owner:** ChatGPT / Architecture Supervision · **Implementation:** Gemini/Antigravity
 
-Reconcile database/application roles, permissions and hierarchy before adding new roles. Discovered ghost dependencies, simulated multi-role states, and authorization bypasses. Produced Contextual Functional Assignment Architecture (ADR-0003), Canonical RBAC Specification (`.ai/04-SECURITY/RBAC-MODEL.md` containing all 30 required sections), Privileged Access Policy (`.ai/04-SECURITY/PRIVILEGED-ACCESS.md`), Findings RBAC-001 through RBAC-023, and comprehensive resolutions for BLOCKER 1 through BLOCKER 12. Reconciled canonical permission inventory to exactly 33 atomic permissions. Strictly documentation and architectural analysis; zero database migrations, RLS, or application code changes. Phase 1 Report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Responses: `.ai/05-WORKFLOW/messages/MSG-0015.md`, `.ai/05-WORKFLOW/messages/MSG-0016.md`, `.ai/05-WORKFLOW/messages/MSG-0017.md`.
+The canonical permission catalog is now 46 permissions. Phase 3D follows the approved sequential charter in `.ai/05-WORKFLOW/TASK-0007-PHASE-3D-DISCOVERY.md`.
 
+### Phase 3D Cohort 3D-2 — Server Actions Security & Authorization Boundary
+**Status:** AUTHORIZED / ACTIVE · **Priority:** Critical  
+**Specification:** `.ai/05-WORKFLOW/TASK-0007-PHASE-3D-COHORT-2.md`  
+**Authorization:** `.ai/05-WORKFLOW/messages/MSG-0023.md`  
+**Implementation branch:** `ai-eos/task-0007-phase-3d-cohort-2-server-actions`
+
+Objective: establish a unified request-safe Server Action authorization boundary; secure core student, teacher, parent, class and bursary mutations; eliminate arbitrary tenant fallback in academic calendar; and secure subjects/curriculum/offerings against unauthenticated direct privileged database access.
+
+**Frontend authorization is deferred to Phase 3D Cohort 3D-4.**
 
 ## TASK-TEST-001 — AI-EOS Collaboration Protocol Validation
 **Status:** IMPLEMENTED (Review Corrections Applied · Awaiting Second Review) · **Priority:** P1 · **Owner:** ChatGPT / Project Supervisor · **Target:** Gemini/Antigravity
 
-Controlled process test. Validated that a fresh Gemini/Antigravity session can discover and follow the AI-EOS collaboration protocol, identify authority, recognize an authorized task, assess governance/documentation health, submit an evidence-based recommendation and report blockers without changing application functionality. Specification: `.ai/05-WORKFLOW/TASK-TEST-001.md`. Authorization: `.ai/05-WORKFLOW/messages/MSG-TEST-001.md`. Supervisory review: `.ai/05-WORKFLOW/messages/MSG-TEST-003.md` (CHANGES_REQUESTED). Implementation corrections response: `.ai/05-WORKFLOW/messages/MSG-TEST-004.md`. Implementation report: `.ai/05-WORKFLOW/IMPLEMENTATION-REPORT.md`. Status is IMPLEMENTED pending second ChatGPT supervisory review (`REVIEW-TASK-TEST-001`). No merge is authorized.
+Controlled process test. No merge is authorized until its separate supervisory review is completed.

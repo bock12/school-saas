@@ -9,9 +9,9 @@ engineering_memory: .ai/
 active_task:
   id: TASK-0007-PHASE-3D-COHORT-2
   parent_task: TASK-0007
-  status: NOT_YET_AUTHORIZED
-  title: "Phase 3D Cohort 3D-2: Frontend Authorization Migration (Capability Hooks & Component Gates)"
-  branch: null
+  status: ACTIVE
+  title: "Phase 3D Cohort 3D-2: Server Actions Security & Authorization Boundary"
+  branch: ai-eos/task-0007-phase-3d-cohort-2-server-actions
   target_migration: null
   canonical_permissions: 46
 last_completed_task:
@@ -27,12 +27,12 @@ previous_completed_task:
   pr_number: 19
   branch: ai-eos/task-0007-phase-3c-cohort-4-enrollment-rpc
 last_instruction:
-  id: TASK-0007-PHASE-3D-COHORT-1-SUPERVISORY-APPROVAL
+  id: MSG-0023
   from: chatgpt
   to: gemini
-  type: SUPERVISORY_APPROVAL
-  task_id: TASK-0007-PHASE-3D-COHORT-1
-  status: APPROVED_MERGE_AUTHORIZED
+  type: AUTHORIZED_TASK
+  task_id: TASK-0007-PHASE-3D-COHORT-2
+  status: ACTIVE
 last_response:
   id: MSG-0022
   from: gemini
