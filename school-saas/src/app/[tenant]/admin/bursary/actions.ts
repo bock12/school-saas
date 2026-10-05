@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
 
 export async function bursaryVerifyAndClearPayment(
   tenantSlug: string,
@@ -10,17 +11,13 @@ export async function bursaryVerifyAndClearPayment(
   paymentMethod?: string,
   notes?: string
 ) {
-  const supabase = await createClient();
-
-  const { data: tenantData } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .single();
-
-  if (!tenantData) {
-    return { success: false, error: 'Tenant not found.' };
-  }
+  const authorization = await requireServerActionAuthorization({
+    permission: 'finance.invoices.manage',
+    requestedTenantSlug: tenantSlug,
+    resolveResource: { type: 'applicant', id: applicantId },
+  });
+  const supabase = authorization.supabase;
+  const tenantId = authorization.target.tenantId;
 
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -35,7 +32,7 @@ export async function bursaryVerifyAndClearPayment(
       payment_method: paymentMethod || 'Bank Transfer',
     })
     .eq('id', applicantId)
-    .eq('tenant_id', tenantData.id);
+    .eq('tenant_id', tenantId);
 
   if (updateError) {
     return { success: false, error: updateError.message };
@@ -43,7 +40,7 @@ export async function bursaryVerifyAndClearPayment(
 
   // 2. Log in admission_history
   await supabase.from('admission_history').insert({
-    tenant_id: tenantData.id,
+    tenant_id: tenantId,
     applicant_id: applicantId,
     from_stage: 'Enrollment',
     to_stage: 'Enrollment',
@@ -62,17 +59,13 @@ export async function bursaryRejectPaymentReceipt(
   applicantId: string,
   reason: string
 ) {
-  const supabase = await createClient();
-
-  const { data: tenantData } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .single();
-
-  if (!tenantData) {
-    return { success: false, error: 'Tenant not found.' };
-  }
+  const authorization = await requireServerActionAuthorization({
+    permission: 'finance.invoices.manage',
+    requestedTenantSlug: tenantSlug,
+    resolveResource: { type: 'applicant', id: applicantId },
+  });
+  const supabase = authorization.supabase;
+  const tenantId = authorization.target.tenantId;
 
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -85,7 +78,7 @@ export async function bursaryRejectPaymentReceipt(
       payment_cleared: false,
     })
     .eq('id', applicantId)
-    .eq('tenant_id', tenantData.id);
+    .eq('tenant_id', tenantId);
 
   if (updateError) {
     return { success: false, error: updateError.message };
@@ -93,7 +86,7 @@ export async function bursaryRejectPaymentReceipt(
 
   // Log in admission_history
   await supabase.from('admission_history').insert({
-    tenant_id: tenantData.id,
+    tenant_id: tenantId,
     applicant_id: applicantId,
     from_stage: 'Enrollment',
     to_stage: 'Enrollment',
@@ -111,22 +104,17 @@ export async function updateBursarySettingsAction(
   tenantSlug: string,
   settings: Record<string, any>
 ) {
-  const supabase = await createClient();
-
-  const { data: tenantData } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .single();
-
-  if (!tenantData) {
-    return { success: false, error: 'Tenant not found.' };
-  }
+  const authorization = await requireServerActionAuthorization({
+    permission: 'finance.invoices.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+  const supabase = authorization.supabase;
+  const tenantId = authorization.target.tenantId;
 
   const { error } = await supabase
     .from('tenants')
     .update({ bursary_settings: settings })
-    .eq('id', tenantData.id);
+    .eq('id', tenantId);
 
   if (error) {
     return { success: false, error: error.message };
