@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
 import { revalidatePath } from 'next/cache';
 
 export async function createParent(tenantSlug: string, formData: FormData) {
