@@ -304,13 +304,14 @@ export async function createCalendarEvent(
   tenantSlug: string,
   payload: CalendarEventPayload
 ): Promise<{
+
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
   });
   const authorizedSupabase = authorization.supabase;
-  const authorizedTenantId = authorization.target.authorizedTenantId;
- success: boolean; event?: AcademicCalendarEvent; error?: string }> {
+  const authorizedTenantId = authorization.target.tenantId;
+
   try {
     const pool = getPgPool();
     if (pool) {
@@ -388,13 +389,14 @@ export async function updateCalendarEvent(
   eventId: string,
   payload: CalendarEventPayload
 ): Promise<{
+
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
   });
   const authorizedSupabase = authorization.supabase;
-  const authorizedTenantId = authorization.target.authorizedTenantId;
- success: boolean; error?: string }> {
+  const authorizedTenantId = authorization.target.tenantId;
+
   try {
     const pool = getPgPool();
     if (pool) {
@@ -473,13 +475,14 @@ export async function deleteCalendarEvent(
   tenantSlug: string,
   eventId: string
 ): Promise<{
+
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
   });
   const authorizedSupabase = authorization.supabase;
-  const authorizedTenantId = authorization.target.authorizedTenantId;
- success: boolean; error?: string }> {
+  const authorizedTenantId = authorization.target.tenantId;
+
   try {
     const pool = getPgPool();
     if (pool) {
