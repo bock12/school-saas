@@ -5,9 +5,13 @@ import { revalidatePath } from 'next/cache';
 import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
 
 export async function addStudent(formData: FormData) {
-  const supabase = await createClient();
-
   const tenant = formData.get('tenant') as string;
+
+  const authorization = await requireServerActionAuthorization({
+    permission: 'students.records.manage',
+    requestedTenantSlug: tenant,
+  });
+  const supabase = authorization.supabase;
   const sectionId = formData.get('section_id') as string | null;
 
   // 1. Resolve tenant_id from slug
