@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import type { User } from '@supabase/supabase-js';
 import {
   type AuthorizationDecision,
   AuthorizationError,
