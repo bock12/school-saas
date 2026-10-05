@@ -1,5 +1,7 @@
 'use server';
 
+import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
+
 import { getPgPool } from '@/lib/db/pg-fallback';
 import { revalidatePath } from 'next/cache';
 
@@ -212,6 +214,11 @@ export async function getSubjectOfferings(
 export async function createSubjectOffering(
   tenantSlug: string,
   payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
     academic_year_id: string;
     term_id?: string;
     subject_id: string;
@@ -334,6 +341,11 @@ export async function updateSubjectOffering(
   tenantSlug: string,
   offeringId: string,
   payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
     teacher_id?: string | null;
     assistant_teacher_id?: string | null;
     periods_per_week?: number;
@@ -433,7 +445,12 @@ export async function updateSubjectOffering(
 export async function deleteSubjectOffering(
   tenantSlug: string,
   offeringId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -650,7 +667,12 @@ export async function upsertTeacherQualification(
   tenantSlug: string,
   teacherId: string,
   subjectId: string,
-  payload: { qualification_level?: string; is_primary?: boolean }
+  payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+ qualification_level?: string; is_primary?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
@@ -719,7 +741,12 @@ export async function generateTermOfferingsFromYear(
   tenantSlug: string,
   academicYearId: string,
   termId: string
-): Promise<{ success: boolean; count?: number; error?: string }> {
+): Promise<{
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+ success: boolean; count?: number; error?: string }> {
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -832,6 +859,11 @@ export async function updateTermOffering(
   tenantSlug: string,
   termOfferingId: string,
   payload: {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
     term_teacher_id?: string | null;
     assistant_teacher_id?: string | null;
     periods_per_week?: number;
