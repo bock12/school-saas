@@ -1,6 +1,5 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
 import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
 import { revalidatePath } from 'next/cache';
 
