@@ -37,7 +37,7 @@ export interface ServerActionAuthorizationOptions {
 
 export interface ServerActionAuthorizationSuccess {
   ok: true;
-  user: NonNullable<Awaited<ReturnType<typeof createClient>>['auth']> extends never ? never : any;
+  user: User;
   supabase: any;
   authContext: TrustedSecurityContext;
   decision: AuthorizationDecision;
