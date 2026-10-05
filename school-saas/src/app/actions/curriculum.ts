@@ -175,10 +175,6 @@ export async function getCurriculumVersions(
 export async function createCurriculumVersion(
   tenantSlug: string,
   payload: {
-  const authorization = await requireServerActionAuthorization({
-    permission: 'curriculum.version.create',
-    requestedTenantSlug: tenantSlug,
-  });
 
     subject_id: string;
     academic_year_id: string;
@@ -188,6 +184,11 @@ export async function createCurriculumVersion(
     notes?: string;
   }
 ): Promise<{ success: boolean; version?: CurriculumVersionRecord; error?: string }> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -244,12 +245,13 @@ export async function updateCurriculumVersion(
   tenantSlug: string,
   versionId: string,
   payload: {
+ notes?: string; effective_from?: string; effective_to?: string; grade_level?: string }
+): Promise<{ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
   });
- notes?: string; effective_from?: string; effective_to?: string; grade_level?: string }
-): Promise<{ success: boolean; error?: string }> {
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     if (!tenantId) return { success: false, error: 'Tenant not found.' };
@@ -292,11 +294,12 @@ export async function submitCurriculumForReview(
   tenantSlug: string,
   versionId: string
 ): Promise<{
+ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.review',
     requestedTenantSlug: tenantSlug,
   });
- success: boolean; error?: string }> {
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -351,11 +354,12 @@ export async function approveCurriculum(
   tenantSlug: string,
   versionId: string
 ): Promise<{
+ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.approve',
     requestedTenantSlug: tenantSlug,
   });
- success: boolean; error?: string }> {
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -392,11 +396,12 @@ export async function publishCurriculum(
   tenantSlug: string,
   versionId: string
 ): Promise<{
+ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.publish',
     requestedTenantSlug: tenantSlug,
   });
- success: boolean; error?: string }> {
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -490,10 +495,6 @@ export async function upsertCurriculumTopic(
   tenantSlug: string,
   versionId: string,
   payload: {
-  const authorization = await requireServerActionAuthorization({
-    permission: 'curriculum.version.create',
-    requestedTenantSlug: tenantSlug,
-  });
 
     id?: string;
     parent_topic_id?: string;
@@ -504,6 +505,11 @@ export async function upsertCurriculumTopic(
     estimated_periods?: number;
   }
 ): Promise<{ success: boolean; topic?: CurriculumTopicRecord; error?: string }> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+
   try {
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -553,11 +559,12 @@ export async function deleteCurriculumTopic(
   tenantSlug: string,
   topicId: string
 ): Promise<{
+ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
   });
- success: boolean; error?: string }> {
+
   try {
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -587,10 +594,6 @@ export async function upsertLearningOutcome(
   versionId: string,
   topicId: string,
   payload: {
-  const authorization = await requireServerActionAuthorization({
-    permission: 'curriculum.version.create',
-    requestedTenantSlug: tenantSlug,
-  });
 
     id?: string;
     code?: string;
@@ -599,6 +602,11 @@ export async function upsertLearningOutcome(
     sequence: number;
   }
 ): Promise<{ success: boolean; outcome?: LearningOutcomeRecord; error?: string }> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'curriculum.version.create',
+    requestedTenantSlug: tenantSlug,
+  });
+
   try {
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -697,11 +705,12 @@ export async function logTopicProgress(
   status: string,
   notes?: string
 ): Promise<{
+ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.coverage.log',
     requestedTenantSlug: tenantSlug,
   });
- success: boolean; error?: string }> {
+
   try {
     const userId = await resolveUserId();
     const pool = getPgPool();
