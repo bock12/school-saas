@@ -33,19 +33,24 @@ Harden high-risk privileged API routes identified during TASK-0003 (/api/admissi
 Implement and verify database-level Row Level Security (RLS) policies, cross-tenant isolation, RBAC boundaries, and recipient ownership. See prior governance record and implementation report.
 
 ## TASK-0007 — Canonical RBAC & Permission Architecture
-**Status:** ACTIVE — Phase 3D implementation in progress · **Priority:** High · **Owner:** ChatGPT / Architecture Supervision · **Implementation:** Gemini/Antigravity
+**Status:** ACTIVE — Phase 3D post-merge verification · **Priority:** High · **Owner:** ChatGPT / Architecture Supervision · **Implementation:** Gemini/Antigravity
 
 The canonical permission catalog is now 46 permissions. Phase 3D follows the approved sequential charter in `.ai/05-WORKFLOW/TASK-0007-PHASE-3D-DISCOVERY.md`.
 
 ### Phase 3D Cohort 3D-2 — Server Actions Security & Authorization Boundary
-**Status:** AUTHORIZED / ACTIVE · **Priority:** Critical  
+**Status:** IMPLEMENTATION MERGED — POST-MERGE VERIFICATION PENDING · **Priority:** Critical  
 **Specification:** `.ai/05-WORKFLOW/TASK-0007-PHASE-3D-COHORT-2.md`  
 **Authorization:** `.ai/05-WORKFLOW/messages/MSG-0023.md`  
-**Implementation branch:** `ai-eos/task-0007-phase-3d-cohort-2-server-actions`
+**Implementation branch:** `ai-eos/task-0007-phase-3d-cohort-2-server-actions`  
+**Merged PR:** #22  
+**Merge commit:** `41a6071d024a4018e34c745177e4269ea3919999`
 
 Objective: establish a unified request-safe Server Action authorization boundary; secure core student, teacher, parent, class and bursary mutations; eliminate arbitrary tenant fallback in academic calendar; and secure subjects/curriculum/offerings against unauthenticated direct privileged database access.
 
 **Frontend authorization is deferred to Phase 3D Cohort 3D-4.**
+
+### TASK-0007 next execution gate
+Do not begin Cohort 3D-3 until post-merge verification of Cohort 3D-2 is complete and the supervisory gate is explicitly cleared.
 
 ## TASK-TEST-001 — AI-EOS Collaboration Protocol Validation
 **Status:** IMPLEMENTED (Review Corrections Applied · Awaiting Second Review) · **Priority:** P1 · **Owner:** ChatGPT / Project Supervisor · **Target:** Gemini/Antigravity
