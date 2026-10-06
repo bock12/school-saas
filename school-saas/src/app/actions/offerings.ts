@@ -237,6 +237,8 @@ export async function createSubjectOffering(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -357,6 +359,8 @@ export async function updateSubjectOffering(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -454,9 +458,9 @@ export async function deleteSubjectOffering(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -678,9 +682,9 @@ export async function upsertTeacherQualification(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -752,9 +756,9 @@ export async function generateTermOfferingsFromYear(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -879,6 +883,8 @@ export async function updateTermOffering(
     permission: 'staff.allocations.manage',
     requestedTenantSlug: tenantSlug,
   });
+
+  const tenantId = authorization.target.tenantId;
 
   try {
     const tenantId = await resolveTenantId(tenantSlug);
