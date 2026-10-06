@@ -189,9 +189,9 @@ export async function createCurriculumVersion(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -252,9 +252,9 @@ export async function updateCurriculumVersion(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -299,6 +299,8 @@ export async function submitCurriculumForReview(
     permission: 'curriculum.version.review',
     requestedTenantSlug: tenantSlug,
   });
+
+  const tenantId = authorization.target.tenantId;
 
   try {
     const tenantId = await resolveTenantId(tenantSlug);
@@ -360,6 +362,8 @@ export async function approveCurriculum(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -401,6 +405,8 @@ export async function publishCurriculum(
     permission: 'curriculum.version.publish',
     requestedTenantSlug: tenantSlug,
   });
+
+  const tenantId = authorization.target.tenantId;
 
   try {
     const tenantId = await resolveTenantId(tenantSlug);
@@ -510,6 +516,8 @@ export async function upsertCurriculumTopic(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -565,6 +573,8 @@ export async function deleteCurriculumTopic(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -606,6 +616,8 @@ export async function upsertLearningOutcome(
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
   });
+
+  const tenantId = authorization.target.tenantId;
 
   try {
     const pool = getPgPool();
@@ -710,6 +722,8 @@ export async function logTopicProgress(
     permission: 'curriculum.coverage.log',
     requestedTenantSlug: tenantSlug,
   });
+
+  const tenantId = authorization.target.tenantId;
 
   try {
     const userId = await resolveUserId();
