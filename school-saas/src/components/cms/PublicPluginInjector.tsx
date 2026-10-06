@@ -8,6 +8,23 @@ import {
 } from 'lucide-react';
 import type { CmsPluginRecord, CmsGlobalSettings } from '@/lib/types/landing-cms';
 
+function sanitizeCustomCss(css: string): string {
+  // CSS is treated as untrusted CMS content. Strip constructs that can load
+  // external resources or escape the intended style-only boundary.
+  return css
+    .replace(/@import\\s+[^;]+;?/gi, '')
+    .replace(/url\\s*\\([^)]*\\)/gi, '')
+    .replace(/expression\\s*\\([^)]*\\)/gi, '')
+    .replace(/behavior\\s*:/gi, '')
+    .replace(/-moz-binding\\s*:/gi, '')
+    .replace(/<\\/style/gi, '');
+}
+
+function SafeCustomCss({ css }: { css: string }) {
+  const sanitized = sanitizeCustomCss(css);
+  return sanitized ? <style>{sanitized}</style> : null;
+}
+
 interface PublicPluginInjectorProps {
   plugins: CmsPluginRecord[];
   settings?: CmsGlobalSettings;
@@ -251,9 +268,7 @@ export function PublicPluginInjector({ plugins, settings }: PublicPluginInjector
       )}
 
       {/* ── 5. Custom Global Head/Body CSS & Script Injector ──────── */}
-      {settings?.custom_css && (
-        <style dangerouslySetInnerHTML={{ __html: settings.custom_css }} />
-      )}
+      {settings?.custom_css && <SafeCustomCss css={settings.custom_css} />}
     </>
   );
 }
