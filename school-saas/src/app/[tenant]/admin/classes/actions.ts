@@ -37,9 +37,13 @@ export async function addClass(formData: FormData) {
 }
 
 export async function addSection(formData: FormData) {
-  const supabase = await createClient();
-
   const tenant = formData.get('tenant') as string;
+  const authorization = await requireServerActionAuthorization({
+    permission: 'students.records.manage',
+    requestedTenantSlug: tenant,
+  });
+  const supabase = authorization.supabase;
+  const tenantId = authorization.target.tenantId;
   const classId = formData.get('class_id') as string;
   const teacherId = (formData.get('teacher_id') as string) || null;
 
