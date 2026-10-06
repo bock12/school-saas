@@ -1,24 +1,17 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
 
 export async function addTeacher(formData: FormData) {
-  const supabase = await createClient();
-
   const tenant = formData.get('tenant') as string;
 
-  // 1. Resolve tenant_id from slug
-  const { data: tenantData, error: tenantError } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', tenant)
-    .single();
-
-  if (tenantError || !tenantData) {
-    return { success: false, error: 'Tenant not found.' };
-  }
-  const tenantId = tenantData.id;
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.accounts.manage',
+    requestedTenantSlug: tenant,
+  });
+  const supabase = authorization.supabase;
+  const tenantId = authorization.target.tenantId;
 
   // 2. Resolve department_id if provided
   const departmentId = (formData.get('department_id') as string) || null;
