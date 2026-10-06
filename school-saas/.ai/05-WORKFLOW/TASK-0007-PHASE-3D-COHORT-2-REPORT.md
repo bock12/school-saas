@@ -2,16 +2,18 @@
 
 ## Status
 
-**IMPLEMENTATION COMPLETE — VERIFICATION GATE PENDING**
+**IMPLEMENTATION MERGED — POST-MERGE VERIFICATION PENDING**
 
 Task: `TASK-0007-PHASE-3D-COHORT-2`  
 Scope: Server Actions Security & Authorization Boundary  
 Implementation branch: `ai-eos/task-0007-phase-3d-cohort-2-server-actions`  
-Pull request: #22
+Pull request: #22  
+Merge commit: `41a6071d024a4018e34c745177e4269ea3919999`
 
 ## Implemented
 
 ### Canonical Server Action boundary
+
 Added:
 - `src/lib/auth/server-action-guard.ts`
 - `authorizeServerAction()`
@@ -57,36 +59,28 @@ No parallel permission registry or ad-hoc role model was introduced.
 - No new client-side-only security checks were introduced.
 - Frontend authorization migration remains deferred to Phase 3D-4.
 
-## Verification limitations
+## Merge / verification record
 
-The repository currently has no GitHub Actions workflow configured for the required test/typecheck/build commands. The execution environment cannot clone the repository, so local `npm test`, `tsc`, and production-build execution could not be performed.
+PR #22 was merged by the project owner into `main` on 2026-10-06 with merge commit `41a6071d024a4018e34c745177e4269ea3919999`.
 
-The latest Vercel status previously reached success, but subsequent commits have triggered a new deployment. The current deployment status is not treated as test-suite evidence.
+Pre-merge evidence included:
+- User-confirmed GitHub UI CI success.
+- Recorded CodeQL success for the PR head.
+- Vercel success.
+- Static security regression coverage included in the PR.
 
-Therefore:
-- TypeScript: **NOT VERIFIED**
-- Tests: **NOT VERIFIED**
-- Production build: **NOT VERIFIED**
-- Security review: **STATIC REVIEW PASSED; RUNTIME REVIEW PENDING**
-- Code review: **PENDING**
-- Merge: **NOT AUTHORIZED**
+The recorded Dependency Review attempt failed because GitHub Dependency Graph was disabled. The failed run was rerun, but the connector continued to expose the same configuration failure. The PR was subsequently merged by the project owner.
 
-## Additional containment test
+## Post-merge verification limitations
 
-Added `tests/security/cohort-3d-2-server-actions.test.ts` and included it in `npm test`. It statically verifies the canonical guard is present, privileged DB access occurs after authorization in scoped mutations, and the academic-calendar arbitrary tenant fallbacks are absent.
+The GitHub connector currently returns no pull-request workflow runs for merge commit `41a6071d024a4018e34c745177e4269ea3919999`. Therefore this report does **not** claim post-merge CI, CodeQL, Dependency Review, or production deployment verification.
 
-## Review gates
+Runtime authorization tests are also not claimed as independently executed by this supervisory session; the PR contains static security regression coverage.
 
-Before merge, supervisory review must confirm:
-1. Guard placement is valid TypeScript/Next.js Server Action syntax.
-2. All in-scope mutation paths establish authorization before privileged access.
-3. Canonical permission mappings are appropriate.
-4. Cross-tenant related-record integrity is preserved.
-5. Existing authorization/security tests pass.
-6. Typecheck and production build pass in a real repository environment.
-
-## Residual/deferred items
+## Residual / deferred items
 
 - Frontend capability/component authorization remains Phase 3D-4.
 - Adjacent Server Actions outside this cohort require separate review if not covered by the approved scope.
-- Academic-calendar currently uses the existing canonical academic permission `curriculum.version.create` because no dedicated calendar permission exists in the canonical registry; this mapping requires supervisory confirmation before merge.
+- Academic-calendar currently uses the existing canonical academic permission `curriculum.version.create` because no dedicated calendar permission exists in the canonical registry; this mapping remains a design follow-up.
+- Dedicated class and academic-calendar permissions were not introduced into the frozen canonical registry as part of this cohort.
+- Cohort 3D-3 must not begin until post-merge verification is completed and explicitly cleared.
