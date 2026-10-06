@@ -78,7 +78,7 @@ export async function linkStudentToParent(tenantSlug: string, parentId: string, 
   const { data, error } = await supabase
     .from('student_parents')
     .insert([{
-      tenant_id: tenant.id,
+      tenant_id: tenantId,
       parent_id: parentId,
       student_id: studentId,
       relationship,
