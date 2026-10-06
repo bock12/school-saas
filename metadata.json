@@ -1,5 +1,0 @@
-{
-  "name": "SchoolSaaS",
-  "description": "A complete multi-tenant SaaS solution for managing schools with isolated tenant data, role-based access, admissions, and academic tools.",
-  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
