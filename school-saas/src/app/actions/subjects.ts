@@ -581,13 +581,14 @@ export async function bulkCreateSubjects(
   if (!tenantId) return { success: false, created: 0, errors: [{ row: 0, error: 'Tenant not found.' }] };
 
   const pool = getPgPool();
-  if (!pool) return { success: false, created: 0, errors: [{ row: 0, error: 'Database unavailable.' }] };
-
-  const client = await pool.connect();
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
   });
+
+  if (!pool) return { success: false, created: 0, errors: [{ row: 0, error: 'Database unavailable.' }] };
+
+  const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
