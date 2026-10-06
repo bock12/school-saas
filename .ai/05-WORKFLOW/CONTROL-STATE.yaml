@@ -1,0 +1,92 @@
+version: "1.0"
+authority:
+  final: human
+  supervisor: chatgpt
+  implementation: gemini
+  coding_assistant: copilot
+source_of_truth: github
+engineering_memory: .ai/
+active_task:
+  id: TASK-0007-PHASE-3D-COHORT-2
+  parent_task: TASK-0007
+  status: ACTIVE
+  title: "Phase 3D Cohort 3D-2: Post-merge verification"
+  branch: main
+  target_migration: null
+  canonical_permissions: 46
+last_completed_task:
+  id: TASK-0007-PHASE-3D-COHORT-1
+  status: MERGED_ON_MAIN
+  commit: 428eab7
+  pr_number: 20
+  branch: ai-eos/task-0007-phase-3d-cohort-1-api-containment
+previous_completed_task:
+  id: TASK-0007-PHASE-3C-COHORT-4
+  status: MERGED_ON_MAIN
+  commit: 2727b38
+  pr_number: 19
+  branch: ai-eos/task-0007-phase-3c-cohort-4-enrollment-rpc
+last_instruction:
+  id: MSG-0023
+  from: chatgpt
+  to: gemini
+  type: AUTHORIZED_TASK
+  task_id: TASK-0007-PHASE-3D-COHORT-2
+  status: COMPLETED_MERGED
+last_response:
+  id: MSG-0022
+  from: gemini
+  to: chatgpt
+  type: FINAL_SUBSTANTIATION_REPORT
+  task_id: TASK-0007-PHASE-3D-COHORT-1
+  status: APPROVED_MERGE_AUTHORIZED
+  merge_authorized: true
+  in_response_to: TASK-0007-PHASE-3D-COHORT-1-SUPERVISORY-APPROVAL
+
+pending:
+  recommendations:
+    - REC-0001
+    - REC-0002
+    - REC-0003
+    - REC-0004
+    - REC-0005
+    - REC-0006
+    - REC-0007
+    - REC-0008
+    - REC-0009
+    - REC-0010
+    - REC-0011
+    - REC-0012
+    - REC-0013
+    - REC-0014
+    - REC-0015
+    - REC-0016
+    - REC-0017
+    - REC-0018
+    - REC-0019
+    - REC-0020
+    - REC-0021
+    - REC-0022
+    - REC-0023
+  reviews:
+    - REVIEW-TASK-TEST-001
+    - REVIEW-TASK-0005
+    - REVIEW-TASK-0006
+  escalations: []
+protocol:
+  authoritative_instruction_requires:
+    - from=chatgpt
+    - type=AUTHORIZED_TASK or ARCHITECTURE_DIRECTIVE
+    - linked_task_id
+    - status=ACTIVE or APPROVED
+  recommendation_prefix: REC-
+  message_prefix: MSG-
+  review_prefix: REVIEW-
+  task_prefix: TASK-
+  action_prefix: ACT-
+  escalation_prefix: ESC-
+  status_values:
+    - PROPOSED
+    - ACTIVE
+    - BLOCKED
+    - COMPLETED

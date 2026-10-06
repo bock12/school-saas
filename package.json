@@ -1,0 +1,45 @@
+{
+  "name": "educate",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000 -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "node --conditions=react-server --test-concurrency=1 --import tsx --test tests/auth/admissions-canonical-api.test.ts tests/auth/api-canonical-integration.test.ts tests/auth/api-guard.test.ts tests/auth/authorization-engine.test.ts tests/auth/authorization-context-resolver.test.ts tests/auth/authorization-contract.test.ts tests/security/privileged-api-containment.test.ts tests/security/credential-containment.test.ts tests/security/rls-database-boundary.test.ts tests/security/api-rls-integration.test.ts tests/security/enrollment-rpc-security.test.ts tests/security/cohort-3d-1-api-containment.test.ts tests/security/cohort-3d-2-server-actions.test.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.2",
+    "@tanstack/react-query": "^5.101.2",
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.14.5",
+    "@types/pg": "^8.20.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "lucide-react": "^1.21.0",
+    "next": "^16.4.0",
+    "papaparse": "^5.5.4",
+    "pg": "^8.22.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.9.0",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.6.0",
+    "use-debounce": "^10.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^16.4.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.13",
+    "typescript": "^5",
+    "ws": "^8.21.1"
+  }
+}
