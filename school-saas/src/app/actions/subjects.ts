@@ -323,9 +323,9 @@ export async function createSubject(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database connection unavailable.' };
@@ -408,9 +408,9 @@ export async function updateSubject(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database connection unavailable.' };
@@ -479,9 +479,9 @@ export async function archiveSubject(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database connection unavailable.' };
@@ -539,9 +539,9 @@ export async function restoreSubject(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database connection unavailable.' };
@@ -577,8 +577,6 @@ export async function bulkCreateSubjects(
   const errors: { row: number; error: string }[] = [];
   let created = 0;
 
-  const tenantId = await resolveTenantId(tenantSlug);
-  if (!tenantId) return { success: false, created: 0, errors: [{ row: 0, error: 'Tenant not found.' }] };
 
   const pool = getPgPool();
   const authorization = await requireServerActionAuthorization({
@@ -589,6 +587,8 @@ export async function bulkCreateSubjects(
   if (!pool) return { success: false, created: 0, errors: [{ row: 0, error: 'Database unavailable.' }] };
 
   const client = await pool.connect();
+
+  const tenantId = authorization.target.tenantId;
 
   try {
     await client.query('BEGIN');
@@ -732,9 +732,9 @@ export async function createCurriculumStream(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -786,9 +786,9 @@ export async function updateCurriculumStream(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -832,9 +832,9 @@ export async function deleteCurriculumStream(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -942,9 +942,9 @@ export async function upsertStreamSubjectRule(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -1013,9 +1013,9 @@ export async function deleteStreamSubjectRule(
     requestedTenantSlug: tenantSlug,
   });
 
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
