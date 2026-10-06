@@ -1,0 +1,40 @@
+name: One-time lockfile repair
+
+on:
+  push:
+    branches:
+      - "ai-eos/task-0007-phase-3d-cohort-2-server-actions"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    if: github.actor == 'bock12'
+    defaults:
+      run:
+        working-directory: school-saas
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: school-saas/package-lock.json
+
+      - name: Regenerate lockfile
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Commit lockfile if changed
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "Lockfile already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: synchronize npm lockfile"
+          git push
