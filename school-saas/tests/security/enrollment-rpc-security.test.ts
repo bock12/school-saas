@@ -19,9 +19,6 @@ if (!dbUrl && fs.existsSync(envFile)) {
   }
 }
 
-if (!dbUrl) {
-  test('Database integration prerequisites are not configured', { skip: 'DATABASE_URL is not configured in the test environment' }, () => {});
-} else {
 
 export function resolveTestSslConfig(env: Partial<NodeJS.ProcessEnv> | Record<string, string | undefined> = process.env): pg.ConnectionConfig['ssl'] {
   let customCa = env.DATABASE_SSL_CA;
@@ -43,7 +40,9 @@ export function resolveTestSslConfig(env: Partial<NodeJS.ProcessEnv> | Record<st
       };
 }
 
-test('TASK-0007 Phase 3C Cohort 4: Admissions Enrollment RPC Database Security & Boundaries', async (t) => {
+const databaseTest = dbUrl ? test : test.skip;
+
+databaseTest('TASK-0007 Phase 3C Cohort 4: Admissions Enrollment RPC Database Security & Boundaries', async (t) => {
   const defaultCaPath = path.join(process.cwd(), 'supabase', 'certs', 'prod-ca-2021.crt');
   if (!process.env.DATABASE_SSL_CA && fs.existsSync(defaultCaPath)) {
     process.env.DATABASE_SSL_CA = defaultCaPath;
@@ -514,4 +513,3 @@ test('TASK-0007 Phase 3C Cohort 4: Admissions Enrollment RPC Database Security &
   }
 });
 
-}
