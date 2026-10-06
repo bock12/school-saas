@@ -12,12 +12,12 @@ function sanitizeCustomCss(css: string): string {
   // CSS is treated as untrusted CMS content. Strip constructs that can load
   // external resources or escape the intended style-only boundary.
   return css
-    .replace(/@import\\s+[^;]+;?/gi, '')
-    .replace(/url\\s*\\([^)]*\\)/gi, '')
-    .replace(/expression\\s*\\([^)]*\\)/gi, '')
-    .replace(/behavior\\s*:/gi, '')
-    .replace(/-moz-binding\\s*:/gi, '')
-    .replace(/<\\/style/gi, '');
+    .replace(/@import\s+[^;]+;?/gi, '')
+    .replace(/url\s*\([^)]*\)/gi, '')
+    .replace(/expression\s*\([^)]*\)/gi, '')
+    .replace(/behavior\s*:/gi, '')
+    .replace(/-moz-binding\s*:/gi, '')
+    .replace(/<\/style/gi, '');
 }
 
 function SafeCustomCss({ css }: { css: string }) {
