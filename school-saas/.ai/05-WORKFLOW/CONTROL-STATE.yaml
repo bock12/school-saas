@@ -10,8 +10,8 @@ active_task:
   id: TASK-0007-PHASE-3D-COHORT-2
   parent_task: TASK-0007
   status: ACTIVE
-  title: "Phase 3D Cohort 3D-2: Server Actions Security & Authorization Boundary"
-  branch: ai-eos/task-0007-phase-3d-cohort-2-server-actions
+  title: "Phase 3D Cohort 3D-2: Post-merge verification"
+  branch: main
   target_migration: null
   canonical_permissions: 46
 last_completed_task:
@@ -32,7 +32,7 @@ last_instruction:
   to: gemini
   type: AUTHORIZED_TASK
   task_id: TASK-0007-PHASE-3D-COHORT-2
-  status: ACTIVE
+  status: COMPLETED_MERGED
 last_response:
   id: MSG-0022
   from: gemini
