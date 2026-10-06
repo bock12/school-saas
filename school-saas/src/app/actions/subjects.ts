@@ -578,17 +578,16 @@ export async function bulkCreateSubjects(
   let created = 0;
 
 
-  const pool = getPgPool();
   const authorization = await requireServerActionAuthorization({
     permission: 'curriculum.version.create',
     requestedTenantSlug: tenantSlug,
   });
+  const tenantId = authorization.target.tenantId;
 
+  const pool = getPgPool();
   if (!pool) return { success: false, created: 0, errors: [{ row: 0, error: 'Database unavailable.' }] };
 
   const client = await pool.connect();
-
-  const tenantId = authorization.target.tenantId;
 
   try {
     await client.query('BEGIN');
