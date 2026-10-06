@@ -1,5 +1,7 @@
 'use server';
 
+import { requireServerActionAuthorization } from '@/lib/auth/server-action-guard';
+
 import { getPgPool } from '@/lib/db/pg-fallback';
 import { revalidatePath } from 'next/cache';
 
@@ -212,6 +214,7 @@ export async function getSubjectOfferings(
 export async function createSubjectOffering(
   tenantSlug: string,
   payload: {
+
     academic_year_id: string;
     term_id?: string;
     subject_id: string;
@@ -229,6 +232,13 @@ export async function createSubjectOffering(
     override_overload?: boolean;
   }
 ): Promise<OfferingMutationResult> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
+  const tenantId = authorization.target.tenantId;
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -334,6 +344,7 @@ export async function updateSubjectOffering(
   tenantSlug: string,
   offeringId: string,
   payload: {
+
     teacher_id?: string | null;
     assistant_teacher_id?: string | null;
     periods_per_week?: number;
@@ -343,6 +354,13 @@ export async function updateSubjectOffering(
     override_overload?: boolean;
   }
 ): Promise<OfferingMutationResult> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
+  const tenantId = authorization.target.tenantId;
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
@@ -433,10 +451,16 @@ export async function updateSubjectOffering(
 export async function deleteSubjectOffering(
   tenantSlug: string,
   offeringId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{
+ success: boolean; error?: string }> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -650,11 +674,17 @@ export async function upsertTeacherQualification(
   tenantSlug: string,
   teacherId: string,
   subjectId: string,
-  payload: { qualification_level?: string; is_primary?: boolean }
+  payload: {
+ qualification_level?: string; is_primary?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -719,10 +749,16 @@ export async function generateTermOfferingsFromYear(
   tenantSlug: string,
   academicYearId: string,
   termId: string
-): Promise<{ success: boolean; count?: number; error?: string }> {
+): Promise<{
+ success: boolean; count?: number; error?: string }> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
+  const tenantId = authorization.target.tenantId;
+
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -832,6 +868,7 @@ export async function updateTermOffering(
   tenantSlug: string,
   termOfferingId: string,
   payload: {
+
     term_teacher_id?: string | null;
     assistant_teacher_id?: string | null;
     periods_per_week?: number;
@@ -842,6 +879,13 @@ export async function updateTermOffering(
     override_overload?: boolean;
   }
 ): Promise<OfferingMutationResult> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+
+  const tenantId = authorization.target.tenantId;
+
   try {
     const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
