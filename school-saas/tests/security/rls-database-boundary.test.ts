@@ -19,9 +19,6 @@ if (!dbUrl && fs.existsSync(envFile)) {
   }
 }
 
-if (!dbUrl) {
-  test('Database integration prerequisites are not configured', { skip: 'DATABASE_URL is not configured in the test environment' }, () => {});
-} else {
 
 interface TestFixtures {
   tenantAId: string;
@@ -84,7 +81,9 @@ export function resolveTestSslConfig(env: Partial<NodeJS.ProcessEnv> | Record<st
       };
 }
 
-test('TASK-0006: Real PostgreSQL RLS & Tenant Isolation Test Harness', async (t) => {
+const databaseTest = dbUrl ? test : test.skip;
+
+databaseTest('TASK-0006: Real PostgreSQL RLS & Tenant Isolation Test Harness', async (t) => {
   // Test Environment TLS Configuration:
   // Supabase remote cloud poolers utilize intermediate certificates issued by the Supabase Root CA.
   // Load repository CA certificate for Supabase Cloud pooler verification if not already explicitly configured.
@@ -1036,4 +1035,3 @@ test('TASK-0006-CORRECTION: Test Harness TLS Configuration & Fail-Closed Behavio
 });
 
 
-}
