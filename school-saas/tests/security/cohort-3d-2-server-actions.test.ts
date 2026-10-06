@@ -35,7 +35,7 @@ test('Phase 3D-2 mutation actions authorize before privileged DB access', () => 
   const mutationFiles = ACTIONS.filter((file) => !file.endsWith('academic-calendar.ts'));
   for (const relativePath of mutationFiles) {
     const source = read(relativePath);
-    const functionMatches = [...source.matchAll(/export async function\\s+([A-Za-z0-9_]+)[\\s\\S]*?(?=\\nexport async function|$)/g)];
+    const functionMatches = [...source.matchAll(/export async function\s+([A-Za-z0-9_]+)[\s\\S]*?(?=\\nexport async function|$)/g)];
 
     for (const match of functionMatches) {
       const body = match[0];
@@ -60,9 +60,9 @@ test('Phase 3D-2 mutation actions authorize before privileged DB access', () => 
 test('academic calendar has no arbitrary tenant fallback or module-level admin client', () => {
   const source = read('src/app/actions/academic-calendar.ts');
 
-  assert.doesNotMatch(source, /const\\s+supabaseAdmin\\s*=\\s*createAdminClient\\(\\)/);
-  assert.doesNotMatch(source, /SELECT id FROM tenants\\s+LIMIT 1/i);
-  assert.doesNotMatch(source, /SELECT id FROM tenants[\\s\\S]*?LIMIT 1/i);
-  assert.doesNotMatch(source, /ILIKE '%|ilike\\(.*%/i);
+  assert.doesNotMatch(source, /const\s+supabaseAdmin\s*=\s*createAdminClient\(\)/);
+  assert.doesNotMatch(source, /SELECT id FROM tenants\s+LIMIT 1/i);
+  assert.doesNotMatch(source, /SELECT id FROM tenants[\s\\S]*?LIMIT 1/i);
+  assert.doesNotMatch(source, /ILIKE '%|ilike\(.*%/i);
   assert.match(source, /requireServerActionAuthorization/);
 });
