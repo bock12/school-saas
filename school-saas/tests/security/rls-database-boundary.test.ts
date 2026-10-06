@@ -6,14 +6,22 @@ import pg from 'pg';
 
 const { Client } = pg;
 
-// Read DATABASE_URL from .env.local
-const envContent = fs.readFileSync(path.join(process.cwd(), '.env.local'), 'utf8');
-let dbUrl = '';
-for (const line of envContent.split(/\r?\n/)) {
-  if (line.startsWith('DATABASE_URL=')) {
-    dbUrl = line.substring('DATABASE_URL='.length).trim().replace(/^['"]|['"]$/g, '');
+// Prefer CI/local environment configuration; optionally fall back to .env.local for developer runs.
+let dbUrl = process.env.DATABASE_URL ?? '';
+const envFile = path.join(process.cwd(), '.env.local');
+if (!dbUrl && fs.existsSync(envFile)) {
+  const envContent = fs.readFileSync(envFile, 'utf8');
+  for (const line of envContent.split(/\r?\n/)) {
+    if (line.startsWith('DATABASE_URL=')) {
+      dbUrl = line.substring('DATABASE_URL='.length).trim().replace(/^['"]|['"]$/g, '');
+      break;
+    }
   }
 }
+
+if (!dbUrl) {
+  test('Database integration prerequisites are not configured', { skip: 'DATABASE_URL is not configured in the test environment' }, () => {});
+} else {
 
 interface TestFixtures {
   tenantAId: string;
@@ -1027,3 +1035,5 @@ test('TASK-0006-CORRECTION: Test Harness TLS Configuration & Fail-Closed Behavio
   });
 });
 
+
+}
