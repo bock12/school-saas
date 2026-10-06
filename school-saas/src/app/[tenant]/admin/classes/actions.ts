@@ -47,17 +47,6 @@ export async function addSection(formData: FormData) {
   const classId = formData.get('class_id') as string;
   const teacherId = (formData.get('teacher_id') as string) || null;
 
-  const { data: tenantData, error: tenantError } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('slug', tenant)
-    .single();
-
-  if (tenantError || !tenantData) {
-    return { success: false, error: 'Tenant not found.' };
-  }
-  const tenantId = tenantData.id;
-
   const { error } = await supabase.from('sections').insert({
     tenant_id: tenantId,
     class_id: classId,
