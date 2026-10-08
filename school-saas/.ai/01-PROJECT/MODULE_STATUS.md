@@ -22,4 +22,4 @@ These are evidence labels, not release approval.
 | Communications / notifications | PARTIALLY_BOUND | Routes and chat/communication migrations. | Review recipient scope, disclosure, abuse. |
 | Transport / hostel / library / inventory / welfare / health | PROTOTYPE | Operational surfaces plus 108 prototype-signal pages. | Triage individually. |
 | Analytics / reports / exports | PARTIALLY_BOUND | Analytics and CASS/export surfaces. | Review minimization, auth, audit, correctness. |
-| Automated tests / CI / release verification | BLOCKED | No visible suite/CI; prior build `ENOSPC`. | Operational hardening. |
+| Automated tests / CI / release verification | BLOCKED | Test script and GitHub Actions workflows are present; prior build `ENOSPC` remains historical evidence, and current-main CI status was not independently verified during L1-01. | Verify current CI/build and restore dependency lockfile before Level 1 Gate. |
