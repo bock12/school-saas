@@ -8,6 +8,35 @@ import {
 } from 'lucide-react';
 import type { CmsPluginRecord, CmsGlobalSettings } from '@/lib/types/landing-cms';
 
+function sanitizeCustomCss(css: string): string {
+  // CSS is treated as untrusted CMS content. Strip constructs that can load
+  // external resources or escape the intended style-only boundary.
+  return css
+    .replace(/@import\s+[^;]+;?/gi, '')
+    .replace(/url\s*\([^)]*\)/gi, '')
+    .replace(/expression\s*\([^)]*\)/gi, '')
+    .replace(/behavior\s*:/gi, '')
+    .replace(/-moz-binding\s*:/gi, '')
+    .replace(/<\/style/gi, '');
+}
+
+function SafeCustomCss({ css }: { css: string }) {
+  const sanitized = sanitizeCustomCss(css);
+  return sanitized ? <style>{sanitized}</style> : null;
+}
+
+function sanitizeCmsUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const url = value.trim();
+  if (!url || url.startsWith('//')) return null;
+
+  // CMS links may target same-origin paths/fragments or explicit HTTPS URLs.
+  if (url.startsWith('/') || url.startsWith('#')) return url;
+  if (/^https:\/\//i.test(url)) return url;
+
+  return null;
+}
+
 interface PublicPluginInjectorProps {
   plugins: CmsPluginRecord[];
   settings?: CmsGlobalSettings;
@@ -88,6 +117,7 @@ export function PublicPluginInjector({ plugins, settings }: PublicPluginInjector
   };
 
   const currentNotif = socialProofPlugin?.config?.notifications?.[socialProofIndex];
+  const bannerLinkUrl = sanitizeCmsUrl(topBannerPlugin?.config?.linkUrl);
 
   return (
     <>
@@ -104,13 +134,24 @@ export function PublicPluginInjector({ plugins, settings }: PublicPluginInjector
               <p className="truncate text-white/95 text-xs">
                 {topBannerPlugin.config?.message || 'New features available!'}
               </p>
-              {topBannerPlugin.config?.linkUrl && (
-                <Link
-                  href={topBannerPlugin.config.linkUrl}
-                  className="font-bold underline underline-offset-2 hover:text-white/80 shrink-0 hidden sm:inline-flex items-center gap-1"
-                >
-                  {topBannerPlugin.config?.linkText || 'Learn More'}
-                </Link>
+              {bannerLinkUrl && (
+                /^https:\/\//i.test(bannerLinkUrl) ? (
+                  <a
+                    href={bannerLinkUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold underline underline-offset-2 hover:text-white/80 shrink-0 hidden sm:inline-flex items-center gap-1"
+                  >
+                    {topBannerPlugin.config?.linkText || 'Learn More'}
+                  </a>
+                ) : (
+                  <Link
+                    href={bannerLinkUrl}
+                    className="font-bold underline underline-offset-2 hover:text-white/80 shrink-0 hidden sm:inline-flex items-center gap-1"
+                  >
+                    {topBannerPlugin.config?.linkText || 'Learn More'}
+                  </Link>
+                )
               )}
             </div>
 
@@ -251,9 +292,7 @@ export function PublicPluginInjector({ plugins, settings }: PublicPluginInjector
       )}
 
       {/* ── 5. Custom Global Head/Body CSS & Script Injector ──────── */}
-      {settings?.custom_css && (
-        <style dangerouslySetInnerHTML={{ __html: settings.custom_css }} />
-      )}
+      {settings?.custom_css && <SafeCustomCss css={settings.custom_css} />}
     </>
   );
 }

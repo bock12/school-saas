@@ -14,7 +14,6 @@ type Tenant = { id: string; name: string; slug: string; type: string; logo_url: 
 
 export default function PlatformLoginPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantSearch, setTenantSearch] = useState('');
@@ -45,6 +44,7 @@ export default function PlatformLoginPage() {
     if (!selectedTenant) { setError('Please select your school or organization first.'); return; }
     setLoading(true);
     setError(null);
+    const supabase = createClient();
     setSuccess(null);
 
     if (mode === 'magic_link') {
@@ -85,6 +85,7 @@ export default function PlatformLoginPage() {
     const tenantBase = typeof window !== 'undefined'
       ? `${window.location.protocol}//${selectedTenant.slug}.${window.location.hostname.replace(/^(www\.|admin\.)/, '')}${window.location.port ? `:${window.location.port}` : ''}`
       : '';
+    const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/api/auth/callback?next=${tenantBase}/dashboard` }
