@@ -4,7 +4,7 @@
 **Date:** 2026-10-08  
 **Repository:** `bock12/school-saas`  
 **Branch:** `arch/l1-01-governance-baseline`  
-**Status:** DISCOVERED / BASELINE RECORDED  
+**Status:** BASELINE RECORDED / CONDITIONS RECONCILED  
 **Verdict:** READY WITH CONDITIONS
 
 ## 1. Executive Summary
@@ -255,25 +255,19 @@ L1-01 records them but does not silently remediate them.
 
 ### L1-01-A — Documentation synchronization
 
-Update:
-
-- project stack version
-- migration inventory
-- permission-count references
-- stale test/CI statements
-- module-status evidence
+**Completed on this branch:** project stack version and stale test/CI documentation were corrected; permission-count and migration governance documentation were reconciled.
 
 ### L1-01-B — Dependency reproducibility
 
-Restore/produce the canonical npm lockfile through a controlled dependency-installation procedure and verify it against `package.json`.
+**Open:** restore/produce the canonical npm lockfile through a controlled dependency-installation procedure and verify it against `package.json`. An attempt to perform this locally was blocked because the execution environment cannot resolve GitHub/network dependencies; no fabricated lockfile was committed.
 
 ### L1-01-C — Permission documentation reconciliation
 
-Replace current-state references to 33 with 46 where they describe the live registry, while preserving historical Phase-3A evidence where it is intentionally historical.
+**Completed on this branch:** the RBAC document now explicitly marks the 33-permission matrix as a historical Phase-3A snapshot and identifies the live registry's 46 permissions as current truth.
 
 ### L1-01-D — Migration governance
 
-Create a documented rule for handling the existing duplicate numeric prefixes without rewriting migration history.
+**Completed on this branch:** documented a no-rewrite migration governance rule in `.ai/05-WORKFLOW/L1-01-MIGRATION-GOVERNANCE.md`.
 
 ### L1-01-E — Security remediation continuation
 
