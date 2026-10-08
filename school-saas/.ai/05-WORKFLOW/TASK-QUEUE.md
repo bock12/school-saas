@@ -70,3 +70,17 @@ Formal implementation roadmap: Level 1 Platform Foundation → Level 2 Core Scho
 **Acceptance criteria:** `school-saas/.ai/05-WORKFLOW/ROADMAP.md` defines all four levels, scope and exit gates; security, QA, database governance and documentation are cross-level requirements; material architecture decisions remain subject to ADR and human approval.
 
 **Governance note:** This record authorizes planning structure only. It does not authorize implementation of all roadmap items.
+
+
+## L1-01 — Governance & Architecture Baseline
+**Status:** IN PROGRESS — BASELINE RECORDED · **Priority:** High · **Owner:** ChatGPT / Engineering Authority · **Implementation:** Governance/documentation only
+
+Objective: establish a verified repository, governance, architecture, dependency, authorization, migration and security baseline before Level 1 feature/security implementation proceeds.
+
+**Baseline report:** `.ai/05-WORKFLOW/L1-01-GOVERNANCE-BASELINE-REPORT.md`
+
+**Current conditions:** documentation synchronization and dependency reproducibility remain open. Current `main` has no `school-saas/package-lock.json`; the canonical permission registry contains 46 permissions while some Phase-3A documentation still states 33; migration prefixes 018, 022 and 024 are duplicated.
+
+**Security note:** existing critical/high security findings remain open and are not closed by L1-01.
+
+**Next gate:** synchronize authoritative documentation, address lockfile reproducibility, then proceed to L1-02 Tenant & Authorization Foundation under task-level authorization.
