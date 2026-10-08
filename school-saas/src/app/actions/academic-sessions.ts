@@ -4,7 +4,13 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getPgPool } from '@/lib/db/pg-fallback';
 import { revalidatePath } from 'next/cache';
 
-const supabaseAdmin = createAdminClient();
+const supabaseAdmin = new Proxy({} as ReturnType<typeof createAdminClient>, {
+  get(_target, prop) {
+    const client = createAdminClient();
+    const val = (client as any)[prop];
+    return typeof val === 'function' ? val.bind(client) : val;
+  },
+});
 
 export interface TermPayload {
   id?: string;

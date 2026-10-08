@@ -256,12 +256,21 @@ body {
   background: hsl(var(--bg-secondary));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-lg);
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card:hover {
   border-color: hsl(var(--border-hover));
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  transform: translateY(-4px);
+}
+
+/* Focused input and select high-visibility accessibility outline */
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: hsl(var(--accent)) !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 }
 
 .stat-card-gradient {
