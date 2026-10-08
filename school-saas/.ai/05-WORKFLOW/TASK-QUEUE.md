@@ -73,7 +73,7 @@ Formal implementation roadmap: Level 1 Platform Foundation → Level 2 Core Scho
 
 
 ## L1-01 — Governance & Architecture Baseline
-**Status:** IN PROGRESS — BASELINE RECORDED · **Priority:** High · **Owner:** ChatGPT / Engineering Authority · **Implementation:** Governance/documentation only
+**Status:** IN PROGRESS — CONDITIONS RECONCILED; LOCKFILE OPEN · **Priority:** High · **Owner:** ChatGPT / Engineering Authority · **Implementation:** Governance/documentation only
 
 Objective: establish a verified repository, governance, architecture, dependency, authorization, migration and security baseline before Level 1 feature/security implementation proceeds.
 
@@ -83,4 +83,4 @@ Objective: establish a verified repository, governance, architecture, dependency
 
 **Security note:** existing critical/high security findings remain open and are not closed by L1-01.
 
-**Next gate:** synchronize authoritative documentation, address lockfile reproducibility, then proceed to L1-02 Tenant & Authorization Foundation under task-level authorization.
+**Completed in current pass:** documentation synchronization, 46-permission reconciliation, and migration-governance documentation. **Open condition:** restore and verify `school-saas/package-lock.json` through a controlled dependency-installation environment. Then perform L1-01 supervisory closure and proceed to L1-02 Tenant & Authorization Foundation under task-level authorization.
