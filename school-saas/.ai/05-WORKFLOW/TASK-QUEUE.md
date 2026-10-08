@@ -56,3 +56,17 @@ Do not begin Cohort 3D-3 until post-merge verification of Cohort 3D-2 is complet
 **Status:** IMPLEMENTED (Review Corrections Applied · Awaiting Second Review) · **Priority:** P1 · **Owner:** ChatGPT / Project Supervisor · **Target:** Gemini/Antigravity
 
 Controlled process test. No merge is authorized until its separate supervisory review is completed.
+
+
+## ROADMAP-0001 — Four-Level Implementation Roadmap
+**Status:** PLANNING · **Priority:** High · **Owner:** Human Project Owner · **Supervisor:** ChatGPT Engineering Authority
+
+Formal implementation roadmap: Level 1 Platform Foundation → Level 2 Core School ERP → Level 3 Advanced ERP → Level 4 SaaS Expansion.
+
+**Dependency:** Level 1 establishes authentication, tenant isolation, centralized authorization, RLS, audit and platform primitives before Level 2 becomes the primary delivery focus. Level 3 depends on Level 2. Level 4 is demand-driven and depends on Levels 1–3 stability.
+
+**Execution rule:** Do not generate hundreds of implementation tickets upfront. Decompose progressively as Level → Epic → Feature → Vertical Slice → Implementation Task → Tests → Review.
+
+**Acceptance criteria:** `school-saas/.ai/05-WORKFLOW/ROADMAP.md` defines all four levels, scope and exit gates; security, QA, database governance and documentation are cross-level requirements; material architecture decisions remain subject to ADR and human approval.
+
+**Governance note:** This record authorizes planning structure only. It does not authorize implementation of all roadmap items.
