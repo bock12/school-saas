@@ -4,14 +4,14 @@
 Multi-tenant school-management platform serving public visitors, super administrators, school/organization administrators, teachers, students, parents, applicants and exam-office users.
 
 ## Verified stack
-- Next.js 16.2.9 App Router
+- Next.js 16.4.x App Router
 - React 19
 - strict TypeScript
 - Tailwind CSS 4
 - Supabase Auth/PostgreSQL/Storage/RLS
 - Supabase SSR clients
 - `pg` helpers under `src/lib/db`
-- npm/package-lock
+- npm (package-lock currently missing from main; reproducibility remediation required)
 
 ## Domains
 Tenant/platform administration, admissions, students, parents, staff/HR, academics/curriculum, examinations, attendance, finance/billing/bursary, communications, transport, hostel, library, inventory, analytics, branding and portals.
