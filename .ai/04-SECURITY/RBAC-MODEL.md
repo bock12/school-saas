@@ -414,9 +414,9 @@ $$\langle\text{module}\rangle.\langle\text{resource}\rangle.\langle\text{action}
 
 ---
 
-## 20. Canonical Permission Matrix (PROPOSED — `BLOCKER 4`, `BLOCKER 10`)
+## 20. Canonical Permission Matrix (PROPOSED — historical Phase-3A snapshot)
 
-The canonical permission count is derived from the registry inventory and validated mechanically. There are **exactly 33 atomic permissions**:
+> **L1-01 reconciliation note (2026-10-08):** The live application registry at `src/lib/auth/permissions-registry.ts` currently contains **46 canonical permissions**. The 33-permission matrix below is preserved as a historical Phase-3A design snapshot and must not be treated as the current implementation count. Future authorization changes must update the live registry and this document together.
 
 | # | Module | Canonical Atomic Permission | super_admin | org_admin | school_admin | teacher (base) | + HOD | + Form Master | + Subject Teacher | + Assistant Teacher | + Exam Officer | + VP | student | parent |
 |---|---|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
