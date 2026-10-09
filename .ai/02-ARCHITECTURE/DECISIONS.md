@@ -46,7 +46,7 @@ Adopt the **Contextual Functional Assignment Architecture**:
 4. **Strict Additivity Invariant:** Functional assignments ADD permissions to a base role; they can NEVER remove or subtract permissions already granted by a base role. Therefore, neither VP nor Exam Officer can be assigned `school_admin` base role.
 5. Authoritative persistence for VP, Exam Officer, and academic appointments is established via a Phase-2 dedicated relational table `public.school_staff_assignments` with explicit 5-state lifecycle (`appointed`, `active`, `suspended`, `expired`, `revoked`) and temporal ranges (`effective_from`, `effective_until`, `academic_year_id`).
 6. Scope graph: `department` and `class` are parallel branches under `school` (invariant: `department` is NEVER a parent of `class`).
-7. Canonical permission registry inventory contains **exactly 33 atomic permissions** across 8 modules, adhering strictly to `<module>.<resource>.<action>` grammar.
+7. Canonical permission registry inventory established with **33 atomic permissions** across 8 modules in Phase 3A, subsequently expanded to **46 atomic permissions** across 10 modules (including Phase 3C curriculum extensions, ADR-0004 communications/notifications, and ADR-0005 platform leads), adhering strictly to `<module>.<resource>.<action>` grammar.
 8. Enforce deterministic 8-step evaluation precedence order defaulting to `DENY`.
 
 ### Consequences
