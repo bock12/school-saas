@@ -22,4 +22,4 @@ These are evidence labels, not release approval.
 | Communications / notifications | PARTIALLY_BOUND | Routes and chat/communication migrations. | Review recipient scope, disclosure, abuse. |
 | Transport / hostel / library / inventory / welfare / health | PROTOTYPE | Operational surfaces plus 108 prototype-signal pages. | Triage individually. |
 | Analytics / reports / exports | PARTIALLY_BOUND | Analytics and CASS/export surfaces. | Review minimization, auth, audit, correctness. |
-| Automated tests / CI / release verification | BLOCKED | No visible suite/CI; prior build `ENOSPC`. | Operational hardening. |
+| Automated tests / CI / release verification | FOUNDATION | 13 test suites, 261 test cases, 259 passing (native Node test runner); CI workflow node.js.yml active. | Level 1 integration & gate verification. |

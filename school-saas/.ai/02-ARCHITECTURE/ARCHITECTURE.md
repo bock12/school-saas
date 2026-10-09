@@ -28,5 +28,5 @@ Create an ADR before implementation for material boundary, schema/RLS, authoriza
 
 ## Observed constraints
 - Audit/page inventory: 108 of 170 pages contain mock, placeholder, demo, or coming-soon signals.
-- Migration inventory: 45 files with duplicate numeric prefixes, including 018, 022, and 024; ordering must be explicitly verified before future workflow changes.
+- Migration inventory: 51 files (spanning 001 through 048) with duplicate numeric prefixes, including 018, 022, and 024; ordering must be explicitly verified before future workflow changes.
 - Audit records a prior `ENOSPC` production-build failure; build evidence must state environment constraints.
