@@ -255,7 +255,7 @@ L1-01 records them but does not silently remediate them.
 
 ### L1-01-B — Dependency reproducibility
 
-**Reconciled:** the canonical lockfile exists on current `main` with blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`. The separate proposed branch `chore/issue-27-package-lock` was not found remotely, and the lockfile blob is identical at the PR #26 merge commit and current `main`; a duplicate lockfile-only PR is not justified by current evidence. **Still open:** independently verify manifest/lockfile consistency and the latest current-main CI gates, especially production build. The agent-reported local `npm ci`, tests, audit, and build diagnosis remain reported evidence rather than independently reproduced supervisory results.
+**Reconciled:** the canonical lockfile exists on current `main` with blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`. The separate proposed branch `chore/issue-27-package-lock` was not found remotely, and the lockfile blob is identical at the PR #26 merge commit and current `main`; a duplicate lockfile-only PR is not justified by current evidence. **Verified by supervisory inspection:** the lockfile root dependency and devDependency maps match `package.json` exactly (18 dependencies, 11 devDependencies, no root-map mismatches); Next.js and `eslint-config-next` are locked to 16.4.0. **Still open:** verify the latest current-main/PR CI gates, especially production build. The agent-reported local `npm ci`, tests, audit, and build diagnosis remain reported evidence rather than independently reproduced supervisory results.
 
 ### L1-01-C — Permission documentation reconciliation
 
@@ -307,6 +307,6 @@ The next implementation task should begin only after these baseline conditions a
 
 ### Evidence limitations and remaining gate
 
-The implementation report records successful `npm ci`, typecheck, tests, and production audit, but these commands were not independently rerun by the supervisor. The report records `npm run build` failing during prerender of `/_global-error`; the proposed duplicate-React/container explanation has not been established as root cause. A successful latest-main remote workflow result was not independently verified during this review.
+The implementation report records successful `npm ci`, typecheck, tests, and production audit, but these commands were not independently rerun by the supervisor. The supervisor independently parsed current `package.json` and `package-lock.json`: all 18 dependency and 11 devDependency root entries match exactly, with no mismatches. The report records `npm run build` failing during prerender of `/_global-error`; the proposed duplicate-React/container explanation has not been established as root cause. A successful latest-main remote workflow result was not independently verified during this review.
 
 **Status: READY FOR REVIEW WITH CONDITIONS.** Do not close Issue #27 or mark L1-01 complete until current-main CI is verified, any build failure is investigated using actual logs and a clean checkout, and the remaining governance records are consistent. Do not create a lockfile-only PR unless a real lockfile diff or reproducibility defect is demonstrated.
