@@ -16,7 +16,7 @@ The principal baseline conflicts are documentation drift and repository hygiene,
 1. `school-saas/package.json` declares Next.js `^16.4.0`, while `.ai/01-PROJECT/PROJECT-CONTEXT.md` still states Next.js `16.2.9`.
 2. The canonical TypeScript permission registry contains **46** permissions, while RBAC documentation still contains Phase-3A statements claiming **33**.
 3. The canonical migration directory contains **51** SQL files with duplicate numeric prefixes `018`, `022`, and `024`.
-4. `school-saas/package-lock.json` is absent from current `main`, despite the project context and package workflow identifying npm/package-lock as the dependency baseline.
+4. The canonical `school-saas/package-lock.json` exists on current `main`; its current blob SHA and relationship to the reported Issue #27 work are recorded in the supervisory reconciliation addendum (Section 17).
 5. Module-status documentation contains stale claims that there is no visible test suite/CI, while current repository evidence includes a test script and three GitHub Actions workflows.
 6. Existing security audit material still records critical/high findings. L1-01 does not authorize silently fixing those findings; they remain remediation inputs for L1-02/L1-06 and dedicated security tasks.
 
@@ -85,11 +85,7 @@ Current `school-saas/package.json`:
 
 ### Lockfile finding
 
-`school-saas/package-lock.json` is **not present on current main**.
-
-This is a **HIGH repository reproducibility concern**, because the project uses npm and CI/dependency governance should have a committed lockfile.
-
-This report does not fabricate or generate a lockfile. Reconstructing it requires a controlled dependency installation and verification step.
+`school-saas/package-lock.json` **is present on current `main`** (blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`, verified at `main` and commit `e86e618921a1690a2fc2e92b6c248b75e0f2eff2`). This resolves the file-presence/cache-path concern in the inspected remote history. It does not, by itself, prove clean-install reproducibility or that the current production build passes. See Section 17 for the remaining verification status.
 
 ## 5. Architecture Baseline
 
@@ -241,7 +237,7 @@ L1-01 records them but does not silently remediate them.
 |---|---|---|
 | Canonical governance source identified | PASS | No |
 | Application root identified | PASS | No |
-| Dependency baseline identified | CONDITIONAL | Yes for reproducible installs because lockfile is absent |
+| Dependency baseline identified | CONDITIONAL | Verify manifest/lockfile consistency and current CI; lockfile exists |
 | School tenant model explicit | PASS | No |
 | Authorization source identified | PASS | No |
 | Permission count reconciled | PASS at implementation level; docs stale | No, documentation cleanup required |
@@ -259,7 +255,7 @@ L1-01 records them but does not silently remediate them.
 
 ### L1-01-B — Dependency reproducibility
 
-**Open:** restore/produce the canonical npm lockfile through a controlled dependency-installation procedure and verify it against `package.json`. An attempt to perform this locally was blocked because the execution environment cannot resolve GitHub/network dependencies; no fabricated lockfile was committed.
+**Reconciled:** the canonical lockfile exists on current `main` with blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`. The separate proposed branch `chore/issue-27-package-lock` was not found remotely, and the lockfile blob is identical at the PR #26 merge commit and current `main`; a duplicate lockfile-only PR is not justified by current evidence. **Verified by supervisory inspection:** the lockfile root dependency and devDependency maps match `package.json` exactly (18 dependencies, 11 devDependencies, no root-map mismatches); Next.js and `eslint-config-next` are locked to 16.4.0. **Still open:** verify the latest current-main/PR CI gates, especially production build. The agent-reported local `npm ci`, tests, audit, and build diagnosis remain reported evidence rather than independently reproduced supervisory results.
 
 ### L1-01-C — Permission documentation reconciliation
 
@@ -282,7 +278,7 @@ The repository structure and architectural baseline are sufficiently understood 
 However, L1-01 should not be considered fully closed until:
 
 1. documentation drift is reconciled;
-2. the missing npm lockfile is addressed;
+2. the existing npm lockfile is validated against the manifest and current CI gates, including production build;
 3. permission documentation reflects the current 46-entry registry;
 4. migration-order technical debt is explicitly recorded;
 5. unresolved security findings remain linked to concrete remediation tasks.
@@ -294,3 +290,23 @@ No product feature implementation is authorized by this baseline report.
 This report distinguishes confirmed repository evidence from assumptions and historical documentation.
 
 The next implementation task should begin only after these baseline conditions are acknowledged and the task-level authorization is recorded according to the repository governance protocol.
+
+
+## 17. Supervisory Reconciliation Addendum — Issue #27 (2026-10-10)
+
+**Repository:** `bock12/school-saas`  
+**Issue:** [#27 — Restore reproducible npm lockfile and verify CI gates](https://github.com/bock12/school-saas/issues/27)  
+**PR #26:** [Governance and architecture baseline](https://github.com/bock12/school-saas/pull/26) — merged.
+
+### Confirmed remote state
+
+- `school-saas/package-lock.json` exists on `main`.
+- GitHub returned blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a` for the lockfile at `main`, at `bc4ab459bfcdfb9c615df97ac237e413265ded22`, and at PR #26 merge commit `e86e618921a1690a2fc2e92b6c248b75e0f2eff2`.
+- The workflow `.github/workflows/node.js.yml` points npm caching at `school-saas/package-lock.json` and executes `npm ci`, typecheck, security tests, production dependency audit, and production build.
+- The proposed remote branch `chore/issue-27-package-lock` was not found during branch search. No duplicate lockfile PR was created.
+
+### Evidence limitations and remaining gate
+
+The implementation report records successful `npm ci`, typecheck, tests, and production audit, but these commands were not independently rerun by the supervisor. The supervisor independently parsed current `package.json` and `package-lock.json`: all 18 dependency and 11 devDependency root entries match exactly, with no mismatches. The report records `npm run build` failing during prerender of `/_global-error`; the proposed duplicate-React/container explanation has not been established as root cause. A successful latest-main remote workflow result was not independently verified during this review.
+
+**Status: READY FOR REVIEW WITH CONDITIONS.** Do not close Issue #27 or mark L1-01 complete until current-main CI is verified, any build failure is investigated using actual logs and a clean checkout, and the remaining governance records are consistent. Do not create a lockfile-only PR unless a real lockfile diff or reproducibility defect is demonstrated.
