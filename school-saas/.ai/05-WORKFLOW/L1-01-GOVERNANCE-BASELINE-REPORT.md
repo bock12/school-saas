@@ -255,7 +255,7 @@ L1-01 records them but does not silently remediate them.
 
 ### L1-01-B — Dependency reproducibility
 
-**Reconciled and remotely verified on 2026-10-21:** the canonical lockfile exists on current `main` with blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`. Its root dependency and devDependency maps match `package.json` exactly (18 dependencies, 11 devDependencies, no root-map mismatches); Next.js and `eslint-config-next` are locked to 16.4.0. The current-main CI run associated with commit `5aa116a63a9d267e14afd602550581566d2774d9` passed dependency installation, typecheck, security tests, production dependency audit, and production build. The separate `Lint baseline` job failed with 819 errors and 1,445 warnings (2,264 total problems), primarily `@typescript-eslint/no-explicit-any`, plus `prefer-const` errors and unused-variable warnings. This is broad existing lint debt, not evidence of a lockfile defect. Thus, the lockfile and primary validation job are verified, but the full CI workflow is not entirely green. Do not create a duplicate lockfile-only PR; track lint remediation separately and keep Issue #27 open until its acceptance criteria and governance synchronization are satisfied.
+**Reconciled and remotely verified on 2026-10-21:** the canonical lockfile exists on current `main` with blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`. Its root dependency and devDependency maps match `package.json` exactly (18 dependencies, 11 devDependencies, no root-map mismatches); Next.js and `eslint-config-next` are locked to 16.4.0. The current-main CI run associated with commit `5aa116a63a9d267e14afd602550581566d2774d9` passed dependency installation, typecheck, security tests, production dependency audit, and production build. The separate `Lint baseline` job failed with 819 errors and 1,445 warnings (2,264 total problems), primarily `@typescript-eslint/no-explicit-any`, plus `prefer-const` errors and unused-variable warnings. This is broad existing lint debt, not evidence of a lockfile defect. Thus, the lockfile and primary validation job are verified, but the full CI workflow is not entirely green. Do not create a duplicate lockfile-only PR; track lint remediation separately. Issue #27 was closed on 2026-10-21 after the primary CI job and production build passed and governance reconciliation merged; lint follow-up is tracked in Issue #30.
 
 ### L1-01-C — Permission documentation reconciliation
 
@@ -277,11 +277,12 @@ The repository structure and architectural baseline are sufficiently understood 
 
 However, L1-01 should not be considered fully closed until:
 
-1. documentation drift is reconciled;
-2. the existing npm lockfile is validated against the manifest and the primary CI job, including a successful production build; the separate lint failure is investigated/tracked and the overall CI gate is accurately reported;
-3. permission documentation reflects the current 46-entry registry;
-4. migration-order technical debt is explicitly recorded;
-5. unresolved security findings remain linked to concrete remediation tasks.
+1. remaining documentation drift is reconciled, including stale project-stack and historical RBAC references;
+2. the existing npm lockfile and primary CI job remain verified; lint failure is tracked separately in Issue #30 and is not represented as passing;
+3. permission documentation consistently reflects the current 46-entry registry;
+4. migration-order technical debt remains explicitly recorded without renaming/reordering migrations;
+5. unresolved critical/high security findings remain linked to concrete remediation tasks;
+6. TASK-0007 Phase 3D-2 post-merge verification in Issue #31 is completed before Cohort 3D-3 is authorized.
 
 No product feature implementation is authorized by this baseline report.
 
@@ -292,7 +293,7 @@ This report distinguishes confirmed repository evidence from assumptions and his
 The next implementation task should begin only after these baseline conditions are acknowledged and the task-level authorization is recorded according to the repository governance protocol.
 
 
-## 17. Supervisory Reconciliation Addendum — Issue #27 (2026-10-10)
+## 17. Supervisory Reconciliation Addendum — Issue #27 (updated 2026-10-21)
 
 **Repository:** `bock12/school-saas`  
 **Issue:** [#27 — Restore reproducible npm lockfile and verify CI gates](https://github.com/bock12/school-saas/issues/27)  
@@ -311,4 +312,12 @@ The current `main` HEAD inspected is `5aa116a63a9d267e14afd602550581566d2774d9`.
 
 The earlier agent-reported local build failure and proposed duplicate-React/container explanation remain historical and are not established as the root cause of current status. The remote production build passed in the primary CI job. The remaining CI failure is the lint baseline job and should be tracked separately rather than hidden or conflated with the lockfile concern.
 
-**Status: OPEN — DOCUMENTATION RECONCILIATION AND LINT FOLLOW-UP.** The lockfile acceptance evidence is satisfied, but do not close Issue #27 until the report/task queue are synchronized and the actual lint failure has been triaged against the issue's required CI gates. Do not create a lockfile-only PR unless a real lockfile diff or reproducibility defect is demonstrated.
+**Issue #27 status: CLOSED — COMPLETED (2026-10-21).** PR #29 merged the governance synchronization. CI run #54 on merge commit `c872846f9989114e34aa774c016b73178f5dc80d` passed dependency installation, typecheck, security tests, production dependency audit, and production build. The separate lint job failed and remains explicitly non-blocking; its controlled remediation is tracked in [Issue #30](https://github.com/bock12/school-saas/issues/30). This issue closure does not close L1-01, approve the remaining critical/high security findings, or authorize TASK-0007 Cohort 3D-3.
+
+
+## 18. Supervisory Follow-up — Current Gate Status (2026-10-21)
+
+- Governance reconciliation: PR #29 merged; this report and the canonical task queue are being synchronized to reflect the completed Issue #27.
+- CI: primary validation passed on merge commit `c872846f9989114e34aa774c016b73178f5dc80d`; the lint baseline job failed and is tracked separately in Issue #30.
+- TASK-0007 Phase 3D-2: post-merge verification remains OPEN under Issue #31. Static review flagged permission-semantic confirmation for academic-calendar mutations, tenant-scoped related-record access in offerings, cross-tenant resource integrity, and limitations of source-pattern tests. These findings require verification/remediation; they are not asserted to be runtime-exploitable without further evidence.
+- L1-01 remains OPEN. No L1-02 authorization is granted by this addendum.

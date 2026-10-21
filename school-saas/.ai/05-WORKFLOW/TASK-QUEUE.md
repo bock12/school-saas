@@ -50,7 +50,7 @@ Objective: establish a unified request-safe Server Action authorization boundary
 **Frontend authorization is deferred to Phase 3D Cohort 3D-4.**
 
 ### TASK-0007 next execution gate
-Do not begin Cohort 3D-3 until post-merge verification of Cohort 3D-2 is complete and the supervisory gate is explicitly cleared.
+Post-merge verification of Cohort 3D-2 is tracked in [Issue #31](https://github.com/bock12/school-saas/issues/31). Initial static review requires confirmation of the academic-calendar permission mapping, tenant-scoped related-record reads, resource ownership, and stronger behavioral regression tests. These are review concerns, not yet runtime-confirmed exploits. Do not begin Cohort 3D-3 until Issue #31 acceptance criteria are satisfied and the supervisory gate is explicitly cleared.
 
 ## TASK-TEST-001 — AI-EOS Collaboration Protocol Validation
 **Status:** IMPLEMENTED (Review Corrections Applied · Awaiting Second Review) · **Priority:** P1 · **Owner:** ChatGPT / Project Supervisor · **Target:** Gemini/Antigravity
@@ -73,7 +73,7 @@ Formal implementation roadmap: Level 1 Platform Foundation → Level 2 Core Scho
 
 
 ## L1-01 — Governance & Architecture Baseline
-**Status:** IN PROGRESS — LOCKFILE AND PRIMARY CI JOB VERIFIED; LINT FAILURE / GOVERNANCE RECONCILIATION OPEN · **Priority:** High · **Owner:** ChatGPT / Engineering Authority · **Implementation:** Governance/documentation only
+**Status:** IN PROGRESS — LOCKFILE / PRIMARY CI VERIFIED; LINT DEBT, DOCUMENTATION DRIFT, AND SECURITY GATES OPEN · **Priority:** High · **Owner:** ChatGPT / Engineering Authority · **Implementation:** Governance/documentation only
 
 Objective: establish a verified repository, governance, architecture, dependency, authorization, migration and security baseline before Level 1 feature/security implementation proceeds.
 
@@ -83,4 +83,4 @@ Objective: establish a verified repository, governance, architecture, dependency
 
 **Security note:** existing critical/high security findings remain open and are not closed by L1-01.
 
-**Completed:** 46-permission reconciliation, migration-governance documentation, manifest/lockfile root-map verification, remote CI verification showing the primary validation job (including production build) and CodeQL passed, and initial lint-failure triage from the remote job log (819 errors / 1,445 warnings). **Open conditions:** review/merge the governance reconciliation PR; create or update a dedicated lint-debt task with scoped acceptance criteria; retain all critical/high security findings as open. Do not close L1-01 or proceed to L1-02 until the baseline's remaining acceptance criteria are reviewed and closure is explicitly authorized.
+**Completed:** 46-permission reconciliation; migration-governance documentation; manifest/lockfile root-map verification; PR #29 governance reconciliation merged; Issue #27 closed after primary CI (including production build) passed; CodeQL passed on the prior verified main commit; lint failure triaged and tracked in Issue #30. The merge commit's primary CI passed typecheck, security tests, production dependency audit, and production build; its separate lint job failed as expected under the current non-blocking baseline. **Open conditions:** reconcile remaining baseline documentation drift; remediate critical/high security findings; complete TASK-0007 Phase 3D-2 post-merge review tracked in Issue #31; retain all security findings as open. Do not close L1-01 or proceed to L1-02 until the baseline's remaining acceptance criteria are reviewed and closure is explicitly authorized.
