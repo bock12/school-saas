@@ -186,7 +186,7 @@ Current repository evidence includes:
 
 Therefore, documentation stating that there is no visible test suite/CI is stale.
 
-This does **not** establish that current main CI is passing. CI status must be checked separately before a release or Level 1 gate.
+Remote CI evidence was checked on 2026-10-21 for current `main` commit `5aa116a63a9d267e14afd602550581566d2774d9`. The CI workflow's primary job passed dependency installation, typecheck, security tests, production dependency audit, and production build. The separate `Lint baseline` job failed with 819 errors and 1,445 warnings (2,264 total reported problems); the log identifies `@typescript-eslint/no-explicit-any` as a major error source, with additional `prefer-const` errors and many unused-variable warnings. This is an existing broad lint-debt baseline, not a lockfile failure. Therefore, the primary validation job is green, but the complete CI workflow is not fully green; track and prioritize lint remediation separately before treating the overall CI gate as passed.
 
 ## 10. Security Baseline
 
@@ -215,7 +215,7 @@ L1-01 records them but does not silently remediate them.
 | Migration count | 51 files / highest prefix 048 | Update stale migration inventory |
 | Duplicate migration prefixes | 018, 022, 024 | Record as technical debt; do not rename |
 | CI/test status | test script + 3 workflows exist | Correct stale module-status statement |
-| Lockfile | package-lock missing | Controlled dependency reproducibility task |
+| Lockfile | `school-saas/package-lock.json` exists; root dependency maps match `package.json` | Keep lockfile committed; validate via CI and avoid duplicate lockfile PR |
 | ADR-0002 status | Proposed / human acceptance required | Do not self-approve |
 
 ## 12. Architecture Decision Status
@@ -237,7 +237,7 @@ L1-01 records them but does not silently remediate them.
 |---|---|---|
 | Canonical governance source identified | PASS | No |
 | Application root identified | PASS | No |
-| Dependency baseline identified | CONDITIONAL | Verify manifest/lockfile consistency and current CI; lockfile exists |
+| Dependency baseline identified | PASS for manifest/lockfile root-map consistency; CI primary job passed | No lockfile defect demonstrated; lint job remains a separate CI failure |
 | School tenant model explicit | PASS | No |
 | Authorization source identified | PASS | No |
 | Permission count reconciled | PASS at implementation level; docs stale | No, documentation cleanup required |
@@ -255,7 +255,7 @@ L1-01 records them but does not silently remediate them.
 
 ### L1-01-B — Dependency reproducibility
 
-**Reconciled:** the canonical lockfile exists on current `main` with blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`. The separate proposed branch `chore/issue-27-package-lock` was not found remotely, and the lockfile blob is identical at the PR #26 merge commit and current `main`; a duplicate lockfile-only PR is not justified by current evidence. **Verified by supervisory inspection:** the lockfile root dependency and devDependency maps match `package.json` exactly (18 dependencies, 11 devDependencies, no root-map mismatches); Next.js and `eslint-config-next` are locked to 16.4.0. **Still open:** verify the latest current-main/PR CI gates, especially production build. The agent-reported local `npm ci`, tests, audit, and build diagnosis remain reported evidence rather than independently reproduced supervisory results.
+**Reconciled and remotely verified on 2026-10-21:** the canonical lockfile exists on current `main` with blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`. Its root dependency and devDependency maps match `package.json` exactly (18 dependencies, 11 devDependencies, no root-map mismatches); Next.js and `eslint-config-next` are locked to 16.4.0. The current-main CI run associated with commit `5aa116a63a9d267e14afd602550581566d2774d9` passed dependency installation, typecheck, security tests, production dependency audit, and production build. The separate `Lint baseline` job failed with 819 errors and 1,445 warnings (2,264 total problems), primarily `@typescript-eslint/no-explicit-any`, plus `prefer-const` errors and unused-variable warnings. This is broad existing lint debt, not evidence of a lockfile defect. Thus, the lockfile and primary validation job are verified, but the full CI workflow is not entirely green. Do not create a duplicate lockfile-only PR; track lint remediation separately and keep Issue #27 open until its acceptance criteria and governance synchronization are satisfied.
 
 ### L1-01-C — Permission documentation reconciliation
 
@@ -278,7 +278,7 @@ The repository structure and architectural baseline are sufficiently understood 
 However, L1-01 should not be considered fully closed until:
 
 1. documentation drift is reconciled;
-2. the existing npm lockfile is validated against the manifest and current CI gates, including production build;
+2. the existing npm lockfile is validated against the manifest and the primary CI job, including a successful production build; the separate lint failure is investigated/tracked and the overall CI gate is accurately reported;
 3. permission documentation reflects the current 46-entry registry;
 4. migration-order technical debt is explicitly recorded;
 5. unresolved security findings remain linked to concrete remediation tasks.
@@ -305,8 +305,10 @@ The next implementation task should begin only after these baseline conditions a
 - The workflow `.github/workflows/node.js.yml` points npm caching at `school-saas/package-lock.json` and executes `npm ci`, typecheck, security tests, production dependency audit, and production build.
 - The proposed remote branch `chore/issue-27-package-lock` was not found during branch search. No duplicate lockfile PR was created.
 
-### Evidence limitations and remaining gate
+### Updated remote CI evidence and remaining gate (2026-10-21)
 
-The implementation report records successful `npm ci`, typecheck, tests, and production audit, but these commands were not independently rerun by the supervisor. The supervisor independently parsed current `package.json` and `package-lock.json`: all 18 dependency and 11 devDependency root entries match exactly, with no mismatches. The report records `npm run build` failing during prerender of `/_global-error`; the proposed duplicate-React/container explanation has not been established as root cause. A successful latest-main remote workflow result was not independently verified during this review.
+The current `main` HEAD inspected is `5aa116a63a9d267e14afd602550581566d2774d9`. CI run #51 for that commit completed the primary job successfully: dependency installation, typecheck, security tests, production dependency audit, and production build all passed. The separate `Lint baseline` job failed at the lint step: the job log reports 819 errors and 1,445 warnings (2,264 total), with `@typescript-eslint/no-explicit-any` a dominant error, additional `prefer-const` errors, and numerous unused-variable warnings. This establishes the immediate lint failure class; it does not establish that all findings can safely be fixed in one pass. CodeQL scheduled run #52 also completed successfully on the same main commit. These are remote GitHub Actions results, not locally reproduced test runs.
 
-**Status: READY FOR REVIEW WITH CONDITIONS.** Do not close Issue #27 or mark L1-01 complete until current-main CI is verified, any build failure is investigated using actual logs and a clean checkout, and the remaining governance records are consistent. Do not create a lockfile-only PR unless a real lockfile diff or reproducibility defect is demonstrated.
+The earlier agent-reported local build failure and proposed duplicate-React/container explanation remain historical and are not established as the root cause of current status. The remote production build passed in the primary CI job. The remaining CI failure is the lint baseline job and should be tracked separately rather than hidden or conflated with the lockfile concern.
+
+**Status: OPEN — DOCUMENTATION RECONCILIATION AND LINT FOLLOW-UP.** The lockfile acceptance evidence is satisfied, but do not close Issue #27 until the report/task queue are synchronized and the actual lint failure has been triaged against the issue's required CI gates. Do not create a lockfile-only PR unless a real lockfile diff or reproducibility defect is demonstrated.

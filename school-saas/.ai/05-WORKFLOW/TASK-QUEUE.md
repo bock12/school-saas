@@ -73,14 +73,14 @@ Formal implementation roadmap: Level 1 Platform Foundation → Level 2 Core Scho
 
 
 ## L1-01 — Governance & Architecture Baseline
-**Status:** IN PROGRESS — LOCKFILE PRESENT; CI / GOVERNANCE RECONCILIATION OPEN · **Priority:** High · **Owner:** ChatGPT / Engineering Authority · **Implementation:** Governance/documentation only
+**Status:** IN PROGRESS — LOCKFILE AND PRIMARY CI JOB VERIFIED; LINT FAILURE / GOVERNANCE RECONCILIATION OPEN · **Priority:** High · **Owner:** ChatGPT / Engineering Authority · **Implementation:** Governance/documentation only
 
 Objective: establish a verified repository, governance, architecture, dependency, authorization, migration and security baseline before Level 1 feature/security implementation proceeds.
 
 **Baseline report:** `.ai/05-WORKFLOW/L1-01-GOVERNANCE-BASELINE-REPORT.md`
 
-**Current conditions:** the canonical `school-saas/package-lock.json` exists on current `main` (blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`), contrary to the earlier baseline statement. The canonical permission registry contains 46 permissions while some Phase-3A documentation remains historical; migration prefixes 018, 022 and 024 are duplicated. The manifest and lockfile root dependency maps have been independently compared and match exactly (18 dependencies, 11 devDependencies); current-main/PR CI and production build status still require verification.
+**Current conditions (verified 2026-10-21):** the canonical `school-saas/package-lock.json` exists on current `main` (blob SHA `917c5abd6af5418c7c7c4afa51fb6baa955dfa5a`). The manifest and lockfile root dependency maps match exactly (18 dependencies, 11 devDependencies). CI run #51 on current-main commit `5aa116a63a9d267e14afd602550581566d2774d9` passed dependency installation, typecheck, security tests, production dependency audit, and production build; the separate `Lint baseline` job failed with 819 errors and 1,445 warnings (2,264 total), including widespread `@typescript-eslint/no-explicit-any` errors, some `prefer-const` errors, and unused-variable warnings. CodeQL run #52 passed on the same commit. The canonical permission registry contains 46 permissions while some Phase-3A documentation remains historical; migration prefixes 018, 022 and 024 are duplicated.
 
 **Security note:** existing critical/high security findings remain open and are not closed by L1-01.
 
-**Completed in current pass:** documentation synchronization, 46-permission reconciliation, migration-governance documentation, and remote verification that the lockfile exists on current `main`. **Open conditions:** verify current-main/PR CI, especially the production build, and reconcile the L1-01 baseline report with current evidence. Manifest/lockfile root consistency has been independently verified. Then perform L1-01 supervisory closure and proceed to L1-02 Tenant & Authorization Foundation only under task-level authorization.
+**Completed:** 46-permission reconciliation, migration-governance documentation, manifest/lockfile root-map verification, remote CI verification showing the primary validation job (including production build) and CodeQL passed, and initial lint-failure triage from the remote job log (819 errors / 1,445 warnings). **Open conditions:** review/merge the governance reconciliation PR; create or update a dedicated lint-debt task with scoped acceptance criteria; retain all critical/high security findings as open. Do not close L1-01 or proceed to L1-02 until the baseline's remaining acceptance criteria are reviewed and closure is explicitly authorized.
