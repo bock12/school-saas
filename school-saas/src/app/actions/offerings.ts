@@ -365,6 +365,14 @@ export async function updateSubjectOffering(
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
+    const offeringCheck = await pool.query(
+      'SELECT id FROM subject_offerings WHERE id = $1 AND tenant_id = $2',
+      [offeringId, tenantId]
+    );
+    if (offeringCheck.rows.length === 0) {
+      return { success: false, error: 'Offering not found.' };
+    }
+
     let isOverloaded = false;
 
     // Re-validate workload if changing teacher or changing periods
@@ -390,7 +398,7 @@ export async function updateSubjectOffering(
           if (netTotal > maxPeriods) {
             isOverloaded = true;
             if (!payload.override_overload) {
-              const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1', [payload.teacher_id]);
+              const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1 AND tenant_id = $2', [payload.teacher_id, tenantId]);
               const teacherName = tRes.rows[0] ? `${tRes.rows[0].first_name} ${tRes.rows[0].last_name}` : 'Teacher';
               return {
                 success: false,
@@ -888,12 +896,18 @@ export async function updateTermOffering(
   const tenantId = authorization.target.tenantId;
 
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    const termOfferingCheck = await pool.query(
+      'SELECT id FROM term_offerings WHERE id = $1 AND tenant_id = $2',
+      [termOfferingId, tenantId]
+    );
+    if (termOfferingCheck.rows.length === 0) {
+      return { success: false, error: 'Term offering not found.' };
+    }
 
     let isOverloaded = false;
 
