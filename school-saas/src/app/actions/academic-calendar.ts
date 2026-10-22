@@ -84,6 +84,40 @@ function cleanUuid(id?: string | null): string | null {
 }
 
 /**
+ * Fail closed when calendar event references point outside the authorized tenant.
+ * Uses the caller-scoped Supabase client and tenant predicates; no privileged client.
+ */
+async function calendarReferencesBelongToTenant(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  academicYearId: string | null,
+  termId: string | null
+): Promise<boolean> {
+  if (academicYearId) {
+    const { data, error } = await supabase
+      .from('academic_years')
+      .select('id')
+      .eq('id', academicYearId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (error || !data) return false;
+  }
+
+  if (termId) {
+    const { data, error } = await supabase
+      .from('terms')
+      .select('id')
+      .eq('id', termId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (error || !data) return false;
+  }
+
+  return true;
+}
+
+
+/**
  * Fetch calendar events with optional filtering.
  */
 export async function getAcademicCalendarEvents(
@@ -306,13 +340,23 @@ export async function createCalendarEvent(
   payload: CalendarEventPayload
 ): Promise<{ success: boolean; event?: AcademicCalendarEvent; error?: string }> {
   const authorization = await requireServerActionAuthorization({
-    permission: 'curriculum.version.create',
+    permission: 'calendar.events.manage',
     requestedTenantSlug: tenantSlug,
   });
   const authorizedSupabase = authorization.supabase;
   const authorizedTenantId = authorization.target.tenantId;
 
   try {
+    const referencesValid = await calendarReferencesBelongToTenant(
+      authorizedSupabase,
+      authorizedTenantId,
+      cleanUuid(payload.academicYearId),
+      cleanUuid(payload.termId)
+    );
+    if (!referencesValid) {
+      return { success: false, error: 'Academic year or term does not belong to the authorized tenant.' };
+    }
+
     const pool = getPgPool();
     if (pool) {
       const res = await pool.query(
@@ -390,13 +434,23 @@ export async function updateCalendarEvent(
   payload: CalendarEventPayload
 ): Promise<{ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
-    permission: 'curriculum.version.create',
+    permission: 'calendar.events.manage',
     requestedTenantSlug: tenantSlug,
   });
   const authorizedSupabase = authorization.supabase;
   const authorizedTenantId = authorization.target.tenantId;
 
   try {
+    const referencesValid = await calendarReferencesBelongToTenant(
+      authorizedSupabase,
+      authorizedTenantId,
+      cleanUuid(payload.academicYearId),
+      cleanUuid(payload.termId)
+    );
+    if (!referencesValid) {
+      return { success: false, error: 'Academic year or term does not belong to the authorized tenant.' };
+    }
+
     const pool = getPgPool();
     if (pool) {
       await pool.query(
@@ -475,7 +529,7 @@ export async function deleteCalendarEvent(
   eventId: string
 ): Promise<{ success: boolean; error?: string }> {
   const authorization = await requireServerActionAuthorization({
-    permission: 'curriculum.version.create',
+    permission: 'calendar.events.manage',
     requestedTenantSlug: tenantSlug,
   });
   const authorizedSupabase = authorization.supabase;
