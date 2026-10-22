@@ -96,3 +96,18 @@ test('offering workload reads and mutation preconditions are tenant-scoped', () 
     'teacher detail lookups must be tenant-scoped',
   );
 });
+
+test('academic calendar mutations require dedicated permission and tenant-owned references', () => {
+  const source = read('src/app/actions/academic-calendar.ts');
+  assert.equal((source.match(/permission: 'calendar\.events\.manage'/g) || []).length, 3);
+  assert.doesNotMatch(source, /permission: 'curriculum\.version\.create'/);
+  assert.match(source, /calendarReferencesBelongToTenant/);
+  assert.match(source, /\.eq\('tenant_id', tenantId\)/);
+});
+
+test('teacher workload calculations are constrained to the authorized tenant', () => {
+  const source = read('src/app/actions/offerings.ts');
+  assert.match(source, /permission: 'staff\.allocations\.manage',[\s\S]*?requestedTenantSlug: tenantSlug/);
+  assert.match(source, /WHERE so\.tenant_id = \$1[\s\S]*?AND so\.teacher_id = \$2[\s\S]*?AND so\.academic_year_id = \$3/);
+  assert.match(source, /WHERE tro\.tenant_id = \$1[\s\S]*?AND so\.tenant_id = \$1[\s\S]*?AND tro\.id <> \$3/);
+});
