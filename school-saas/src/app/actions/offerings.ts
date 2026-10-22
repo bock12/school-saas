@@ -240,9 +240,7 @@ export async function createSubjectOffering(
   const tenantId = authorization.target.tenantId;
 
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -260,7 +258,7 @@ export async function createSubjectOffering(
         if (projectedPeriods > maxPeriods) {
           isOverloaded = true;
           if (!payload.override_overload) {
-            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1', [payload.teacher_id]);
+            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1 AND tenant_id = $2', [payload.teacher_id, tenantId]);
             const teacherName = tRes.rows[0] ? `${tRes.rows[0].first_name} ${tRes.rows[0].last_name}` : 'Teacher';
             return {
               success: false,
@@ -362,9 +360,7 @@ export async function updateSubjectOffering(
   const tenantId = authorization.target.tenantId;
 
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
@@ -374,9 +370,12 @@ export async function updateSubjectOffering(
     // Re-validate workload if changing teacher or changing periods
     if (payload.teacher_id !== undefined && payload.teacher_id !== null) {
       const current = await pool.query(
-        `SELECT academic_year_id, periods_per_week, teacher_id FROM subject_offerings WHERE id = $1`,
-        [offeringId]
+        `SELECT academic_year_id, periods_per_week, teacher_id FROM subject_offerings WHERE id = $1 AND tenant_id = $2`,
+        [offeringId, tenantId]
       );
+      if (current.rows.length === 0) {
+        return { success: false, error: 'Offering not found.' };
+      }
       if (current.rows.length > 0) {
         const workload = await getTeacherWorkload(tenantSlug, payload.teacher_id, current.rows[0].academic_year_id);
         if (workload.success && workload.data) {
@@ -466,8 +465,10 @@ export async function deleteSubjectOffering(
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
     const enrollmentCheck = await pool.query(
-      `SELECT COUNT(*) FROM student_subject_enrollments WHERE offering_id = $1 AND status = 'active'`,
-      [offeringId]
+      `SELECT COUNT(*) FROM student_subject_enrollments sse
+       JOIN subject_offerings so ON so.id = sse.offering_id
+       WHERE so.id = $1 AND so.tenant_id = $2 AND sse.tenant_id = $2 AND sse.status = 'active'`,
+      [offeringId, tenantId]
     );
     if (parseInt(enrollmentCheck.rows[0].count) > 0) {
       return { success: false, error: 'Cannot remove offering with active student enrollments.' };
@@ -899,9 +900,12 @@ export async function updateTermOffering(
     // Check term teacher workload if updating teacher
     if (payload.term_teacher_id) {
       const current = await pool.query(
-        `SELECT term_id, periods_per_week, term_teacher_id FROM term_offerings WHERE id = $1`,
-        [termOfferingId]
+        `SELECT term_id, periods_per_week, term_teacher_id FROM term_offerings WHERE id = $1 AND tenant_id = $2`,
+        [termOfferingId, tenantId]
       );
+      if (current.rows.length === 0) {
+        return { success: false, error: 'Term offering not found.' };
+      }
       if (current.rows.length > 0) {
         const termId = current.rows[0].term_id;
         const wkRes = await pool.query(
@@ -916,7 +920,7 @@ export async function updateTermOffering(
         if (projected > maxPeriods) {
           isOverloaded = true;
           if (!payload.override_overload) {
-            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1', [payload.term_teacher_id]);
+            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1 AND tenant_id = $2', [payload.term_teacher_id, tenantId]);
             const teacherName = tRes.rows[0] ? `${tRes.rows[0].first_name} ${tRes.rows[0].last_name}` : 'Teacher';
             return {
               success: false,
