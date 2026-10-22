@@ -141,6 +141,52 @@ async function resolveUserId(): Promise<string | null> {
   }
 }
 
+
+/**
+ * Validate every foreign-key-like offering reference against the trusted tenant.
+ * The database currently has single-column foreign keys, which do not by themselves
+ * guarantee that referenced rows belong to the same tenant.
+ */
+async function areOfferingReferencesTenantOwned(
+  pool: NonNullable<ReturnType<typeof getPgPool>>,
+  tenantId: string,
+  refs: {
+    academicYearId?: string | null;
+    termId?: string | null;
+    subjectId?: string | null;
+    sectionId?: string | null;
+    streamId?: string | null;
+    teacherId?: string | null;
+    assistantTeacherId?: string | null;
+    curriculumVersionId?: string | null;
+  }
+): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT
+       ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM academic_years WHERE id = $2 AND tenant_id = $1)) AS academic_year_ok,
+       ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM terms WHERE id = $3 AND tenant_id = $1)) AS term_ok,
+       ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM subjects WHERE id = $4 AND tenant_id = $1)) AS subject_ok,
+       ($5::uuid IS NULL OR EXISTS (SELECT 1 FROM sections WHERE id = $5 AND tenant_id = $1)) AS section_ok,
+       ($6::uuid IS NULL OR EXISTS (SELECT 1 FROM curriculum_streams WHERE id = $6 AND tenant_id = $1)) AS stream_ok,
+       ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM teachers WHERE id = $7 AND tenant_id = $1)) AS teacher_ok,
+       ($8::uuid IS NULL OR EXISTS (SELECT 1 FROM teachers WHERE id = $8 AND tenant_id = $1)) AS assistant_teacher_ok,
+       ($9::uuid IS NULL OR EXISTS (SELECT 1 FROM curriculum_versions WHERE id = $9 AND tenant_id = $1)) AS curriculum_version_ok`,
+    [
+      tenantId,
+      refs.academicYearId || null,
+      refs.termId || null,
+      refs.subjectId || null,
+      refs.sectionId || null,
+      refs.streamId || null,
+      refs.teacherId || null,
+      refs.assistantTeacherId || null,
+      refs.curriculumVersionId || null,
+    ]
+  );
+
+  return Object.values(result.rows[0] as Record<string, boolean>).every(Boolean);
+}
+
 // ─────────────────────────────────────────────────────────────
 // ACTION: getSubjectOfferings
 // ─────────────────────────────────────────────────────────────
@@ -244,6 +290,20 @@ export async function createSubjectOffering(
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    const referencesValid = await areOfferingReferencesTenantOwned(pool, tenantId, {
+      academicYearId: payload.academic_year_id,
+      termId: payload.term_id,
+      subjectId: payload.subject_id,
+      sectionId: payload.section_id,
+      streamId: payload.stream_id,
+      teacherId: payload.teacher_id,
+      assistantTeacherId: payload.assistant_teacher_id,
+      curriculumVersionId: payload.curriculum_version_id,
+    });
+    if (!referencesValid) {
+      return { success: false, error: 'One or more referenced academic resources do not belong to the authorized tenant.' };
+    }
 
     let isOverloaded = false;
 
@@ -371,6 +431,15 @@ export async function updateSubjectOffering(
     );
     if (offeringCheck.rows.length === 0) {
       return { success: false, error: 'Offering not found.' };
+    }
+
+    const referencesValid = await areOfferingReferencesTenantOwned(pool, tenantId, {
+      teacherId: payload.teacher_id,
+      assistantTeacherId: payload.assistant_teacher_id,
+      curriculumVersionId: payload.curriculum_version_id,
+    });
+    if (!referencesValid) {
+      return { success: false, error: 'One or more referenced academic resources do not belong to the authorized tenant.' };
     }
 
     let isOverloaded = false;
@@ -772,6 +841,14 @@ export async function generateTermOfferingsFromYear(
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
+    const termReferencesValid = await areOfferingReferencesTenantOwned(pool, tenantId, {
+      academicYearId,
+      termId,
+    });
+    if (!termReferencesValid) {
+      return { success: false, error: 'Academic year or term does not belong to the authorized tenant.' };
+    }
+
     // Batch insert term offerings for all active subject offerings of the year that do not yet exist
     const res = await pool.query(
       `INSERT INTO term_offerings (
@@ -907,6 +984,14 @@ export async function updateTermOffering(
     );
     if (termOfferingCheck.rows.length === 0) {
       return { success: false, error: 'Term offering not found.' };
+    }
+
+    const referencesValid = await areOfferingReferencesTenantOwned(pool, tenantId, {
+      teacherId: payload.term_teacher_id,
+      assistantTeacherId: payload.assistant_teacher_id,
+    });
+    if (!referencesValid) {
+      return { success: false, error: 'One or more referenced staff records do not belong to the authorized tenant.' };
     }
 
     let isOverloaded = false;
