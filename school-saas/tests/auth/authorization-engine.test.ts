@@ -90,6 +90,30 @@ describe('Canonical Authorization Engine — Core Unit Tests', () => {
       assert.equal(decision.decision, 'DENY');
       assert.equal(decision.code, 'PERMISSION_NOT_GRANTED');
     });
+
+    test('academic calendar management is granted only to authorized school roles and tenant scope', () => {
+      const schoolAdmin = createTestSecurityContext({
+        baseRole: 'school_admin',
+        tenantId: 'ten-school-1',
+      });
+      const schoolTarget: ResourceTarget = { tenantId: 'ten-school-1' };
+      const allowed = evaluateAuthorization(schoolAdmin, 'calendar.events.manage', schoolTarget);
+      assert.equal(allowed.allowed, true);
+
+      const teacher = createTestSecurityContext({
+        baseRole: 'teacher',
+        tenantId: 'ten-school-1',
+        activeAssignments: [],
+      });
+      const denied = evaluateAuthorization(teacher, 'calendar.events.manage', schoolTarget);
+      assert.equal(denied.allowed, false);
+      assert.equal(denied.code, 'PERMISSION_NOT_GRANTED');
+
+      const foreignTarget: ResourceTarget = { tenantId: 'ten-school-2' };
+      const crossTenant = evaluateAuthorization(schoolAdmin, 'calendar.events.manage', foreignTarget);
+      assert.equal(crossTenant.allowed, false);
+      assert.equal(crossTenant.code, 'CROSS_TENANT_DENIED');
+    });
   });
 
   // --------------------------------------------------------------------------

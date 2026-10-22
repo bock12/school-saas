@@ -66,3 +66,48 @@ test('academic calendar has no arbitrary tenant fallback or module-level admin c
   assert.doesNotMatch(source, /ILIKE '%|ilike\(.*%/i);
   assert.match(source, /requireServerActionAuthorization/);
 });
+
+test('offering workload reads and mutation preconditions are tenant-scoped', () => {
+  const source = read('src/app/actions/offerings.ts');
+
+  assert.match(
+    source,
+    /SELECT id FROM subject_offerings WHERE id = \$1 AND tenant_id = \$2/,
+    'subject offering updates must verify ownership before workload checks',
+  );
+  assert.match(
+    source,
+    /termOfferingCheck/,
+    'term offering updates must verify ownership before workload checks',
+  );
+  assert.match(
+    source,
+    /SELECT term_id, periods_per_week, term_teacher_id FROM term_offerings WHERE id = \$1 AND tenant_id = \$2/,
+    'term workload reads must be scoped to the authorized tenant',
+  );
+  assert.match(
+    source,
+    /JOIN subject_offerings so ON so\.id = sse\.offering_id[\s\S]*?so\.tenant_id = \$2 AND sse\.tenant_id = \$2/,
+    'active enrollment checks must be scoped through the tenant-owned offering',
+  );
+  assert.match(
+    source,
+    /SELECT first_name, last_name FROM teachers WHERE id = \$1 AND tenant_id = \$2/,
+    'teacher detail lookups must be tenant-scoped',
+  );
+});
+
+test('academic calendar mutations require dedicated permission and tenant-owned references', () => {
+  const source = read('src/app/actions/academic-calendar.ts');
+  assert.equal((source.match(/permission: 'calendar\.events\.manage'/g) || []).length, 3);
+  assert.doesNotMatch(source, /permission: 'curriculum\.version\.create'/);
+  assert.match(source, /calendarReferencesBelongToTenant/);
+  assert.match(source, /\.eq\('tenant_id', tenantId\)/);
+});
+
+test('teacher workload calculations are constrained to the authorized tenant', () => {
+  const source = read('src/app/actions/offerings.ts');
+  assert.match(source, /permission: 'staff\.allocations\.manage',[\s\S]*?requestedTenantSlug: tenantSlug/);
+  assert.match(source, /WHERE so\.tenant_id = \$1[\s\S]*?AND so\.teacher_id = \$2[\s\S]*?AND so\.academic_year_id = \$3/);
+  assert.match(source, /WHERE tro\.tenant_id = \$1[\s\S]*?AND so\.tenant_id = \$1[\s\S]*?AND tro\.id <> \$3/);
+});

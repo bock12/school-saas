@@ -141,6 +141,52 @@ async function resolveUserId(): Promise<string | null> {
   }
 }
 
+
+/**
+ * Validate every foreign-key-like offering reference against the trusted tenant.
+ * The database currently has single-column foreign keys, which do not by themselves
+ * guarantee that referenced rows belong to the same tenant.
+ */
+async function areOfferingReferencesTenantOwned(
+  pool: NonNullable<ReturnType<typeof getPgPool>>,
+  tenantId: string,
+  refs: {
+    academicYearId?: string | null;
+    termId?: string | null;
+    subjectId?: string | null;
+    sectionId?: string | null;
+    streamId?: string | null;
+    teacherId?: string | null;
+    assistantTeacherId?: string | null;
+    curriculumVersionId?: string | null;
+  }
+): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT
+       ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM academic_years WHERE id = $2 AND tenant_id = $1)) AS academic_year_ok,
+       ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM terms WHERE id = $3 AND tenant_id = $1)) AS term_ok,
+       ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM subjects WHERE id = $4 AND tenant_id = $1)) AS subject_ok,
+       ($5::uuid IS NULL OR EXISTS (SELECT 1 FROM sections WHERE id = $5 AND tenant_id = $1)) AS section_ok,
+       ($6::uuid IS NULL OR EXISTS (SELECT 1 FROM curriculum_streams WHERE id = $6 AND tenant_id = $1)) AS stream_ok,
+       ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM teachers WHERE id = $7 AND tenant_id = $1)) AS teacher_ok,
+       ($8::uuid IS NULL OR EXISTS (SELECT 1 FROM teachers WHERE id = $8 AND tenant_id = $1)) AS assistant_teacher_ok,
+       ($9::uuid IS NULL OR EXISTS (SELECT 1 FROM curriculum_versions WHERE id = $9 AND tenant_id = $1)) AS curriculum_version_ok`,
+    [
+      tenantId,
+      refs.academicYearId || null,
+      refs.termId || null,
+      refs.subjectId || null,
+      refs.sectionId || null,
+      refs.streamId || null,
+      refs.teacherId || null,
+      refs.assistantTeacherId || null,
+      refs.curriculumVersionId || null,
+    ]
+  );
+
+  return Object.values(result.rows[0] as Record<string, boolean>).every(Boolean);
+}
+
 // ─────────────────────────────────────────────────────────────
 // ACTION: getSubjectOfferings
 // ─────────────────────────────────────────────────────────────
@@ -240,12 +286,24 @@ export async function createSubjectOffering(
   const tenantId = authorization.target.tenantId;
 
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    const referencesValid = await areOfferingReferencesTenantOwned(pool, tenantId, {
+      academicYearId: payload.academic_year_id,
+      termId: payload.term_id,
+      subjectId: payload.subject_id,
+      sectionId: payload.section_id,
+      streamId: payload.stream_id,
+      teacherId: payload.teacher_id,
+      assistantTeacherId: payload.assistant_teacher_id,
+      curriculumVersionId: payload.curriculum_version_id,
+    });
+    if (!referencesValid) {
+      return { success: false, error: 'One or more referenced academic resources do not belong to the authorized tenant.' };
+    }
 
     let isOverloaded = false;
 
@@ -260,7 +318,7 @@ export async function createSubjectOffering(
         if (projectedPeriods > maxPeriods) {
           isOverloaded = true;
           if (!payload.override_overload) {
-            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1', [payload.teacher_id]);
+            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1 AND tenant_id = $2', [payload.teacher_id, tenantId]);
             const teacherName = tRes.rows[0] ? `${tRes.rows[0].first_name} ${tRes.rows[0].last_name}` : 'Teacher';
             return {
               success: false,
@@ -362,21 +420,39 @@ export async function updateSubjectOffering(
   const tenantId = authorization.target.tenantId;
 
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    const offeringCheck = await pool.query(
+      'SELECT id FROM subject_offerings WHERE id = $1 AND tenant_id = $2',
+      [offeringId, tenantId]
+    );
+    if (offeringCheck.rows.length === 0) {
+      return { success: false, error: 'Offering not found.' };
+    }
+
+    const referencesValid = await areOfferingReferencesTenantOwned(pool, tenantId, {
+      teacherId: payload.teacher_id,
+      assistantTeacherId: payload.assistant_teacher_id,
+      curriculumVersionId: payload.curriculum_version_id,
+    });
+    if (!referencesValid) {
+      return { success: false, error: 'One or more referenced academic resources do not belong to the authorized tenant.' };
+    }
 
     let isOverloaded = false;
 
     // Re-validate workload if changing teacher or changing periods
     if (payload.teacher_id !== undefined && payload.teacher_id !== null) {
       const current = await pool.query(
-        `SELECT academic_year_id, periods_per_week, teacher_id FROM subject_offerings WHERE id = $1`,
-        [offeringId]
+        `SELECT academic_year_id, periods_per_week, teacher_id FROM subject_offerings WHERE id = $1 AND tenant_id = $2`,
+        [offeringId, tenantId]
       );
+      if (current.rows.length === 0) {
+        return { success: false, error: 'Offering not found.' };
+      }
       if (current.rows.length > 0) {
         const workload = await getTeacherWorkload(tenantSlug, payload.teacher_id, current.rows[0].academic_year_id);
         if (workload.success && workload.data) {
@@ -391,7 +467,7 @@ export async function updateSubjectOffering(
           if (netTotal > maxPeriods) {
             isOverloaded = true;
             if (!payload.override_overload) {
-              const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1', [payload.teacher_id]);
+              const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1 AND tenant_id = $2', [payload.teacher_id, tenantId]);
               const teacherName = tRes.rows[0] ? `${tRes.rows[0].first_name} ${tRes.rows[0].last_name}` : 'Teacher';
               return {
                 success: false,
@@ -466,8 +542,10 @@ export async function deleteSubjectOffering(
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
     const enrollmentCheck = await pool.query(
-      `SELECT COUNT(*) FROM student_subject_enrollments WHERE offering_id = $1 AND status = 'active'`,
-      [offeringId]
+      `SELECT COUNT(*) FROM student_subject_enrollments sse
+       JOIN subject_offerings so ON so.id = sse.offering_id
+       WHERE so.id = $1 AND so.tenant_id = $2 AND sse.tenant_id = $2 AND sse.status = 'active'`,
+      [offeringId, tenantId]
     );
     if (parseInt(enrollmentCheck.rows[0].count) > 0) {
       return { success: false, error: 'Cannot remove offering with active student enrollments.' };
@@ -494,17 +572,27 @@ export async function getTeacherWorkload(
   teacherId: string,
   academicYearId: string
 ): Promise<{ success: boolean; data?: { total_periods: number; offering_count: number }; error?: string }> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+  const tenantId = authorization.target.tenantId;
+
   try {
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
     const res = await pool.query(
       `SELECT
-          COALESCE(SUM(periods_per_week), 0) AS total_periods,
+          COALESCE(SUM(so.periods_per_week), 0) AS total_periods,
           COUNT(*) AS offering_count
-        FROM subject_offerings
-        WHERE teacher_id = $1 AND academic_year_id = $2 AND status = 'active'`,
-      [teacherId, academicYearId]
+        FROM subject_offerings so
+        JOIN teachers te ON te.id = so.teacher_id AND te.tenant_id = so.tenant_id
+        WHERE so.tenant_id = $1
+          AND so.teacher_id = $2
+          AND so.academic_year_id = $3
+          AND so.status = 'active'`,
+      [tenantId, teacherId, academicYearId]
     );
 
     return {
@@ -763,6 +851,14 @@ export async function generateTermOfferingsFromYear(
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
+    const termReferencesValid = await areOfferingReferencesTenantOwned(pool, tenantId, {
+      academicYearId,
+      termId,
+    });
+    if (!termReferencesValid) {
+      return { success: false, error: 'Academic year or term does not belong to the authorized tenant.' };
+    }
+
     // Batch insert term offerings for all active subject offerings of the year that do not yet exist
     const res = await pool.query(
       `INSERT INTO term_offerings (
@@ -887,26 +983,58 @@ export async function updateTermOffering(
   const tenantId = authorization.target.tenantId;
 
   try {
-    const tenantId = await resolveTenantId(tenantSlug);
     const userId = await resolveUserId();
-    if (!tenantId) return { success: false, error: 'Tenant not found.' };
 
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
+
+    const termOfferingCheck = await pool.query(
+      `SELECT tro.id, tro.term_id FROM term_offerings tro
+       JOIN subject_offerings so
+         ON so.id = tro.subject_offering_id
+        AND so.tenant_id = tro.tenant_id
+       WHERE tro.id = $1 AND tro.tenant_id = $2`,
+      [termOfferingId, tenantId]
+    );
+    if (termOfferingCheck.rows.length === 0) {
+      return { success: false, error: 'Term offering not found.' };
+    }
+
+    const referencesValid = await areOfferingReferencesTenantOwned(pool, tenantId, {
+      termId: termOfferingCheck.rows[0].term_id,
+      teacherId: payload.term_teacher_id,
+      assistantTeacherId: payload.assistant_teacher_id,
+    });
+    if (!referencesValid) {
+      return { success: false, error: 'One or more referenced staff records do not belong to the authorized tenant.' };
+    }
 
     let isOverloaded = false;
 
     // Check term teacher workload if updating teacher
     if (payload.term_teacher_id) {
       const current = await pool.query(
-        `SELECT term_id, periods_per_week, term_teacher_id FROM term_offerings WHERE id = $1`,
-        [termOfferingId]
+        `SELECT term_id, periods_per_week, term_teacher_id FROM term_offerings WHERE id = $1 AND tenant_id = $2`,
+        [termOfferingId, tenantId]
       );
+      if (current.rows.length === 0) {
+        return { success: false, error: 'Term offering not found.' };
+      }
       if (current.rows.length > 0) {
         const termId = current.rows[0].term_id;
         const wkRes = await pool.query(
-          `SELECT total_periods, is_overloaded FROM get_teacher_term_workload($1, $2, $3)`,
-          [payload.term_teacher_id, termId, termOfferingId]
+          `SELECT COALESCE(SUM(tro.periods_per_week), 0) AS total_periods
+           FROM term_offerings tro
+           JOIN subject_offerings so
+             ON so.id = tro.subject_offering_id
+            AND so.tenant_id = tro.tenant_id
+           WHERE tro.tenant_id = $1
+             AND so.tenant_id = $1
+             AND tro.term_id = $2
+             AND tro.id <> $3
+             AND tro.status = 'active'
+             AND COALESCE(tro.term_teacher_id, so.teacher_id) = $4`,
+          [tenantId, termId, termOfferingId, payload.term_teacher_id]
         );
         const currentLoad = parseInt(wkRes.rows[0]?.total_periods || '0');
         const added = payload.periods_per_week ?? current.rows[0].periods_per_week;
@@ -916,7 +1044,7 @@ export async function updateTermOffering(
         if (projected > maxPeriods) {
           isOverloaded = true;
           if (!payload.override_overload) {
-            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1', [payload.term_teacher_id]);
+            const tRes = await pool.query('SELECT first_name, last_name FROM teachers WHERE id = $1 AND tenant_id = $2', [payload.term_teacher_id, tenantId]);
             const teacherName = tRes.rows[0] ? `${tRes.rows[0].first_name} ${tRes.rows[0].last_name}` : 'Teacher';
             return {
               success: false,
