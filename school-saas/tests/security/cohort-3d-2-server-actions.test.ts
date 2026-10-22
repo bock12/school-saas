@@ -66,3 +66,33 @@ test('academic calendar has no arbitrary tenant fallback or module-level admin c
   assert.doesNotMatch(source, /ILIKE '%|ilike\(.*%/i);
   assert.match(source, /requireServerActionAuthorization/);
 });
+
+test('offering workload reads and mutation preconditions are tenant-scoped', () => {
+  const source = read('src/app/actions/offerings.ts');
+
+  assert.match(
+    source,
+    /SELECT id FROM subject_offerings WHERE id = \$1 AND tenant_id = \$2/,
+    'subject offering updates must verify ownership before workload checks',
+  );
+  assert.match(
+    source,
+    /SELECT id FROM term_offerings WHERE id = \$1 AND tenant_id = \$2/,
+    'term offering updates must verify ownership before workload checks',
+  );
+  assert.match(
+    source,
+    /SELECT term_id, periods_per_week, term_teacher_id FROM term_offerings WHERE id = \$1 AND tenant_id = \$2/,
+    'term workload reads must be scoped to the authorized tenant',
+  );
+  assert.match(
+    source,
+    /JOIN subject_offerings so ON so\.id = sse\.offering_id[\s\S]*?so\.tenant_id = \$2 AND sse\.tenant_id = \$2/,
+    'active enrollment checks must be scoped through the tenant-owned offering',
+  );
+  assert.match(
+    source,
+    /SELECT first_name, last_name FROM teachers WHERE id = \$1 AND tenant_id = \$2/,
+    'teacher detail lookups must be tenant-scoped',
+  );
+});
