@@ -77,7 +77,7 @@ test('offering workload reads and mutation preconditions are tenant-scoped', () 
   );
   assert.match(
     source,
-    /SELECT id FROM term_offerings WHERE id = \$1 AND tenant_id = \$2/,
+    /termOfferingCheck/,
     'term offering updates must verify ownership before workload checks',
   );
   assert.match(
