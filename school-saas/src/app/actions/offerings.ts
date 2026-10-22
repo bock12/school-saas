@@ -989,7 +989,11 @@ export async function updateTermOffering(
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
     const termOfferingCheck = await pool.query(
-      'SELECT id FROM term_offerings WHERE id = $1 AND tenant_id = $2',
+      `SELECT tro.id, tro.term_id FROM term_offerings tro
+       JOIN subject_offerings so
+         ON so.id = tro.subject_offering_id
+        AND so.tenant_id = tro.tenant_id
+       WHERE tro.id = $1 AND tro.tenant_id = $2`,
       [termOfferingId, tenantId]
     );
     if (termOfferingCheck.rows.length === 0) {
@@ -997,6 +1001,7 @@ export async function updateTermOffering(
     }
 
     const referencesValid = await areOfferingReferencesTenantOwned(pool, tenantId, {
+      termId: termOfferingCheck.rows[0].term_id,
       teacherId: payload.term_teacher_id,
       assistantTeacherId: payload.assistant_teacher_id,
     });
