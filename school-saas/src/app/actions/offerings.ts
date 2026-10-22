@@ -572,17 +572,27 @@ export async function getTeacherWorkload(
   teacherId: string,
   academicYearId: string
 ): Promise<{ success: boolean; data?: { total_periods: number; offering_count: number }; error?: string }> {
+  const authorization = await requireServerActionAuthorization({
+    permission: 'staff.allocations.manage',
+    requestedTenantSlug: tenantSlug,
+  });
+  const tenantId = authorization.target.tenantId;
+
   try {
     const pool = getPgPool();
     if (!pool) return { success: false, error: 'Database unavailable.' };
 
     const res = await pool.query(
       `SELECT
-          COALESCE(SUM(periods_per_week), 0) AS total_periods,
+          COALESCE(SUM(so.periods_per_week), 0) AS total_periods,
           COUNT(*) AS offering_count
-        FROM subject_offerings
-        WHERE teacher_id = $1 AND academic_year_id = $2 AND status = 'active'`,
-      [teacherId, academicYearId]
+        FROM subject_offerings so
+        JOIN teachers te ON te.id = so.teacher_id AND te.tenant_id = so.tenant_id
+        WHERE so.tenant_id = $1
+          AND so.teacher_id = $2
+          AND so.academic_year_id = $3
+          AND so.status = 'active'`,
+      [tenantId, teacherId, academicYearId]
     );
 
     return {
@@ -1008,8 +1018,18 @@ export async function updateTermOffering(
       if (current.rows.length > 0) {
         const termId = current.rows[0].term_id;
         const wkRes = await pool.query(
-          `SELECT total_periods, is_overloaded FROM get_teacher_term_workload($1, $2, $3)`,
-          [payload.term_teacher_id, termId, termOfferingId]
+          `SELECT COALESCE(SUM(tro.periods_per_week), 0) AS total_periods
+           FROM term_offerings tro
+           JOIN subject_offerings so
+             ON so.id = tro.subject_offering_id
+            AND so.tenant_id = tro.tenant_id
+           WHERE tro.tenant_id = $1
+             AND so.tenant_id = $1
+             AND tro.term_id = $2
+             AND tro.id <> $3
+             AND tro.status = 'active'
+             AND COALESCE(tro.term_teacher_id, so.teacher_id) = $4`,
+          [tenantId, termId, termOfferingId, payload.term_teacher_id]
         );
         const currentLoad = parseInt(wkRes.rows[0]?.total_periods || '0');
         const added = payload.periods_per_week ?? current.rows[0].periods_per_week;
